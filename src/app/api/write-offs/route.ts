@@ -1,3 +1,4 @@
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const writeOffDate = body?.writeOffDate ? new Date(body.writeOffDate) : new Date();
   const storeId = await getStoreId();
+  const bd = await backdatingError(storeId, writeOffDate);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
 
   const writeOff = await prisma.writeOff.create({
     data: { storeId, userId: session.user.id, writeOffDate },

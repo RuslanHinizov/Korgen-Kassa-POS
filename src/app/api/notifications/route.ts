@@ -49,7 +49,7 @@ export async function GET() {
       level: "warning",
       title: "Нет активной кассы",
       description: "Для приёма оплаты настройте и активируйте кассу.",
-      href: "/management/registers",
+      href: "/management/cashboxes",
     });
   }
 

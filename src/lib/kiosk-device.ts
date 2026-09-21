@@ -13,6 +13,9 @@ export async function hasKioskAccess(): Promise<boolean> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || session.user.role !== "CASHIER") return false;
 
+  const account = await prisma.user.findUnique({ where: { id: session.user.id }, select: { allowCashierLogin: true, firedAt: true } });
+  if (!account || !account.allowCashierLogin || account.firedAt) return false;
+
   const storeId = await getStoreId();
   const assignment = await prisma.userStoreAssignment.findUnique({
     where: { userId_storeId: { userId: session.user.id, storeId } },

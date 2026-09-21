@@ -61,8 +61,13 @@ export async function uploadFile(
 
 // ─── Local ────────────────────────────────────────────────────────────────────
 
+/** Where local uploads live. In Docker this is a persistent volume (UPLOAD_DIR); files are served by app/uploads/[name]. */
+export function uploadDir() {
+  return process.env.UPLOAD_DIR || path.join(process.cwd(), "public", "uploads");
+}
+
 async function uploadLocal(buffer: Buffer, filename: string): Promise<UploadResult> {
-  const dir = path.join(process.cwd(), "public", "uploads");
+  const dir = uploadDir();
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, filename), buffer);
   return { url: `/uploads/${filename}` };

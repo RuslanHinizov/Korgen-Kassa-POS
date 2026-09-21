@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   name: z.string().min(1),
   phone: z.string().optional().nullable(),
+  photoUrl: z.string().max(500).optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const storeId = await getStoreId();
   const consultant = await prisma.consultant.create({
-    data: { storeId, name: parsed.data.name.trim(), phone: parsed.data.phone?.trim() || null },
+    data: { storeId, name: parsed.data.name.trim(), phone: parsed.data.phone?.trim() || null, photoUrl: parsed.data.photoUrl || null },
   });
   return NextResponse.json({ consultant }, { status: 201 });
 }

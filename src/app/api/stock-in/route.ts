@@ -1,4 +1,5 @@
 import { xlsxResponse } from "@/lib/xlsx-response";
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getStockInActor, stockInOwnerFilter } from "@/lib/stock-in-access";
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json().catch(() => ({}));
   const stockInDate = body?.stockInDate ? new Date(body.stockInDate) : new Date();
+  const bd = await backdatingError(actor.storeId, stockInDate);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
   const stockIn = await prisma.stockIn.create({
     data: { storeId: actor.storeId, userId: actor.userId, stockInDate },
   });

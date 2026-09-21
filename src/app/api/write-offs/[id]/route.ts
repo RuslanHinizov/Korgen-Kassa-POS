@@ -1,3 +1,4 @@
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -57,6 +58,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.writeOff.findFirst({ where: { id, storeId }, select: { status: true } });
   if (!existing) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   if (existing.status === "POSTED") return NextResponse.json({ error: "Проведённый документ нельзя изменить" }, { status: 409 });
+
+  const bd = await backdatingError(storeId, parsed.data.writeOffDate);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
 
   const writeOff = await prisma.writeOff.update({
     where: { id },

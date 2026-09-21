@@ -8,7 +8,7 @@ export async function GET() {
   if (!(await hasKioskAccess())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const users = await prisma.user.findMany({
-    where: { role: { in: ["CASHIER", "MANAGER"] }, pin: { not: null } },
+    where: { role: { in: ["CASHIER", "MANAGER"] }, pin: { not: null }, firedAt: null, allowCashierLogin: true },
     select: { id: true, name: true, role: true },
     orderBy: { name: "asc" },
   });

@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./db";
 
@@ -26,6 +27,17 @@ export const auth = betterAuth({
         type: "string",
         defaultValue: "CASHIER",
         input: false, // not user-settable via sign-up
+      },
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        // Dismissed employees (Бывшие пользователи) cannot sign in.
+        before: async (session) => {
+          const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { firedAt: true } });
+          if (user?.firedAt) throw new APIError("FORBIDDEN", { message: "Доступ закрыт: сотрудник уволен" });
+        },
       },
     },
   },

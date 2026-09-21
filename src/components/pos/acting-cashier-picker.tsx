@@ -40,6 +40,25 @@ export function ActingCashierPicker({ onDone }: { onDone: (cashier: Cashier) => 
     }
   }
 
+  // A barcode scanner types the digits and presses Enter — the cashier is identified by that code.
+  async function submitCode(raw: string) {
+    const code = raw.trim();
+    if (!code || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await fetch("/api/pos/acting-cashier", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!r.ok) { setError("Кассир с таким кодом не найден"); return; }
+      const d = await r.json();
+      onDone(d.cashier);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function press(digit: string) {
     if (busy || pin.length >= 4) return;
     const next = pin + digit;
@@ -59,6 +78,19 @@ export function ActingCashierPicker({ onDone }: { onDone: (cashier: Cashier) => 
         {!selected ? (
           <>
             <h1 className="mb-4 text-center text-lg font-semibold">Кто работает?</h1>
+            <input
+              autoFocus
+              inputMode="numeric"
+              placeholder="Отсканируйте штрихкод кассира"
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                void submitCode(e.currentTarget.value);
+                e.currentTarget.value = "";
+              }}
+              className="mb-3 h-10 w-full rounded-lg border bg-background px-3 text-center text-sm"
+            />
+            {error && <p className="mb-3 text-center text-sm text-destructive">{error}</p>}
             <div className="grid grid-cols-2 gap-2">
               {cashiers.map((c) => (
                 <button

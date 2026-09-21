@@ -24,11 +24,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const userId = typeof body?.userId === "string" ? body.userId : "";
   const pin = typeof body?.pin === "string" ? body.pin : "";
-  if (!userId || !pin) return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  if (!code && (!userId || !pin)) return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, pin: true } });
-  if (!user || !verifyPin(pin, user.pin)) {
-    return NextResponse.json({ error: "Неверный PIN" }, { status: 401 });
+  // A scanned «Идентификационный признак кассира» barcode identifies the cashier without a PIN.
+  const user = code
+    ? await prisma.user.findFirst({ where: { cashierCode: code, firedAt: null, allowCashierLogin: true }, select: { id: true, name: true, role: true, pin: true } })
+    : await prisma.user.findFirst({ where: { id: userId, firedAt: null }, select: { id: true, name: true, role: true, pin: true } });
+  if (!user || (!code && !verifyPin(pin, user.pin))) {
+    return NextResponse.json({ error: code ? "Кассир с таким кодом не найден" : "Неверный PIN" }, { status: 401 });
   }
 
   const jar = await cookies();

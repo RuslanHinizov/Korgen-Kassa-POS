@@ -5,7 +5,8 @@ import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { ArrowLeft, Check, Download, ExternalLink, Loader2, Package, Plus, Printer, ScanLine, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Download, ExternalLink, Loader2, Package, Plus, Printer, ScanLine, Trash2, Upload } from "lucide-react";
+import { ImportItemsModal } from "@/components/ui/import-items-modal";
 import { ProductPickerModal, type PickableProduct } from "@/components/ui/product-picker-modal";
 import { isFractionalUnit, parseQuantityInput, unitLabel } from "@/lib/units";
 import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
@@ -40,6 +41,7 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
   const [scan, setScan] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
   const print = useAnchoredPopover();
+  const [importOpen, setImportOpen] = useState(false);
   const [newProductName, setNewProductName] = useState("");
   const [newProductBarcode, setNewProductBarcode] = useState("");
 
@@ -67,6 +69,22 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
   }, [autosave, doc?.status, comment]);
 
   const draft = doc?.status === "DRAFT";
+
+  async function importItems(rows: { barcode: string; quantity: number }[]) {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/purchase-receipts/${id}/items/import`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: rows }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось импортировать"); return; }
+      setImportOpen(false);
+      const restored = d.restored ? `, восстановлено удалённых: ${d.restored}` : "";
+      if (d.notFound.length > 0) toast.error(`Добавлено: ${d.added}${restored}. Не найдено по штрихкоду/артикулу: ${d.notFound.length}`);
+      else toast.success(`Добавлено товаров: ${d.added}${restored}`);
+      load();
+    } finally { setBusy(false); }
+  }
 
   async function toggleConsignment(next: boolean) {
     setDoc((d) => (d ? { ...d, isConsignment: next } : d));
@@ -309,7 +327,12 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
         </div>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {draft && (
+          <button onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
+            <Upload className="h-4 w-4" /> Импорт товаров
+          </button>
+        )}
         <button onClick={exportItemsCsv} disabled={doc.items.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-40">
           <Download className="h-4 w-4" /> Выгрузить в Excel
         </button>
@@ -382,6 +405,7 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
           onSelect={addProducts}
         />
       )}
+      {importOpen && <ImportItemsModal busy={busy} onClose={() => setImportOpen(false)} onImport={importItems} />}
     </div>
   );
 }

@@ -21,7 +21,7 @@ export async function GET() {
     });
   return NextResponse.json({
     cashboxes: cashboxes.map((c) => ({
-      id: c.id, no: c.no, name: c.name, active: c.active, appVersion: c.appVersion, lastSyncAt: c.lastSyncAt,
+      id: c.id, no: c.no, name: c.name, active: c.active, appVersion: c.appVersion, platform: c.platform, pairedAt: c.pairedAt, lastSyncAt: c.lastSyncAt,
       accountId: c.accountId, accountName: c.account?.name ?? null, balance: c.account ? Number(c.account.balance) : null,
       extraAccountId: c.extraAccountId, extraAccountName: c.extraAccount?.name ?? null, extraBalance: c.extraAccount ? Number(c.extraAccount.balance) : null,
       linkedAccountsCount: (c.accountId ? 1 : 0) + (c.extraAccountId ? 1 : 0),

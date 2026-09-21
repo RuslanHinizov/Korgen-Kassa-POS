@@ -1,11 +1,7 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { getStoreId } from "@/lib/store-context";
-import { auth } from "@/lib/auth";
-import { CashboxesList } from "@/components/management/cashboxes-list";
+import { redirectTo, requireRole } from "@/lib/admin-page";
 
-export default async function RegistersPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
-  return <CashboxesList />;
+// Old address of «Управление кассами»; kept so bookmarks keep working.
+export default async function RegistersRedirect() {
+  await requireRole();
+  return redirectTo("/management/cashboxes");
 }

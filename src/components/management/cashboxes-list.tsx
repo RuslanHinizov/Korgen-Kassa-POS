@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
-import { Loader2, Plus } from "lucide-react";
+import { CircleHelp, Loader2, Pencil, Plus } from "lucide-react";
 import { CashboxModal } from "./cashbox-modal";
 import { PosPermissionsPanel } from "./pos-permissions-panel";
 
@@ -16,20 +15,17 @@ interface Cashbox {
   balance: number | null;
   extraBalance: number | null;
   appVersion: string | null;
+  lastSyncAt: string | null;
   linkedAccountsCount: number;
 }
 
 export function CashboxesList() {
-  const searchParams = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const receiptMode = requestedTab === "receipt";
-  const [tab, setTab] = useState<"cashboxes" | "permissions">(
-    requestedTab === "permissions" ? "permissions" : "cashboxes"
-  );
+  const [tab, setTab] = useState<"cashboxes" | "permissions">("cashboxes");
   const [cashboxes, setCashboxes] = useState<Cashbox[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [openTab, setOpenTab] = useState<"general" | "accounts">("general");
 
   function load() {
     setLoading(true);
@@ -62,16 +58,10 @@ export function CashboxesList() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6">
-      <div>
-        <h1 className="text-lg font-semibold">
-          {receiptMode ? "Управление чеком" : "Управление кассами"}
-        </h1>
-        {receiptMode && (
-          <p className="text-muted-foreground mt-1 text-sm">
-            Выберите кассу, чтобы настроить заголовок, подвал, ширину бумаги и формат чека.
-          </p>
-        )}
-      </div>
+      <h1 className="flex items-center gap-2 text-lg font-semibold">
+        Управление кассами
+        <span title="Здесь настраиваются кассы: статус, ключ подключения, чек и счета. Вкладка «Настройка разрешений на кассе» задаёт, что можно делать на кассе." className="text-primary"><CircleHelp className="h-4 w-4" /></span>
+      </h1>
 
       <div className="flex gap-6 border-b text-sm font-medium">
         <button
@@ -109,21 +99,22 @@ export function CashboxesList() {
                   <th className="px-4 py-2.5 text-left">Название</th>
                   <th className="px-4 py-2.5 text-left">Статус активности</th>
                   <th className="px-4 py-2.5 text-left">Версия</th>
-                  <th className="px-4 py-2.5 text-right">Наличными</th>
-                  <th className="px-4 py-2.5 text-right">Безналичными</th>
+                  <th className="px-4 py-2.5 text-left">Послед. время синхр.</th>
+                  <th className="px-4 py-2.5 text-right">Остаток на счету</th>
                   <th className="px-4 py-2.5 text-right">Привязанные счета</th>
+                  <th className="w-12 px-4 py-2.5" />
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
+                    <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
                       <Loader2 className="inline h-5 w-5 animate-spin" />
                     </td>
                   </tr>
                 ) : cashboxes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
+                    <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
                       Тут пока пусто
                     </td>
                   </tr>
@@ -133,21 +124,24 @@ export function CashboxesList() {
                       <td className="text-muted-foreground px-4 py-2.5">{c.no}</td>
                       <td className="px-4 py-2.5">
                         <button
-                          onClick={() => setOpenId(c.id)}
+                          onClick={() => { setOpenTab("general"); setOpenId(c.id); }}
                           className="text-primary hover:underline"
                         >
                           {c.name}
                         </button>
                       </td>
                       <td className="px-4 py-2.5">{c.active ? "Активна" : "Не активна"}</td>
-                      <td className="text-muted-foreground px-4 py-2.5">{c.appVersion ?? ""}</td>
+                      <td className="text-muted-foreground px-4 py-2.5">{c.appVersion ? `V pos ${c.appVersion}` : ""}</td>
+                      <td className="text-muted-foreground px-4 py-2.5 whitespace-nowrap">{c.lastSyncAt ? new Date(c.lastSyncAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">
                         {c.balance !== null ? formatCurrency(c.balance) : "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">
-                        {c.extraBalance !== null ? formatCurrency(c.extraBalance) : "—"}
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => { setOpenTab("accounts"); setOpenId(c.id); }} className="text-primary hover:underline">{c.linkedAccountsCount}</button>
                       </td>
-                      <td className="px-4 py-2.5 text-right">{c.linkedAccountsCount}</td>
+                      <td className="px-4 py-2.5">
+                        <button onClick={() => { setOpenTab("general"); setOpenId(c.id); }} className="text-primary hover:bg-accent inline-flex h-8 w-8 items-center justify-center rounded" aria-label="Редактировать"><Pencil className="h-4 w-4" /></button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -160,7 +154,7 @@ export function CashboxesList() {
       {openId && (
         <CashboxModal
           id={openId}
-          initialTab={receiptMode ? "receipt" : "general"}
+          initialTab={openTab}
           onClose={() => setOpenId(null)}
           onSaved={() => {
             setOpenId(null);

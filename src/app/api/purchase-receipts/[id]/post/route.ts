@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!receipt.supplierId) return NextResponse.json({ error: "Выберите поставщика" }, { status: 400 });
   if (receipt.items.length === 0) return NextResponse.json({ error: "Добавьте хотя бы один товар" }, { status: 400 });
 
-  const settings = await prisma.businessSettings.findUnique({ where: { storeId }, select: { autoUpdateCostPrice: true, autoUpdateSalePrice: true, autoUpdateBundleSalePrice: true } });
+  const settings = await prisma.businessSettings.findUnique({ where: { storeId }, select: { autoUpdateCostPrice: true, autoUpdateSalePrice: true, autoUpdateBundleSalePrice: true, roundSalePriceUp: true } });
   const doUpdateCost = settings?.autoUpdateCostPrice !== false;
   const doUpdateSalePrice = settings?.autoUpdateSalePrice !== false;
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           where: { id: item.productId },
           data: {
             ...(doUpdateCost ? { cost: discountedCost } : {}),
-            ...(doUpdateSalePrice ? { price: Number(item.salePrice) } : {}),
+            ...(doUpdateSalePrice ? { price: settings?.roundSalePriceUp ? Math.ceil(Number(item.salePrice) - 1e-9) : Number(item.salePrice) } : {}),
           },
         });
       }

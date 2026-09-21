@@ -37,6 +37,10 @@ export interface ReceiptSettings {
   receiptFooter: string;
   /** false = compact legacy layout (one line per item); undefined/true = detailed layout. */
   posNewReceiptFormat?: boolean;
+  /** «Верхняя часть чека»; falls back to the store name. */
+  receiptHeader?: string;
+  /** «Печатать НДС в чеке»; undefined/true prints the tax line. */
+  receiptPrintVat?: boolean;
 }
 
 import { useTranslations, useLocale } from "next-intl";
@@ -97,7 +101,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
             className="h-12 mx-auto mb-2 object-contain"
           />
         )}
-        <p className="font-bold text-sm">{settings.name}</p>
+        <p className="font-bold text-sm whitespace-pre-line">{settings.receiptHeader || settings.name}</p>
       </div>
 
       <div className="border-t border-dashed border-black my-2" />
@@ -157,7 +161,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
             <span>-{fmt(data.discountAmount, c, d, locale)}</span>
           </div>
         )}
-        {data.taxAmount > 0 && (
+        {data.taxAmount > 0 && settings.receiptPrintVat !== false && (
           <div className="flex justify-between">
             <span>{settings.taxName}</span>
             <span>{fmt(data.taxAmount, c, d, locale)}</span>

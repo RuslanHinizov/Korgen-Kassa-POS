@@ -16,6 +16,8 @@ export async function GET() {
     taxRate: Number(s.taxRate),
     taxName: s.taxName,
     receiptFooter: s.receiptFooter,
+    receiptHeader: s.receiptHeader || s.name,
+    receiptPrintVat: s.receiptPrintVat,
     requireOpenShift: s.requireOpenShift,
     posCreditSale: s.posCreditSale,
     posShowSalesHistory: s.posShowSalesHistory,

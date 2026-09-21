@@ -56,3 +56,9 @@ next-env.d.ts
 
 # uploaded product images
 /public/uploads
+
+# local working files, DB dumps and editor state
+/scratchpad/
+/backups/
+/.claude/
+/public/*_export_*.xlsx

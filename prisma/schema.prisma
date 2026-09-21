@@ -146,6 +146,14 @@ model User {
   /// Hashed 4+ digit PIN — POS kiosk "who's working" quick-switch (display/attribution
   /// tag only, does not change the authenticated session — see src/lib/pin.ts).
   pin           String?
+  lastName      String?
+  phone         String?
+  /// Set when the employee is dismissed (Бывшие пользователи); sign-in is blocked.
+  firedAt       DateTime?
+  /// «Разрешить вход на кассу».
+  allowCashierLogin Boolean @default(true)
+  /// Number encoded in the printable «Идентификационный признак кассира» barcode.
+  cashierCode   String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -1417,6 +1425,7 @@ model Consultant {
   storeId   String
   name      String
   phone     String?
+  photoUrl  String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1566,6 +1575,8 @@ model BusinessSettings {
   requireOpenShift  Boolean  @default(false)
   // Permissions (Настройка разрешений на сайте)
   allowWholesale      Boolean @default(false)
+  receiptHeader       String  @default("") // «Верхняя часть чека»; empty → store name
+  receiptPrintVat     Boolean @default(true) // «Печатать НДС в чеке»
   autoUpdateSalePrice Boolean @default(true) // recompute sale price from markup % when cost changes on a receipt
   roundSalePriceUp    Boolean @default(false) // round product sale price up to the nearest whole currency unit
   backdatingDays      Int     @default(365) // how many days back a document's date may be set
@@ -1611,8 +1622,8 @@ model BusinessSettings {
   posAccessReturnNoReceipt CashboxAccessRole @default(ALL)
   posAccessDeleteItem     CashboxAccessRole @default(ALL)
   posAccessDecreaseQty    CashboxAccessRole @default(ALL)
-  posRoundingWeightItems  RoundingMode @default(NONE)
-  posRoundingDiscount     RoundingMode @default(NONE)
+  posRoundingWeightItems  RoundingMode @default(UP_1)
+  posRoundingDiscount     RoundingMode @default(UP_1)
 
   setupComplete    Boolean  @default(false)
   createdAt        DateTime @default(now())

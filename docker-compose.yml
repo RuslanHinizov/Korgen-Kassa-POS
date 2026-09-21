@@ -30,9 +30,13 @@ services:
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in .env before starting production}"
       BETTER_AUTH_TRUSTED_ORIGINS: "${BETTER_AUTH_TRUSTED_ORIGINS:-}"
       NODE_ENV: production
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  uploads_data:

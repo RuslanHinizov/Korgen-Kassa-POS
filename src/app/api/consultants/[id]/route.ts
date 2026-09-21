@@ -8,6 +8,7 @@ import { z } from "zod";
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   phone: z.string().optional().nullable(),
+  photoUrl: z.string().max(500).optional().nullable(),
   active: z.boolean().optional(),
 });
 

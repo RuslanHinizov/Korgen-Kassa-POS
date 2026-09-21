@@ -1,3 +1,4 @@
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -55,6 +56,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (existing.status !== "DRAFT" && existing.status !== "COUNTING") {
     return NextResponse.json({ error: "Документ на этом этапе нельзя изменить" }, { status: 409 });
   }
+
+  const bd = await backdatingError(storeId, parsed.data.countedAt);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
 
   const stocktake = await prisma.stocktake.update({
     where: { id },

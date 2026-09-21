@@ -1,4 +1,5 @@
 import { xlsxResponse } from "@/lib/xlsx-response";
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -77,6 +78,9 @@ export async function POST(req: NextRequest) {
   }
   const toStore = await prisma.store.findUnique({ where: { id: parsed.data.toStoreId } });
   if (!toStore) return NextResponse.json({ error: "Магазин назначения не найден" }, { status: 404 });
+
+  const bd = await backdatingError(storeId, parsed.data.createdAt);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
 
   const transfer = await prisma.storeTransfer.create({
     data: { storeId, toStoreId: parsed.data.toStoreId, userId: session.user.id, comment: parsed.data.comment, createdAt: parsed.data.createdAt },

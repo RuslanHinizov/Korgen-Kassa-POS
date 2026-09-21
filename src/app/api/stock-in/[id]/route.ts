@@ -1,3 +1,4 @@
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getStockInActor, stockInOwnerFilter } from "@/lib/stock-in-access";
@@ -53,6 +54,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.stockIn.findFirst({ where: { id, storeId: actor.storeId, ...stockInOwnerFilter(actor) }, select: { status: true } });
   if (!existing) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   if (existing.status !== "DRAFT") return NextResponse.json({ error: "Документ нельзя изменить" }, { status: 409 });
+
+  const bd = await backdatingError(actor.storeId, parsed.data.stockInDate);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
 
   const stockIn = await prisma.stockIn.update({
     where: { id },

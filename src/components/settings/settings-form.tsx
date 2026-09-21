@@ -9,7 +9,6 @@ import { updateSettings } from "@/app/actions/settings-actions";
 import { setLocale } from "@/app/actions/locale-actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { SaleRestrictionsPanel } from "./sale-restrictions-panel";
 
 const settingsSchema = z.object({
   name: z.string().min(1, "Business name is required"),
@@ -475,7 +474,6 @@ export function SettingsForm({ settings }: Props) {
           <input type="checkbox" {...register("autoRestoreDeletedProducts")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
         </div>
 
-        <SaleRestrictionsPanel />
       </section>
 
       {/* Image Storage */}

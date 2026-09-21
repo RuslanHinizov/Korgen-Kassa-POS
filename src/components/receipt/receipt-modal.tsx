@@ -14,6 +14,8 @@ interface ReceiptSettings {
   currencyDecimals: number;
   taxName: string;
   receiptFooter: string;
+  receiptHeader?: string;
+  receiptPrintVat?: boolean;
 }
 
 interface ReceiptItem {

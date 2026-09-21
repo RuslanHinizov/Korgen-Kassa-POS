@@ -1,3 +1,4 @@
+import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const data = parsed.data;
   const storeId = await getStoreId();
+  const bd = await backdatingError(storeId, data.receivedAt);
+  if (bd) return NextResponse.json({ error: bd }, { status: 400 });
   const [supplier, validProducts] = await Promise.all([
     prisma.supplier.findFirst({ where: { id: data.supplierId, ...(await counterpartyScope(storeId)) } }),
     prisma.product.count({ where: { id: { in: [...new Set(data.items.map((i) => i.productId))] }, storeId } }),

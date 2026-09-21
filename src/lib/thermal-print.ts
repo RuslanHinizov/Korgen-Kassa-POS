@@ -51,6 +51,8 @@ interface ThermalReceiptSettings {
   currencyDecimals: number;
   taxName: string;
   receiptFooter: string;
+  receiptHeader?: string;
+  receiptPrintVat?: boolean;
 }
 
 interface ThermalReceiptItem {
@@ -87,7 +89,7 @@ function buildReceiptBytes(
 
   chunks.push(INIT);
   chunks.push(ALIGN_CENTER, DOUBLE_HEIGHT, BOLD_ON);
-  chunks.push(text(settings.name + "\n"));
+  chunks.push(text((settings.receiptHeader || settings.name) + "\n"));
   chunks.push(NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT);
 
   const now = new Date();
@@ -109,7 +111,7 @@ function buildReceiptBytes(
   if (data.discountAmount > 0) {
     chunks.push(twoColumns("Discount", `-${fmt(data.discountAmount)}`));
   }
-  if (data.taxAmount > 0) {
+  if (data.taxAmount > 0 && settings.receiptPrintVat !== false) {
     chunks.push(twoColumns(settings.taxName, fmt(data.taxAmount)));
   }
   chunks.push(divider());
