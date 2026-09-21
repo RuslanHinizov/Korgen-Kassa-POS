@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { hashPin } from "@/lib/pin";
 
 // ---- Schemas ----
 
@@ -12,13 +13,20 @@ const createUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  role: z.enum(["ADMIN", "CASHIER"]),
+  role: z.enum(["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"]),
+  /** Kiosk "who's working" PIN (4+ digits) — optional at creation. */
+  pin: z.string().optional(),
+  /** Stores where the employee is allowed to work. */
+  storeIds: z.array(z.string()).default([]),
 });
 
 const updateUserSchema = z.object({
   name: z.string().min(1, "Name is required").optional(),
   email: z.string().email("Invalid email").optional(),
-  role: z.enum(["ADMIN", "CASHIER"]).optional(),
+  role: z.enum(["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"]).optional(),
+  /** New PIN (4+ digits) to set, or "__CLEAR__" to remove it; omit to leave unchanged. */
+  pin: z.string().optional(),
+  storeIds: z.array(z.string()).optional(),
 });
 
 const updateProfileSchema = z.object({
@@ -60,13 +68,18 @@ export async function createUserAction(data: z.infer<typeof createUserSchema>) {
     return { error: parsed.error.flatten().fieldErrors };
   }
 
-  const { name, email, password, role } = parsed.data;
+  const { name, email, password, role, pin, storeIds } = parsed.data;
 
   try {
     // Check if user already exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return { error: "User with this email already exists" };
+    }
+    const uniqueStoreIds = [...new Set(storeIds)];
+    if (uniqueStoreIds.length) {
+      const count = await prisma.store.count({ where: { id: { in: uniqueStoreIds } } });
+      if (count !== uniqueStoreIds.length) return { error: "One or more stores do not exist" };
     }
 
     // Call Better Auth server-side API to create user.
@@ -76,10 +89,14 @@ export async function createUserAction(data: z.infer<typeof createUserSchema>) {
       body: { name, email, password },
     });
 
-    // Update user role
+    // Update user role (+ optional kiosk PIN)
     const user = await prisma.user.update({
       where: { email },
-      data: { role },
+      data: {
+        role,
+        ...(pin && pin.trim().length >= 4 ? { pin: hashPin(pin.trim()) } : {}),
+        ...(uniqueStoreIds.length ? { storeAssignments: { create: uniqueStoreIds.map((storeId) => ({ storeId })) } } : {}),
+      },
       select: {
         id: true,
         email: true,
@@ -130,12 +147,21 @@ export async function updateUserAction(id: string, data: z.infer<typeof updateUs
       }
     }
 
+    const pinPatch = updates.pin === "__CLEAR__" ? { pin: null } : updates.pin && updates.pin.trim().length >= 4 ? { pin: hashPin(updates.pin.trim()) } : {};
+    const uniqueStoreIds = updates.storeIds ? [...new Set(updates.storeIds)] : undefined;
+    if (uniqueStoreIds) {
+      const count = await prisma.store.count({ where: { id: { in: uniqueStoreIds } } });
+      if (count !== uniqueStoreIds.length) return { error: "One or more stores do not exist" };
+    }
+
     const user = await prisma.user.update({
       where: { id },
       data: {
         ...(updates.name && { name: updates.name }),
         ...(updates.email && { email: updates.email }),
         ...(updates.role && { role: updates.role }),
+        ...pinPatch,
+        ...(uniqueStoreIds ? { storeAssignments: { deleteMany: {}, create: uniqueStoreIds.map((storeId) => ({ storeId })) } } : {}),
       },
     });
 
@@ -228,6 +254,7 @@ export async function updateProfileAction(data: z.infer<typeof updateProfileSche
     });
 
     revalidatePath("/settings/profile");
+    revalidatePath("/profile");
     revalidatePath("/pos");
     return { success: true, user: updatedUser };
   } catch (err) {

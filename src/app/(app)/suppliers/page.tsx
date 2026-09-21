@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Pencil, Trash2, Search, Package } from "lucide-react";
+import { Download, Plus, Pencil, Trash2, Search, Package } from "lucide-react";
 
 interface Supplier {
   id: string;
@@ -77,7 +77,7 @@ export default function SuppliersPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Name is required"); return; }
+    if (!form.name.trim()) { setError(t("err_name")); return; }
     setSaving(true);
     setError(null);
     try {
@@ -101,12 +101,12 @@ export default function SuppliersPage() {
           });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error ?? "Save failed");
+        throw new Error(d.error ?? t("err_save"));
       }
       setModalOpen(false);
       fetchSuppliers(search);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("err_save"));
     } finally {
       setSaving(false);
     }
@@ -114,11 +114,12 @@ export default function SuppliersPage() {
 
   async function handleDelete(s: Supplier) {
     if ((s._count?.products ?? 0) > 0) {
-      alert(`Cannot delete "${s.name}" — it has ${s._count?.products} product(s) assigned.`);
+      alert(t("cannot_delete", { name: s.name, count: s._count?.products ?? 0 }));
       return;
     }
-    if (!confirm(`Delete supplier "${s.name}"?`)) return;
-    await fetch(`/api/suppliers/${s.id}`, { method: "DELETE" });
+    if (!confirm(t("confirm_delete_simple", { name: s.name }))) return;
+    const res = await fetch(`/api/suppliers/${s.id}`, { method: "DELETE" });
+    if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? "Не удалось удалить"); return; }
     fetchSuppliers(search);
   }
 
@@ -131,12 +132,15 @@ export default function SuppliersPage() {
     <div className="p-4 sm:p-6 max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("title")}</h1>
+        <div className="flex items-center gap-2">
+        <button onClick={() => window.open(`/api/suppliers?export=xlsx&q=${encodeURIComponent(search)}`, "_blank")} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent"><Download className="h-4 w-4" /> Экспорт</button>
         <button
           onClick={openCreate}
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" /> {t("add")}
         </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -191,14 +195,14 @@ export default function SuppliersPage() {
                       <button
                         onClick={() => openEdit(s)}
                         className="rounded p-1.5 hover:bg-accent transition-colors"
-                        title="Edit"
+                        title={tc("edit")}
                       >
                         <Pencil className="h-4 w-4 text-muted-foreground" />
                       </button>
                       <button
                         onClick={() => handleDelete(s)}
                         className="rounded p-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                        title="Delete"
+                        title={tc("delete")}
                       >
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
                       </button>
@@ -234,7 +238,7 @@ export default function SuppliersPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Supplier name"
+                  placeholder={t("name_placeholder")}
                   required
                 />
               </div>
@@ -244,7 +248,7 @@ export default function SuppliersPage() {
                   value={form.contactName}
                   onChange={(e) => setForm({ ...form, contactName: e.target.value })}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Full name"
+                  placeholder={t("contact_placeholder")}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -255,7 +259,7 @@ export default function SuppliersPage() {
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="name@example.com"
+                    placeholder={t("email_placeholder")}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -264,7 +268,7 @@ export default function SuppliersPage() {
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="+1 555 0100"
+                    placeholder={t("phone_placeholder")}
                   />
                 </div>
               </div>
@@ -275,7 +279,7 @@ export default function SuppliersPage() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={3}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  placeholder="Optional notes…"
+                  placeholder={t("notes_placeholder")}
                 />
               </div>
               <div className="flex justify-end gap-3 pt-1">

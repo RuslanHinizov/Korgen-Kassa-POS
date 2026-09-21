@@ -1,21 +1,22 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { X, Keyboard } from "lucide-react";
-
-const SHORTCUTS = [
-  { key: "/ or F2", description: "Focus product search" },
-  { key: "F4", description: "Open held orders" },
-  { key: "F8", description: "Open payment panel" },
-  { key: "Enter", description: "Add first search result to cart" },
-  { key: "Escape", description: "Close modal / clear search" },
-  { key: "?", description: "Show this cheat sheet" },
-];
 
 interface KeyboardShortcutsModalProps {
   onClose: () => void;
 }
 
 export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps) {
+  const t = useTranslations("pos.shortcuts");
+  const SHORTCUTS = [
+    { key: "/ or F2", description: t("focus_search") },
+    { key: "F4", description: t("open_held") },
+    { key: "F8", description: t("open_payment") },
+    { key: "Enter", description: t("add_first") },
+    { key: "Escape", description: t("close_modal") },
+    { key: "?", description: t("show_cheatsheet") },
+  ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
@@ -25,7 +26,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-2">
             <Keyboard className="h-4 w-4 text-muted-foreground" />
-            <h2 className="font-semibold">Keyboard Shortcuts</h2>
+            <h2 className="font-semibold">{t("title")}</h2>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
@@ -47,7 +48,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             </tbody>
           </table>
           <p className="mt-4 text-[11px] text-muted-foreground text-center">
-            Press <kbd className="rounded border bg-muted px-1 text-xs font-mono">?</kbd> anytime to toggle this panel
+            {t("toggle_hint")}
           </p>
         </div>
       </div>

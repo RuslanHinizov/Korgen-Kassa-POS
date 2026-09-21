@@ -3,21 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/auth-client";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const t = useTranslations("settings");
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const role = session?.user?.role;
+  const isAdmin = role === "ADMIN";
+  const isPrivileged = role === "ADMIN" || role === "MANAGER";
 
   const tabs = [
-    { label: "General", href: "/settings", id: "general", adminOnly: true },
-    { label: "Users", href: "/settings/users", id: "users", adminOnly: true },
-    { label: "Profile", href: "/settings/profile", id: "profile", adminOnly: false },
+    { label: t("tab_general"), href: "/settings", id: "general", show: isPrivileged },
+    { label: t("tab_users"), href: "/settings/users", id: "users", show: isAdmin },
+    { label: t("tab_audit"), href: "/settings/audit", id: "audit", show: isPrivileged },
+    { label: t("tab_profile"), href: "/settings/profile", id: "profile", show: true },
   ];
 
-  const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
+  const visibleTabs = tabs.filter((tab) => tab.show);
 
   return (
     <div className="flex flex-col">

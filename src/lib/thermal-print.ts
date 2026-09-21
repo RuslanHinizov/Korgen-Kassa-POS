@@ -18,6 +18,7 @@ function text(str: string): Uint8Array {
 const INIT = cmd(ESC, 0x40);                    // Initialize printer
 const LINE_FEED = cmd(0x0a);                    // Line feed
 const CUT = cmd(GS, 0x56, 0x00);               // Full cut
+const DRAWER_KICK = cmd(ESC, 0x70, 0x00, 0x19, 0xfa); // Open cash drawer (pin 2, 25ms/250ms pulse)
 const BOLD_ON = cmd(ESC, 0x45, 0x01);          // Bold on
 const BOLD_OFF = cmd(ESC, 0x45, 0x00);         // Bold off
 const ALIGN_CENTER = cmd(ESC, 0x61, 0x01);     // Center align
@@ -61,6 +62,7 @@ interface ThermalReceiptItem {
 
 interface ThermalReceiptData {
   saleId?: string;
+  documentNo?: number;
   items: ThermalReceiptItem[];
   subtotal: number;
   discountAmount: number;
@@ -90,8 +92,8 @@ function buildReceiptBytes(
 
   const now = new Date();
   chunks.push(text(`${now.toLocaleDateString()}  ${now.toLocaleTimeString()}\n`));
-  if (data.saleId) {
-    chunks.push(text(`#${data.saleId.slice(-8).toUpperCase()}\n`));
+  if (data.documentNo != null) {
+    chunks.push(text(`#${data.documentNo}\n`));
   }
   chunks.push(divider());
 
@@ -250,6 +252,74 @@ async function printReceiptWebUSB({
     }
     return { ok: false, error: err instanceof Error ? err.message : "USB print failed" };
   }
+}
+
+/**
+ * Send a raw ESC/POS byte sequence to the connected printer (Web Serial, then
+ * WebUSB fallback). Used for the cash-drawer kick and any future raw commands.
+ */
+export async function sendRawToPrinter(
+  bytes: Uint8Array
+): Promise<{ ok: boolean; error?: string }> {
+  if ("serial" in navigator) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const serial = (navigator as any).serial as {
+        requestPort(): Promise<{
+          open(opts: { baudRate: number }): Promise<void>;
+          close(): Promise<void>;
+          writable: WritableStream<Uint8Array> | null;
+        }>;
+      };
+      const port = await serial.requestPort();
+      await port.open({ baudRate: 9600 });
+      const writer = port.writable?.getWriter();
+      if (!writer) return { ok: false, error: "Cannot write to port" };
+      await writer.write(bytes);
+      writer.releaseLock();
+      await port.close();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Send failed" };
+    }
+  }
+  if ("usb" in navigator) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const usb = (navigator as any).usb as {
+        requestDevice(opts: { filters: { classCode: number }[] }): Promise<{
+          open(): Promise<void>;
+          close(): Promise<void>;
+          claimInterface(n: number): Promise<void>;
+          transferOut(endpoint: number, data: BufferSource): Promise<unknown>;
+          configuration: {
+            interfaces: {
+              interfaceNumber: number;
+              alternate: { endpoints: { direction: string; endpointNumber: number }[] };
+            }[];
+          } | null;
+        }>;
+      };
+      const device = await usb.requestDevice({ filters: [{ classCode: 7 }] });
+      await device.open();
+      const iface = device.configuration?.interfaces[0];
+      if (!iface) return { ok: false, error: "USB printer interface not found" };
+      await device.claimInterface(iface.interfaceNumber);
+      const outEndpoint = iface.alternate.endpoints.find((ep) => ep.direction === "out");
+      if (!outEndpoint) return { ok: false, error: "USB printer OUT endpoint not found" };
+      await device.transferOut(outEndpoint.endpointNumber, bytes.buffer as ArrayBuffer);
+      await device.close();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "USB send failed" };
+    }
+  }
+  return { ok: false, error: "No Web Serial / WebUSB available" };
+}
+
+/** Fire the cash-drawer kick pulse. */
+export async function kickCashDrawer(): Promise<{ ok: boolean; error?: string }> {
+  return sendRawToPrinter(DRAWER_KICK);
 }
 
 export { buildReceiptBytes };

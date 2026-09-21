@@ -1,6 +1,6 @@
 # Testing Guide
 
-Olgax POS has two independent test layers:
+Korgen Kassa POS has two independent test layers:
 
 | Layer | Tool | Scope | Location |
 |---|---|---|---|

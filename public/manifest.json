@@ -1,11 +1,11 @@
 {
-  "name": "Olgax POS",
-  "short_name": "Olgax POS",
-  "description": "Open-source offline-capable Point of Sale for small businesses",
+  "name": "Korgen Kassa POS",
+  "short_name": "Korgen Kassa",
+  "description": "POS система для вашего бизнеса",
   "start_url": "/pos",
   "display": "standalone",
-  "background_color": "#0f2044",
-  "theme_color": "#0f2044",
+  "background_color": "#15503A",
+  "theme_color": "#15503A",
   "orientation": "any",
   "icons": [
     {

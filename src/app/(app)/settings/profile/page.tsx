@@ -8,12 +8,14 @@ import { useTranslations } from "next-intl";
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
+  const tc = useTranslations("common");
+  const tu = useTranslations("users");
   const { data: session, refetch } = useSession();
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   if (!session?.user) {
-    return <div className="p-4">Loading...</div>;
+    return <div className="p-4">{tc("loading")}</div>;
   }
 
   const displayUser = session.user;
@@ -41,7 +43,7 @@ export default function ProfilePage() {
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-muted-foreground">{t("name")}</label>
-            <p className="text-base font-medium">{displayUser.name || "(Not set)"}</p>
+            <p className="text-base font-medium">{displayUser.name || tc("none")}</p>
           </div>
 
           <div>
@@ -59,7 +61,7 @@ export default function ProfilePage() {
                     : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                 }`}
               >
-                {displayUser.role}
+                {displayUser.role === "ADMIN" ? tu("role_admin") : displayUser.role === "MANAGER" ? tu("role_manager") : tu("role_cashier")}
               </span>
             </div>
           </div>

@@ -1,10 +1,27 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { toast } from "sonner";
+import { lineGross, roundAmount } from "@/lib/rounding";
+import type { DiscountLine } from "@/lib/promotions";
+import { unitLabel } from "@/lib/units";
 
-export type PaymentMethod = "CASH" | "CARD" | "OTHER";
+export type PaymentMethod = "CASH" | "CARD" | "OTHER" | "CREDIT";
+
+function lineId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `line-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** JSON/localStorage may contain legacy or malformed values. Never let one turn totals into NaN. */
+function finiteNumber(value: unknown, fallback = 0) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
 
 export interface CartItem {
-  productId: string;
+  /** Stable per-line id — the true identity for remove/update/selection (NOT productId, which repeats across lines only when merged). */
+  id: string;
+  /** null for "Универсальный продукт" — a manually-entered line not tied to any catalog product. */
+  productId: string | null;
   name: string;
   price: number;
   quantity: number;
@@ -12,6 +29,18 @@ export interface CartItem {
   notes: string;
   /** Snapshot of stock at time of add (for offline validation) */
   stock: number;
+  /** Snapshot used only to warn the cashier about a low remaining balance. */
+  lowStockThreshold?: number;
+  /** "kg"/"l"/"m" products support fractional quantities; old persisted carts default to pieces. */
+  unit?: "pcs" | "kg" | "l" | "m";
+  /** For category-scoped promotions */
+  categoryId?: string | null;
+  /** Per-line discount (currency amount), matches UMAG's СКИДКА column. */
+  lineDiscount: number;
+  /** Catalog price captured before the cashier overrode the price at the kassa. */
+  catalogPrice?: number;
+  /** Wholesale price snapshot, used by the kassa's wholesale toggle. */
+  wholesalePrice?: number | null;
 }
 
 /** One line in a split-tender payment */
@@ -37,11 +66,25 @@ export interface CartState {
   loyaltyPointsUsed: number;
   note: string;
 
+  /** Auto-applied promotion discount lines (set by the POS engine) */
+  autoDiscounts: DiscountLine[];
+  autoDiscountTotal: number;
+  /** Attached discount card */
+  discountCardCode: string;
+  discountCardPercent: number;
+
   // Actions
-  addItem: (item: Omit<CartItem, "quantity" | "notes">) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  updateItemNotes: (productId: string, notes: string) => void;
+  /** Catalog items with the same productId merge into the existing line; custom (productId: null) items never merge.
+   *  `notes`/`lineDiscount` are optional — used when restoring a held-order snapshot, default to ""/0 otherwise. */
+  addItem: (item: Omit<CartItem, "id" | "quantity" | "notes" | "lineDiscount"> & Partial<Pick<CartItem, "notes" | "lineDiscount">>, quantity?: number) => void;
+  /** "Универсальный продукт" — a manually-entered name+price line with no catalog product. */
+  addCustomItem: (item: { name: string; price: number; quantity: number }) => void;
+  removeItem: (id: string) => void;
+  removeItems: (ids: string[]) => void;
+  updateQuantity: (id: string, quantity: number) => void;
+  updateItemNotes: (id: string, notes: string) => void;
+  updateLineDiscount: (id: string, amount: number) => void;
+  updateItemPrice: (id: string, price: number) => void;
   setDiscount: (amount: number, type: "fixed" | "percent") => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setAmountTendered: (amount: number) => void;
@@ -53,10 +96,24 @@ export interface CartState {
   removePaymentLine: (method: PaymentMethod) => void;
   clearPaymentLines: () => void;
   setNote: (note: string) => void;
+  setAutoDiscounts: (lines: DiscountLine[], total: number) => void;
+  setDiscountCard: (code: string, percent: number) => void;
   clearCart: () => void;
+
+  /** Rounding rules from the kassa permissions (set by the POS screen once settings load). */
+  roundingWeight: string;
+  roundingDiscount: string;
+  setRounding: (weight: string, discount: string) => void;
+  /** One line before discounts, honouring weighted-item rounding. */
+  lineGrossOf: (item: CartItem) => number;
 
   // Derived
   subtotal: () => number;
+  /** manual (whole-cart) discount only */
+  manualDiscountValue: () => number;
+  /** sum of every line's own lineDiscount */
+  lineDiscountTotal: () => number;
+  /** manual + auto (promotions + card) + per-line, capped at subtotal */
   discountValue: () => number;
   taxAmount: (taxRate: number) => number;
   total: (taxRate: number) => number;
@@ -78,54 +135,110 @@ export const useCartStore = create<CartState>()(
       taxRate: null,
       loyaltyPointsUsed: 0,
       note: "",
+      autoDiscounts: [],
+      autoDiscountTotal: 0,
+      discountCardCode: "",
+      discountCardPercent: 0,
 
-      addItem: (item) =>
+      roundingWeight: "NONE",
+      roundingDiscount: "NONE",
+      setRounding: (weight, discount) => set({ roundingWeight: weight || "NONE", roundingDiscount: discount || "NONE" }),
+      lineGrossOf: (item) => lineGross(finiteNumber(item.price), finiteNumber(item.quantity), item.unit, get().roundingWeight),
+
+      addItem: (item, quantity = 1) =>
         set((state) => {
-          const existing = state.items.find((i) => i.productId === item.productId);
+          const amount = Math.max(0.001, finiteNumber(quantity, 1));
+          // A held order is serialized as JSON, where Infinity (the stock marker
+          // for a manual "Универсальный продукт") becomes null.  Manual lines are
+          // intentionally not stock-limited, so restore their sentinel here.
+          const availableStock = item.productId === null ? Infinity : finiteNumber(item.stock);
+          const existing = item.productId != null ? state.items.find((i) => i.productId === item.productId) : undefined;
           if (existing) {
+            const capped = Math.min(existing.stock, existing.quantity + amount);
+            if (capped <= existing.quantity) {
+              toast.error(`Остаток: ${existing.stock} ${unitLabel(existing.unit, true)} — больше нельзя добавить`);
+              return {};
+            }
             return {
               items: state.items.map((i) =>
-                i.productId === item.productId
-                  ? { ...i, quantity: i.quantity + 1 }
+                i.id === existing.id
+                  ? { ...i, quantity: capped, unit: item.unit ?? i.unit ?? "pcs" }
                   : i
               ),
             };
           }
-          return { items: [...state.items, { ...item, quantity: 1, notes: "" }] };
+          const capped = Math.min(availableStock, amount);
+          if (capped <= 0) {
+            toast.error(`Остаток: ${availableStock} ${unitLabel(item.unit, true)} — нет в наличии`);
+            return {};
+          }
+          return { items: [...state.items, { ...item, stock: availableStock, id: lineId(), unit: item.unit ?? "pcs", quantity: capped, notes: item.notes ?? "", lineDiscount: item.lineDiscount ?? 0 }] };
         }),
 
-      removeItem: (productId) =>
+      addCustomItem: (item) =>
         set((state) => ({
-          items: state.items.filter((i) => i.productId !== productId),
+          items: [
+            ...state.items,
+            { id: lineId(), productId: null, name: item.name, price: item.price, quantity: Math.max(0.001, item.quantity), notes: "", stock: Infinity, unit: "pcs", categoryId: null, lineDiscount: 0 },
+          ],
         })),
 
-      updateQuantity: (productId, quantity) =>
+      removeItem: (id) =>
+        set((state) => ({
+          items: state.items.filter((i) => i.id !== id),
+        })),
+
+      removeItems: (ids) =>
         set((state) => {
-          if (quantity <= 0) {
-            return { items: state.items.filter((i) => i.productId !== productId) };
+          const idSet = new Set(ids);
+          return { items: state.items.filter((i) => !idSet.has(i.id)) };
+        }),
+
+      updateQuantity: (id, quantity) =>
+        set((state) => {
+          const safeQuantity = finiteNumber(quantity);
+          if (safeQuantity <= 0) {
+            return { items: state.items.filter((i) => i.id !== id) };
           }
           return {
-            items: state.items.map((i) =>
-              i.productId === productId ? { ...i, quantity } : i
-            ),
+            items: state.items.map((i) => {
+              if (i.id !== id) return i;
+              const capped = Math.min(i.stock, safeQuantity);
+              if (capped < safeQuantity) toast.error(`Остаток: ${i.stock} ${unitLabel(i.unit, true)} — больше нельзя добавить`);
+              return { ...i, quantity: capped };
+            }),
           };
         }),
 
-      updateItemNotes: (productId, notes) =>
+      updateItemNotes: (id, notes) =>
         set((state) => ({
           items: state.items.map((i) =>
-            i.productId === productId ? { ...i, notes } : i
+            i.id === id ? { ...i, notes } : i
+          ),
+        })),
+
+      updateItemPrice: (id, price) =>
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.id === id ? { ...i, catalogPrice: i.catalogPrice ?? i.price, price: Math.max(0, finiteNumber(price)) } : i
+          ),
+        })),
+
+      updateLineDiscount: (id, amount) =>
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.id === id ? { ...i, lineDiscount: Math.max(0, finiteNumber(amount)) } : i
           ),
         })),
 
       setDiscount: (amount, type) =>
-        set({ discountAmount: amount, discountType: type }),
+        set({ discountAmount: Math.max(0, finiteNumber(amount)), discountType: type }),
 
       setPaymentMethod: (method) => set({ paymentMethod: method }),
       setAmountTendered: (amount) => set({ amountTendered: amount }),
-      setTipAmount: (amount) => set({ tipAmount: Math.max(0, amount) }),
-      setTaxRate: (rate) => set({ taxRate: rate }),
-      setLoyaltyPointsUsed: (points) => set({ loyaltyPointsUsed: Math.max(0, points) }),
+      setTipAmount: (amount) => set({ tipAmount: Math.max(0, finiteNumber(amount)) }),
+      setTaxRate: (rate) => set({ taxRate: rate === null ? null : finiteNumber(rate) }),
+      setLoyaltyPointsUsed: (points) => set({ loyaltyPointsUsed: Math.max(0, finiteNumber(points)) }),
 
       setPaymentLine: (line) =>
         set((state) => {
@@ -141,6 +254,8 @@ export const useCartStore = create<CartState>()(
       clearPaymentLines: () => set({ paymentLines: [] }),
 
       setNote: (note) => set({ note }),
+      setAutoDiscounts: (lines, total) => set({ autoDiscounts: lines, autoDiscountTotal: Math.max(0, finiteNumber(total)) }),
+      setDiscountCard: (code, percent) => set({ discountCardCode: code, discountCardPercent: Math.max(0, finiteNumber(percent)) }),
 
       clearCart: () =>
         set({
@@ -153,22 +268,35 @@ export const useCartStore = create<CartState>()(
           taxRate: null,
           loyaltyPointsUsed: 0,
           note: "",
+          autoDiscounts: [],
+          autoDiscountTotal: 0,
+          discountCardCode: "",
+          discountCardPercent: 0,
         }),
 
       subtotal: () =>
-        get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+        get().items.reduce((sum, i) => sum + get().lineGrossOf(i), 0),
+
+      manualDiscountValue: () => {
+        const { discountAmount, discountType } = get();
+        const amount = finiteNumber(discountAmount);
+        const sub = get().subtotal();
+        if (discountType === "percent") return (sub * amount) / 100;
+        return Math.min(amount, sub);
+      },
+
+      lineDiscountTotal: () => get().items.reduce((sum, i) => sum + finiteNumber(i.lineDiscount), 0),
 
       discountValue: () => {
-        const { discountAmount, discountType } = get();
         const sub = get().subtotal();
-        if (discountType === "percent") return (sub * discountAmount) / 100;
-        return Math.min(discountAmount, sub);
+        const raw = get().manualDiscountValue() + finiteNumber(get().autoDiscountTotal) + get().lineDiscountTotal();
+        return Math.min(sub, roundAmount(raw, get().roundingDiscount));
       },
 
       taxAmount: (defaultTaxRate) => {
         const { taxRate: overrideRate, subtotal, discountValue } = get();
         const base = subtotal() - discountValue();
-        const rate = overrideRate === null ? defaultTaxRate : overrideRate;
+        const rate = finiteNumber(overrideRate === null ? defaultTaxRate : overrideRate);
         // taxRate is usually stored as decimal (0.1) in props, ensure we check the input format
         // assuming props/override are both multipliers (e.g. 0.1 for 10%)
         return base * rate;
@@ -177,13 +305,13 @@ export const useCartStore = create<CartState>()(
       total: (defaultTaxRate) => {
         const { taxRate: overrideRate, subtotal, discountValue, tipAmount } = get();
         const base = subtotal() - discountValue();
-        const rate = overrideRate === null ? defaultTaxRate : overrideRate;
+        const rate = finiteNumber(overrideRate === null ? defaultTaxRate : overrideRate);
         const tax = base * rate;
-        return base + tax + tipAmount;
+        return base + tax + finiteNumber(tipAmount);
       },
 
       paymentLinesTotal: () =>
-        get().paymentLines.reduce((sum, p) => sum + p.amount, 0),
+        get().paymentLines.reduce((sum, p) => sum + finiteNumber(p.amount), 0),
 
       isSplitMode: () => get().paymentLines.length > 0,
 
@@ -191,15 +319,38 @@ export const useCartStore = create<CartState>()(
         const { amountTendered, paymentMethod, paymentLines } = get();
         const tot = get().total(defaultTaxRate);
         if (paymentLines.length > 0) {
-          const paid = paymentLines.reduce((s, p) => s + p.amount, 0);
+          const paid = paymentLines.reduce((s, p) => s + finiteNumber(p.amount), 0);
           return Math.max(0, paid - tot);
         }
         if (paymentMethod !== "CASH") return 0;
-        return Math.max(0, amountTendered - tot);
+        return Math.max(0, finiteNumber(amountTendered) - tot);
       },
     }),
     {
       name: "olgax-pos-cart",
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<CartState>;
+        const items = Array.isArray(persisted.items) ? persisted.items : [];
+        return {
+          ...currentState,
+          ...persisted,
+          items: items.map((raw) => {
+            const item = raw as Partial<CartItem>;
+            const manual = item.productId == null;
+            return {
+              ...item,
+              id: typeof item.id === "string" ? item.id : lineId(),
+              productId: item.productId ?? null,
+              stock: manual ? Infinity : finiteNumber(item.stock),
+              price: finiteNumber(item.price),
+              quantity: Math.max(0.001, finiteNumber(item.quantity, 1)),
+              notes: typeof item.notes === "string" ? item.notes : "",
+              lineDiscount: Math.max(0, finiteNumber(item.lineDiscount)),
+              unit: item.unit ?? "pcs",
+            } as CartItem;
+          }),
+        };
+      },
     }
   )
 );

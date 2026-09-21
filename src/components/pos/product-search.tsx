@@ -1,168 +1,482 @@
-﻿"use client";
+"use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Plus, AlertTriangle } from "lucide-react";
+import { Keyboard, Scale, Search, X, Zap } from "lucide-react";
 import { useCartStore } from "@/store/cart";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { getDeviceSettings, playErrorBeep } from "@/hooks/use-device-settings";
+import { isFractionalUnit, unitLabel } from "@/lib/units";
 
-interface ProductResult {
+export interface ProductResult {
   id: string;
   name: string;
   price: number;
+  wholesalePrice?: number | null;
   stock: number;
+  lowStockThreshold?: number;
+  unit?: "pcs" | "kg" | "l" | "m";
   barcode?: string | null;
   sku?: string | null;
   category?: string | null;
-  imageUrl?: string | null;
+  categoryId?: string | null;
+  scanQuantity?: number;
 }
 
-export function ProductSearch() {
-  const t = useTranslations("pos");
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ProductResult[]>([]);
-  const [allProducts, setAllProducts] = useState<ProductResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [gridLoading, setGridLoading] = useState(true);
-  const addItem = useCartStore((s) => s.addItem);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastKeypressRef = useRef<number>(0);
+interface QuickGroup {
+  id: string;
+  name: string;
+  itemCount: number;
+}
+interface QuickItem {
+  id: string;
+  groupId: string | null;
+  displayName: string | null;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    stock: number;
+    unit: string;
+    barcode: string | null;
+    categoryId?: string | null;
+  } | null;
+}
 
-  // Load all products on mount for the quick-add grid
+export function QuickProductsDialog({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (p: ProductResult) => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations("pos");
+  const [groups, setGroups] = useState<QuickGroup[]>([]);
+  const [items, setItems] = useState<QuickItem[]>([]);
+  const [activeGroup, setActiveGroup] = useState<string | "all">("all");
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    async function loadGrid() {
-      setGridLoading(true);
+    (async () => {
       try {
-        const res = await fetch("/api/products/search?q=&limit=60");
-        if (res.ok) {
-          const data = await res.json();
-          setAllProducts(data);
-        }
-      } catch {
-        // ignore â€” grid is optional
+        const [gRes, iRes] = await Promise.all([
+          fetch("/api/quick-product-groups"),
+          fetch("/api/quick-products"),
+        ]);
+        const gData = gRes.ok ? await gRes.json() : { groups: [] };
+        const iData = iRes.ok ? await iRes.json() : { items: [] };
+        setGroups(gData.groups ?? []);
+        setItems(iData.items ?? []);
       } finally {
-        setGridLoading(false);
+        setLoading(false);
       }
-    }
-    loadGrid();
+    })();
   }, []);
 
-  const search = useCallback(async (q: string) => {
+  const visible = useMemo(
+    () => items.filter((i) => i.product && (activeGroup === "all" || i.groupId === activeGroup)),
+    [items, activeGroup]
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="bg-card flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b p-4">
+          <div className="text-primary flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            <h2 className="font-semibold">{t("quick_products")}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:bg-muted rounded-md p-1"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {groups.length > 0 && (
+          <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b p-3">
+            <button
+              onClick={() => setActiveGroup("all")}
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium",
+                activeGroup === "all"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "hover:bg-accent"
+              )}
+            >
+              {t("all_groups")}
+            </button>
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setActiveGroup(g.id)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium",
+                  activeGroup === g.id
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-accent"
+                )}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="grid grid-cols-3 gap-2">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="bg-muted h-20 animate-pulse rounded-xl border" />
+              ))}
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="text-muted-foreground flex h-40 flex-col items-center justify-center gap-1 text-center text-sm">
+              <Zap className="h-6 w-6" />
+              <p>{t("quick_products_empty")}</p>
+              <p className="text-xs">{t("quick_products_empty_hint")}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {visible.map((item) => {
+                const p = item.product!;
+                return (
+                  <button
+                    key={item.id}
+                    disabled={p.stock <= 0}
+                    onClick={() =>
+                      onSelect({
+                        id: p.id,
+                        name: item.displayName || p.name,
+                        price: p.price,
+                        stock: p.stock,
+                        unit: (p.unit as ProductResult["unit"]) ?? "pcs",
+                        barcode: p.barcode,
+                        categoryId: p.categoryId ?? null,
+                      })
+                    }
+                    className={cn(
+                      "flex min-h-[5.5rem] flex-col justify-between rounded-xl border p-3 text-left transition-all",
+                      p.stock <= 0
+                        ? "bg-muted cursor-not-allowed opacity-50"
+                        : "bg-card hover:border-primary/40 hover:bg-accent active:scale-[.98]"
+                    )}
+                  >
+                    <p className="line-clamp-2 text-xs leading-tight font-semibold">
+                      {item.displayName || p.name}
+                    </p>
+                    <span className="text-primary text-sm font-bold">
+                      {formatCurrency(p.price)}
+                      {isFractionalUnit(p.unit) && (
+                        <span className="text-[10px] font-medium">
+                          {" "}
+                          {t("per_unit", { unit: unitLabel(p.unit, true) })}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeightDialog({
+  product,
+  onAdd,
+  onClose,
+}: {
+  product: ProductResult;
+  onAdd: (weight: number) => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations("pos");
+  const maxStock = Math.max(0, Number(product.stock) || 0);
+  const [weight, setWeight] = useState(() => String(Math.min(1, maxStock)));
+  const value = Number(weight.replace(",", "."));
+  const valid = Number.isFinite(value) && value > 0 && value <= maxStock;
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="bg-card w-full max-w-sm rounded-2xl border p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-primary mb-1 flex items-center gap-2">
+              <Scale className="h-5 w-5" />
+              <h2 className="font-semibold">{t("weight_title")}</h2>
+            </div>
+            <p className="text-muted-foreground text-sm">{product.name}</p>
+            <p className="mt-1 text-sm font-medium">
+              {formatCurrency(product.price)}{" "}
+              {t("per_unit", { unit: unitLabel(product.unit, true) })}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-emerald-800">
+              Остаток: {maxStock} {unitLabel(product.unit, true)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:bg-muted rounded-md p-1"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mb-1.5 block text-sm font-medium" htmlFor="weight-input">
+          {t("weight_label", { unit: unitLabel(product.unit, true) })}
+        </label>
+        <input
+          id="weight-input"
+          autoFocus
+          inputMode="decimal"
+          value={weight}
+          max={maxStock}
+          onChange={(e) => setWeight(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid) onAdd(value);
+          }}
+          className="bg-background focus:ring-primary h-12 w-full rounded-lg border px-3 text-center text-xl font-bold outline-none focus:ring-2"
+        />
+        <div className="my-3 grid grid-cols-4 gap-2">
+          {[0.25, 0.5, 1, 2].map((n) => (
+            <button
+              key={n}
+            disabled={n > maxStock}
+            onClick={() => setWeight(String(n))}
+            className="hover:bg-accent rounded-md border py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {n} {unitLabel(product.unit, true)}
+            </button>
+          ))}
+        </div>
+        <button
+          disabled={!valid}
+          onClick={() => onAdd(value)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 w-full rounded-lg font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t("weight_add")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Built into the POS so a cash monitor never depends on Windows' keyboard. */
+function TouchSearchKeyboard({
+  value,
+  onChange,
+  onSubmit,
+  onClose,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const [language, setLanguage] = useState<"RU" | "EN">("RU");
+  const rows = language === "RU"
+    ? ["1234567890", "йцукенгшщзх", "фывапролджэ", "ячсмитьбю"]
+    : ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"];
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[90] border-t bg-white p-3 shadow-[0_-12px_30px_rgba(0,0,0,0.18)]">
+      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500">
+        <span>Экранная клавиатура</span>
+        <button type="button" onClick={onClose} className="rounded p-1 hover:bg-slate-100" aria-label="Закрыть клавиатуру"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row} className="flex justify-center gap-1.5">
+            {[...row].map((key) => (
+              <button key={key} type="button" onClick={() => onChange(value + key)} className="h-11 min-w-10 flex-1 rounded-lg border bg-slate-50 text-base font-medium active:bg-emerald-100">{key}</button>
+            ))}
+          </div>
+        ))}
+        <div className="flex gap-1.5">
+          <button type="button" onClick={() => setLanguage((current) => current === "RU" ? "EN" : "RU")} className="h-11 rounded-lg border bg-slate-100 px-4 font-semibold">{language}</button>
+          <button type="button" onClick={() => onChange(value.slice(0, -1))} className="h-11 rounded-lg border bg-slate-100 px-4 font-semibold">⌫</button>
+          <button type="button" onClick={() => onChange("")} className="h-11 rounded-lg border bg-slate-100 px-4 text-sm font-semibold">Очистить</button>
+          <button type="button" onClick={onSubmit} className="h-11 flex-1 rounded-lg bg-[#15503A] px-5 font-semibold text-white">Найти</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Kiosk-mode search bar: a single input with a dropdown of results underneath,
+ * matching UMAG's kassa search field (no persistent category-browsing panel —
+ * barcode-less browsing lives in БЫСТРЫЕ ТОВАРЫ instead, see QuickProductsDialog). */
+export function KioskSearchBar() {
+  const t = useTranslations("pos");
+  const addItem = useCartStore((s) => s.addItem);
+
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ProductResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [weightedProduct, setWeightedProduct] = useState<ProductResult | null>(null);
+  const [touchKeyboardOpen, setTouchKeyboardOpen] = useState(false);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeypressRef = useRef(0);
+  const priorEmptyQuery = useRef("");
+  const queryRef = useRef("");
+
+  const search = useCallback(async (q: string): Promise<ProductResult[]> => {
     if (!q.trim()) {
       setResults([]);
-      return;
+      return [];
     }
     setLoading(true);
     try {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        const { searchProductsOffline } = await import("@/lib/pglite");
-        const data = await searchProductsOffline(q);
-        setResults(data);
-      } else {
-        const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
-        setResults(data);
+      const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
+      const found = res.ok ? await res.json() as ProductResult[] : [];
+      setResults(found);
+      const code = q.trim();
+      if (
+        /^[A-Za-z0-9]{6,20}$/.test(code) &&
+        found.length === 0 &&
+        queryRef.current.trim() === code &&
+        priorEmptyQuery.current !== code
+      ) {
+        priorEmptyQuery.current = code;
+        toast.error(t("product_not_found_named", { query: code }), { id: "barcode-not-found" });
+        if (getDeviceSettings().scannerBeepEnabled) playErrorBeep();
       }
+      return found;
     } catch {
       setResults([]);
+      return [];
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  // Show toast when barcode scan returns no result
-  const prevResultsRef = useRef<ProductResult[]>([]);
-  useEffect(() => {
-    const isBarcodeLike = /^[A-Za-z0-9]{6,20}$/.test(query.trim()) && results.length === 0 && prevResultsRef.current !== results && !loading && query.trim().length > 0;
-    if (isBarcodeLike) {
-      toast.error(`Product not found: "${query.trim()}"`, { id: "barcode-not-found", duration: 3000 });
-      const deviceSettings = getDeviceSettings();
-      if (deviceSettings.scannerBeepEnabled) playErrorBeep();
-    }
-    prevResultsRef.current = results;
-  }, [results, query, loading]);
+  const searchMode = Boolean(query.trim());
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setQuery(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    // Barcode scanners type very fast (< 30ms between keystrokes).
-    // Use a short debounce so the search fires immediately after the scanner finishes.
-    const now = Date.now();
-    const timeSinceLast = now - lastKeypressRef.current;
-    lastKeypressRef.current = now;
-    const delay = timeSinceLast < 30 ? 50 : 250;
-    debounceRef.current = setTimeout(() => search(val), delay);
-  }
-
-  function handleSelect(product: ProductResult) {
-    addItem({
-      productId: product.id,
-      name: product.name,
-      price: product.price,
-      stock: product.stock,
-    });
+  function addProduct(product: ProductResult, amount = 1) {
+    addItem(
+      {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        wholesalePrice: product.wholesalePrice ?? null,
+        stock: product.stock,
+        lowStockThreshold: product.lowStockThreshold,
+        unit: product.unit ?? "pcs",
+        categoryId: product.categoryId ?? null,
+      },
+      amount
+    );
+    queryRef.current = "";
     setQuery("");
     setResults([]);
+    setWeightedProduct(null);
+  }
+  function selectProduct(product: ProductResult) {
+    if (product.scanQuantity) addProduct(product, product.scanQuantity);
+    else if (isFractionalUnit(product.unit)) setWeightedProduct(product);
+    else addProduct(product);
+  }
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    queryRef.current = next;
+    setQuery(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const now = Date.now();
+    const fast = now - lastKeypressRef.current < 30;
+    lastKeypressRef.current = now;
+    debounceRef.current = setTimeout(() => search(next), fast ? 50 : 250);
   }
 
-  const showSearchResults = Boolean(query.trim());
+  function setSearchText(next: string) {
+    queryRef.current = next;
+    setQuery(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(next), 120);
+  }
+
+  async function submitSearch() {
+    const code = query.trim();
+    if (!code) return;
+    if (/^[A-Za-z0-9]{6,20}$/.test(code)) window.dispatchEvent(new Event("pos-scanner-read"));
+    // A scanner sends the full barcode and Enter before the result list renders.
+    const found = await search(code);
+    const product = found.find((item) => item.barcode === code) ?? found[0];
+    if (product) {
+      selectProduct(product);
+      setTouchKeyboardOpen(false);
+    }
+  }
 
   return (
-    <div className="flex flex-col h-full gap-3">
-      {/* Search bar */}
-      <div className="relative shrink-0">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <div className="relative flex-1">
+      <div className="relative">
+        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           id="pos-search-input"
-          type="text"
           value={query}
           onChange={handleChange}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && results.length > 0) {
+            if (e.key === "Enter") {
               e.preventDefault();
-              handleSelect(results[0]);
-            } else if (e.key === "Escape") {
+              void submitSearch();
+            }
+            if (e.key === "Escape") {
+              queryRef.current = "";
               setQuery("");
               setResults([]);
-              (e.target as HTMLInputElement).blur();
             }
           }}
-          placeholder={t("search_placeholder")}
-          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-11 w-full rounded-md border pl-9 pr-4 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          placeholder="Поиск"
+          className="border-input bg-background focus:ring-primary flex h-11 w-full rounded-md border py-2 pr-10 pl-9 text-sm outline-none focus:ring-2"
           autoFocus
+          onPointerDown={() => setTouchKeyboardOpen(true)}
         />
+        <button type="button" onClick={() => setTouchKeyboardOpen(true)} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-700 hover:bg-slate-100" aria-label="Экранная клавиатура"><Keyboard className="h-4 w-4" /></button>
       </div>
 
-      {/* Search results */}
-      {showSearchResults && (
-        <div className="shrink-0">
-          {loading && (
-            <p className="text-xs text-muted-foreground px-1 py-2">Searchingâ€¦</p>
-          )}
-          {!loading && results.length === 0 && (
-            <p className="text-xs text-muted-foreground px-1 py-2">No products found</p>
-          )}
-          {results.length > 0 && (
-            <div className="rounded-md border bg-card divide-y overflow-hidden">
+      {touchKeyboardOpen && <TouchSearchKeyboard value={query} onChange={setSearchText} onSubmit={() => void submitSearch()} onClose={() => setTouchKeyboardOpen(false)} />}
+
+      {searchMode && (
+        <div className="bg-popover absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md border shadow-lg">
+          {loading ? (
+            <p className="text-muted-foreground px-3 py-3 text-xs">{t("searching")}</p>
+          ) : results.length === 0 ? (
+            <p className="text-muted-foreground px-3 py-3 text-xs">{t("no_products_found")}</p>
+          ) : (
+            <div className="divide-y">
               {results.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => handleSelect(p)}
-                  className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent transition-colors"
+                  onClick={() => selectProduct(p)}
+                  className="hover:bg-accent flex w-full items-center justify-between px-4 py-3 text-left"
                 >
                   <div>
                     <p className="text-sm font-medium">{p.name}</p>
-                    {p.sku && (
-                      <p className="text-xs text-muted-foreground">SKU: {p.sku}</p>
-                    )}
+                    <p className="text-muted-foreground text-xs">
+                      {isFractionalUnit(p.unit)
+                        ? `${formatCurrency(p.price)} ${t("per_unit", { unit: unitLabel(p.unit, true) })}`
+                        : p.sku
+                          ? `${t("sku")}: ${p.sku}`
+                          : (p.category ?? "")}
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{formatCurrency(p.price)}</p>
-                    <p className="text-xs text-muted-foreground">Stock: {p.stock}</p>
-                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {t("stock")}: {p.stock}
+                    {isFractionalUnit(p.unit) ? ` ${unitLabel(p.unit, true)}` : ""}
+                  </p>
                 </button>
               ))}
             </div>
@@ -170,67 +484,12 @@ export function ProductSearch() {
         </div>
       )}
 
-      {/* Quick-add product grid (when no active search) */}
-      {!showSearchResults && (
-        <div className="flex-1 overflow-y-auto">
-          {gridLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-20 rounded-lg border bg-muted animate-pulse" />
-              ))}
-            </div>
-          ) : allProducts.length === 0 ? (
-            <div className="flex h-40 items-center justify-center text-muted-foreground text-sm">
-              No products yet — add products in the catalog
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-              {allProducts.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleSelect(p)}
-                  disabled={p.stock === 0}
-                  className={cn(
-                    "relative flex flex-col justify-between rounded-lg border p-3 text-left transition-all min-h-[4.5rem]",
-                    p.stock === 0
-                      ? "opacity-50 cursor-not-allowed bg-muted"
-                      : "hover:bg-accent hover:border-primary/30 active:scale-[0.98] cursor-pointer bg-card"
-                  )}
-                >
-                  <div className="flex w-full items-start justify-between gap-1">
-                    <p className="text-xs font-semibold leading-tight line-clamp-2 flex-1">
-                      {p.name}
-                    </p>
-                    <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground mt-0.5" />
-                  </div>
-                  {p.imageUrl ? (
-                    <div className="flex w-full justify-center">
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="rounded-md object-cover"
-                      />
-                    </div>
-                  ) : null}
-                  <div className="flex w-full items-end justify-between mt-1.5">
-                    <span className="text-sm font-bold text-primary">
-                      {formatCurrency(p.price)}
-                    </span>
-                    {p.stock > 0 && p.stock <= 5 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="h-2.5 w-2.5" />
-                        {p.stock}
-                      </span>
-                    )}
-                    {p.stock === 0 && (
-                      <span className="text-[10px] text-destructive font-medium">Out</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      {weightedProduct && (
+        <WeightDialog
+          product={weightedProduct}
+          onAdd={(weight) => addProduct(weightedProduct, weight)}
+          onClose={() => setWeightedProduct(null)}
+        />
       )}
     </div>
   );

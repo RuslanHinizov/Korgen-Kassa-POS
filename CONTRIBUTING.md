@@ -1,4 +1,4 @@
-# Contributing to Olgax POS
+# Contributing to Korgen Kassa POS
 
 Thank you for your interest in contributing! This document covers the most common contribution workflows.
 
@@ -38,7 +38,7 @@ pnpm dev
 
 ## Adding a New Language
 
-Olgax POS uses [next-intl](https://next-intl-docs.vercel.app/) for internationalization.
+Korgen Kassa POS uses [next-intl](https://next-intl-docs.vercel.app/) for internationalization.
 
 ### Step 1 — Create the message file
 

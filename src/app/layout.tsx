@@ -11,10 +11,10 @@ const RTL_LOCALES = ["ar", "he", "fa", "ur"];
 
 export const metadata: Metadata = {
   title: {
-    default: "Olgax POS",
-    template: "%s | Olgax POS",
+    default: "Korgen Kassa POS",
+    template: "%s | Korgen Kassa POS",
   },
-  description: "Open-source, offline-capable Point of Sale for small businesses",
+  description: "Korgen Kassa — POS система для вашего бизнеса",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -28,12 +28,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Olgax POS",
+    title: "Korgen Kassa POS",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f2044",
+  themeColor: "#15503A",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

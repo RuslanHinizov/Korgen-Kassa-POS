@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 
 /** GET /api/loyalty?customerId=... — get balance */
 export async function GET(req: NextRequest) {
@@ -11,12 +12,13 @@ export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get("customerId");
   if (!customerId) return NextResponse.json({ error: "customerId required" }, { status: 400 });
 
+  const storeId = await getStoreId();
   const [customer, settings] = await Promise.all([
-    prisma.customer.findUnique({
-      where: { id: customerId },
+    prisma.customer.findFirst({
+      where: { id: customerId, storeId },
       select: { id: true, name: true, loyaltyPoints: true },
     }),
-    prisma.businessSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.businessSettings.findUnique({ where: { storeId } }),
   ]);
 
   if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });

@@ -3,11 +3,13 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { updateSettings } from "@/app/actions/settings-actions";
 import { setLocale } from "@/app/actions/locale-actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { SaleRestrictionsPanel } from "./sale-restrictions-panel";
 
 const settingsSchema = z.object({
   name: z.string().min(1, "Business name is required"),
@@ -26,6 +28,24 @@ const settingsSchema = z.object({
   loyaltyRedeemValue: z.number().min(1),
   // Inventory
   lowStockThreshold: z.number().int().min(0),
+  // Manager controls
+  maxCashierDiscountPercent: z.number().min(0).max(100),
+  requireOpenShift: z.boolean().optional(),
+  managerPin: z.string().default(""),
+  // Permissions
+  allowWholesale: z.boolean().optional(),
+  autoUpdateSalePrice: z.boolean().optional(),
+  roundSalePriceUp: z.boolean().optional(),
+  backdatingDays: z.number().int().min(0),
+  mergeSameProducts: z.boolean().optional(),
+  bindProductToSupplier: z.boolean().optional(),
+  autosaveReceiptDraft: z.boolean().optional(),
+  autoUpdateCostPrice: z.boolean().optional(),
+  autoUpdateBundleSalePrice: z.boolean().optional(),
+  cashbackEnabled: z.boolean().optional(),
+  hideStockDuringStocktake: z.boolean().optional(),
+  hideAmountsDuringStocktake: z.boolean().optional(),
+  autoRestoreDeletedProducts: z.boolean().optional(),
   // Storage
   storageProvider: z.string().default("local"),
   storageRegion: z.string().default(""),
@@ -54,6 +74,22 @@ type SettingsFormValues = {
   loyaltyEarnRate: number;
   loyaltyRedeemValue: number;
   lowStockThreshold: number;
+  maxCashierDiscountPercent: number;
+  requireOpenShift?: boolean;
+  managerPin: string;
+  allowWholesale?: boolean;
+  autoUpdateSalePrice?: boolean;
+  roundSalePriceUp?: boolean;
+  backdatingDays: number;
+  mergeSameProducts?: boolean;
+  bindProductToSupplier?: boolean;
+  autosaveReceiptDraft?: boolean;
+  autoUpdateCostPrice?: boolean;
+  autoUpdateBundleSalePrice?: boolean;
+  cashbackEnabled?: boolean;
+  hideStockDuringStocktake?: boolean;
+  hideAmountsDuringStocktake?: boolean;
+  autoRestoreDeletedProducts?: boolean;
   storageProvider: string;
   storageRegion: string;
   storageBucket: string;
@@ -79,6 +115,22 @@ interface Props {
     loyaltyEarnRate: { toString(): string };
     loyaltyRedeemValue: { toString(): string };
     lowStockThreshold: number;
+    maxCashierDiscountPercent: { toString(): string };
+    requireOpenShift: boolean;
+    hasManagerPin: boolean;
+    allowWholesale: boolean;
+    autoUpdateSalePrice: boolean;
+    roundSalePriceUp: boolean;
+    backdatingDays: number;
+    mergeSameProducts: boolean;
+    bindProductToSupplier: boolean;
+    autosaveReceiptDraft: boolean;
+    autoUpdateCostPrice: boolean;
+    autoUpdateBundleSalePrice: boolean;
+    cashbackEnabled: boolean;
+    hideStockDuringStocktake: boolean;
+    hideAmountsDuringStocktake: boolean;
+    autoRestoreDeletedProducts: boolean;
     // Storage
     storageProvider: string;
     storageRegion: string | null;
@@ -92,6 +144,7 @@ interface Props {
 
 export function SettingsForm({ settings }: Props) {
   const router = useRouter();
+  const t = useTranslations("settings");
   const {
     register,
     handleSubmit,
@@ -115,6 +168,22 @@ export function SettingsForm({ settings }: Props) {
       loyaltyEarnRate: parseFloat(settings.loyaltyEarnRate.toString()),
       loyaltyRedeemValue: parseFloat(settings.loyaltyRedeemValue.toString()),
       lowStockThreshold: settings.lowStockThreshold,
+      maxCashierDiscountPercent: parseFloat(settings.maxCashierDiscountPercent.toString()),
+      requireOpenShift: settings.requireOpenShift,
+      managerPin: "",
+      allowWholesale: settings.allowWholesale,
+      autoUpdateSalePrice: settings.autoUpdateSalePrice,
+      roundSalePriceUp: settings.roundSalePriceUp,
+      backdatingDays: settings.backdatingDays,
+      mergeSameProducts: settings.mergeSameProducts,
+      bindProductToSupplier: settings.bindProductToSupplier,
+      autosaveReceiptDraft: settings.autosaveReceiptDraft,
+      autoUpdateCostPrice: settings.autoUpdateCostPrice,
+      autoUpdateBundleSalePrice: settings.autoUpdateBundleSalePrice,
+      cashbackEnabled: settings.cashbackEnabled,
+      hideStockDuringStocktake: settings.hideStockDuringStocktake,
+      hideAmountsDuringStocktake: settings.hideAmountsDuringStocktake,
+      autoRestoreDeletedProducts: settings.autoRestoreDeletedProducts,
       // Storage — secret key intentionally never pre-filled (security)
       storageProvider: settings.storageProvider,
       storageRegion: settings.storageRegion ?? "",
@@ -136,10 +205,10 @@ export function SettingsForm({ settings }: Props) {
       await updateSettings(fd);
       // Update locale cookie when language changes
       await setLocale(values.language);
-      toast.success("Settings saved successfully");
+      toast.success(t("saved"));
       router.refresh();
     } catch {
-      toast.error("Failed to save settings. Please try again.");
+      toast.error(t("save_failed"));
     }
   }
 
@@ -172,44 +241,44 @@ export function SettingsForm({ settings }: Props) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       {/* Business */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Business</h2>
-        {field("Business Name *", "name", { placeholder: "My Store" })}
-        {field("Logo URL", "logoUrl", { type: "url", placeholder: "https://…" })}
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_business")}</h2>
+        {field(`${t("business_name")} *`, "name", { placeholder: t("business_name_placeholder") })}
+        {field(t("logo_url"), "logoUrl", { type: "url", placeholder: "https://…" })}
       </section>
 
       {/* Appearance */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Appearance</h2>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_appearance")}</h2>
         <div className="grid grid-cols-2 gap-4">
-          {field("Primary Color", "primaryColor", { type: "color" })}
-          {field("Accent Color", "accentColor", { type: "color" })}
+          {field(t("primary_color"), "primaryColor", { type: "color" })}
+          {field(t("accent_color"), "accentColor", { type: "color" })}
         </div>
       </section>
 
       {/* Currency & Tax */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Currency & Tax</h2>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_currency_tax")}</h2>
         <div className="grid grid-cols-2 gap-4">
-          {field("Currency Symbol", "currency", { placeholder: "$" })}
-          {field("Decimal Places", "currencyDecimals", { type: "number", min: "0", max: "4" })}
+          {field(t("currency_symbol"), "currency", { placeholder: "$" })}
+          {field(t("decimal_places"), "currencyDecimals", { type: "number", min: "0", max: "4" })}
         </div>
         <div className="grid grid-cols-2 gap-4">
-          {field("Tax Rate (%)", "taxRate", { type: "number", step: "0.01", min: "0", max: "100" })}
-          {field("Tax Name", "taxName", { placeholder: "VAT" })}
+          {field(t("tax_rate"), "taxRate", { type: "number", step: "0.01", min: "0", max: "100" })}
+          {field(t("tax_name"), "taxName", { placeholder: t("tax_name_placeholder") })}
         </div>
       </section>
 
       {/* Receipt */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Receipt</h2>
-        {field("Footer Text", "receiptFooter", { placeholder: "Thank you!" })}
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_receipt")}</h2>
+        {field(t("footer_text"), "receiptFooter", { placeholder: t("footer_placeholder") })}
       </section>
 
       {/* Language */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Language</h2>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_language")}</h2>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Language</label>
+          <label className="text-sm font-medium">{t("language")}</label>
           <select
             {...register("language")}
             className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
@@ -234,11 +303,11 @@ export function SettingsForm({ settings }: Props) {
 
       {/* Loyalty */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Loyalty Program</h2>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_loyalty")}</h2>
         <div className="flex items-center justify-between rounded-lg border p-4">
           <div>
-            <p className="text-sm font-medium">Enable Loyalty Points</p>
-            <p className="text-xs text-muted-foreground">Let customers earn and redeem points on purchases</p>
+            <p className="text-sm font-medium">{t("loyalty_enable")}</p>
+            <p className="text-xs text-muted-foreground">{t("loyalty_enable_hint")}</p>
           </div>
           <input
             type="checkbox"
@@ -247,81 +316,199 @@ export function SettingsForm({ settings }: Props) {
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          {field("Earn Rate (pts per $1)", "loyaltyEarnRate", { type: "number", step: "0.01", min: "0", placeholder: "1" })}
-          {field("Redeem Rate (pts per $1 off)", "loyaltyRedeemValue", { type: "number", step: "1", min: "1", placeholder: "100" })}
+          {field(t("loyalty_earn_rate", { unit: `${watch("currency") || settings.currency}1` }), "loyaltyEarnRate", { type: "number", step: "0.01", min: "0", placeholder: "1" })}
+          {field(t("loyalty_redeem_rate", { unit: `${watch("currency") || settings.currency}1` }), "loyaltyRedeemValue", { type: "number", step: "1", min: "1", placeholder: "100" })}
         </div>
         <p className="text-xs text-muted-foreground">
-          Example: Earn Rate = 1, Redeem Rate = 100 → customer earns 1 pt per $1 spent, and 100 pts = $1 discount.
+          {t("loyalty_example", { unit: `${watch("currency") || settings.currency}1` })}
         </p>
       </section>
 
       {/* Inventory */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Inventory</h2>
-        {field("Low Stock Threshold (default)", "lowStockThreshold", { type: "number", min: "0", step: "1", placeholder: "5" })}
-        <p className="text-xs text-muted-foreground">Products with stock at or below this level will show low-stock alerts.</p>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_inventory")}</h2>
+        {field(t("low_stock_threshold"), "lowStockThreshold", { type: "number", min: "0", step: "1", placeholder: "5" })}
+        <p className="text-xs text-muted-foreground">{t("low_stock_hint")}</p>
 
-        {/* Low-stock email alert — placeholder UI, actual emails ship in v0.3 */}
-        <div className="rounded-lg border border-dashed p-4 space-y-3 opacity-80">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-medium">Low-Stock Email Alerts</h3>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              Coming in v0.3
-            </span>
+      </section>
+
+      {/* Manager controls */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_manager")}</h2>
+        {field(t("max_discount"), "maxCashierDiscountPercent", { type: "number", min: "0", max: "100", step: "1" })}
+        <p className="text-xs text-muted-foreground">{t("max_discount_hint")}</p>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("require_shift")}</p>
+            <p className="text-xs text-muted-foreground">{t("require_shift_hint")}</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Receive an email when a product’s stock drops to or below the threshold above.
-          </p>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <input
-              type="email"
-              disabled
-              placeholder="alert@example.com"
-              className="flex-1 h-9 w-full rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground cursor-not-allowed"
-            />
-            <label className="flex items-center gap-2 cursor-not-allowed opacity-60 shrink-0">
-              <input type="checkbox" disabled className="accent-primary" />
-              <span className="text-sm">Enabled</span>
-            </label>
-          </div>
+          <input
+            type="checkbox"
+            {...register("requireOpenShift")}
+            className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+          />
         </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">{t("manager_pin")}</label>
+          <input
+            {...register("managerPin")}
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            placeholder={settings.hasManagerPin ? t("manager_pin_set") : t("manager_pin_unset")}
+            className="border-input bg-background flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          />
+          <p className="text-xs text-muted-foreground">{t("manager_pin_hint")}</p>
+        </div>
+      </section>
+
+      {/* Permissions (Настройка разрешений) */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_permissions")}</h2>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_auto_sale_price")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_auto_sale_price_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("autoUpdateSalePrice")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_round_up")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_round_up_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("roundSalePriceUp")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_wholesale")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_wholesale_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("allowWholesale")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        {field(t("perm_backdating_days"), "backdatingDays", { type: "number", min: "0", step: "1" })}
+        <p className="text-xs text-muted-foreground">{t("perm_backdating_days_hint")}</p>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_merge_products")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_merge_products_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("mergeSameProducts")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_bind_supplier")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_bind_supplier_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("bindProductToSupplier")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_autosave_receipt")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_autosave_receipt_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("autosaveReceiptDraft")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4 opacity-70">
+          <div>
+            <p className="text-sm font-medium">{t("perm_contragents_per_store")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_contragents_per_store_hint")}</p>
+          </div>
+          <input type="checkbox" checked disabled className="h-4 w-4 rounded border-input accent-primary" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_auto_cost_price")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_auto_cost_price_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("autoUpdateCostPrice")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_auto_bundle_price")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_auto_bundle_price_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("autoUpdateBundleSalePrice")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_cashback")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_cashback_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("cashbackEnabled")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_hide_stock_stocktake")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_hide_stock_stocktake_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("hideStockDuringStocktake")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_hide_amounts_stocktake")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_hide_amounts_stocktake_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("hideAmountsDuringStocktake")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">{t("perm_auto_restore")}</p>
+            <p className="text-xs text-muted-foreground">{t("perm_auto_restore_hint")}</p>
+          </div>
+          <input type="checkbox" {...register("autoRestoreDeletedProducts")} className="h-4 w-4 rounded border-input accent-primary cursor-pointer" />
+        </div>
+
+        <SaleRestrictionsPanel />
       </section>
 
       {/* Image Storage */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Image Storage</h2>
+        <h2 className="text-base font-semibold border-b pb-2">{t("section_storage")}</h2>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Storage Provider</label>
+          <label className="text-sm font-medium">{t("storage_provider")}</label>
           <select
             {...register("storageProvider")}
             className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           >
-            <option value="local">Local (public/uploads/) — self-hosted only</option>
+            <option value="local">{t("storage_provider_local")}</option>
             <option value="vercel_blob">Vercel Blob</option>
             <option value="cloudflare_r2">Cloudflare R2</option>
             <option value="s3">AWS S3</option>
           </select>
           <p className="text-xs text-muted-foreground">
-            Where product images are stored after upload.
+            {t("storage_provider_hint")}
           </p>
         </div>
 
         {storageProvider === "local" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300">
-            Files are saved to <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">public/uploads/</code> on your server.
-            This does <strong>not</strong> work on serverless platforms like Vercel — choose a cloud provider instead.
+            {t("storage_local_warn")}
           </div>
         )}
 
         {storageProvider === "vercel_blob" && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 space-y-2 text-sm">
-            <p className="font-medium text-blue-800 dark:text-blue-300">Vercel Blob Setup</p>
+            <p className="font-medium text-blue-800 dark:text-blue-300">{t("storage_vercel_title")}</p>
             <p className="text-muted-foreground">
-              Set the{" "}
-              <code className="font-mono bg-muted px-1 rounded">BLOB_READ_WRITE_TOKEN</code>{" "}
-              environment variable in your Vercel project or <code className="font-mono bg-muted px-1 rounded">.env</code> file.
-              No other configuration is needed.
+              {t("storage_vercel_body")}
             </p>
           </div>
         )}
@@ -329,37 +516,37 @@ export function SettingsForm({ settings }: Props) {
         {(storageProvider === "cloudflare_r2" || storageProvider === "s3") && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              {field("Bucket Name", "storageBucket", { placeholder: "my-bucket" })}
+              {field(t("storage_bucket"), "storageBucket", { placeholder: "my-bucket" })}
               {field(
-                "Region",
+                t("storage_region"),
                 "storageRegion",
                 { placeholder: storageProvider === "cloudflare_r2" ? "auto" : "us-east-1" }
               )}
             </div>
             {storageProvider === "cloudflare_r2" &&
-              field("R2 Endpoint URL", "storageEndpoint", {
+              field(t("storage_endpoint"), "storageEndpoint", {
                 placeholder: "https://<account-id>.r2.cloudflarestorage.com",
               })
             }
-            {field("Access Key ID", "storageAccessKey", { placeholder: "Access key ID", autoComplete: "off" })}
+            {field(t("storage_access_key"), "storageAccessKey", { placeholder: "Access key ID", autoComplete: "off" })}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Secret Access Key</label>
+              <label className="text-sm font-medium">{t("storage_secret_key")}</label>
               <input
                 {...register("storageSecretKey")}
                 type="password"
                 autoComplete="new-password"
-                placeholder={settings.hasStorageSecretKey ? "Leave blank to keep current key" : "Secret access key"}
+                placeholder={settings.hasStorageSecretKey ? t("storage_secret_keep") : t("storage_secret_new")}
                 className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               />
             </div>
-            {field("Public URL (CDN base)", "storagePublicUrl", {
+            {field(t("storage_public_url"), "storagePublicUrl", {
               placeholder: storageProvider === "cloudflare_r2"
                 ? "https://pub-xxx.r2.dev"
                 : "https://cdn.example.com",
               type: "url",
             })}
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              ⚠ Credentials are stored in the database. Use a dedicated IAM / API token with write-only access to this bucket.
+              {t("storage_creds_warn")}
             </p>
           </div>
         )}
@@ -371,7 +558,7 @@ export function SettingsForm({ settings }: Props) {
           disabled={isSubmitting}
           className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center rounded-md px-6 text-sm font-medium transition-colors disabled:opacity-50"
         >
-          {isSubmitting ? "Saving…" : "Save Settings"}
+          {isSubmitting ? t("saving") : t("save")}
         </button>
       </div>
     </form>

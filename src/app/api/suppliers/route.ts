@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { counterpartyScope } from "@/lib/counterparty-scope";
+import { getStoreId } from "@/lib/store-context";
+import { xlsxResponse } from "@/lib/xlsx-response";
 import { z } from "zod";
 
 const supplierSchema = z.object({
@@ -17,18 +20,30 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get("q") ?? "";
+  const storeId = await getStoreId();
   const suppliers = await prisma.supplier.findMany({
-    where: q ? { name: { contains: q, mode: "insensitive" } } : undefined,
+    where: { ...(await counterpartyScope(storeId)), ...(q ? { name: { contains: q, mode: "insensitive" } } : {}) },
     orderBy: { name: "asc" },
-    include: { _count: { select: { products: true } } },
+    include: { _count: { select: { products: { where: { deletedAt: null } } } } },
   });
+
+  if (req.nextUrl.searchParams.get("export") === "xlsx") {
+    return xlsxResponse({
+      filename: "postavshchiki",
+      sheetName: "Поставщики",
+      rows: [
+        ["Название", "Контактное лицо", "Телефон", "Email", "Товаров", "Заметки"],
+        ...suppliers.map((s) => [s.name, s.contactName ?? "", s.phone ?? "", s.email ?? "", s._count.products, s.notes ?? ""]),
+      ],
+    });
+  }
 
   return NextResponse.json({ suppliers });
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,6 +51,7 @@ export async function POST(req: NextRequest) {
   const parsed = supplierSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const supplier = await prisma.supplier.create({ data: parsed.data });
+  const storeId = await getStoreId();
+  const supplier = await prisma.supplier.create({ data: { ...parsed.data, storeId } });
   return NextResponse.json({ supplier }, { status: 201 });
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getStoreId } from "@/lib/store-context";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/lib/auth";
@@ -13,8 +14,8 @@ export default async function ReportsPage() {
   noStore();
   const session = await auth.api.getSession({ headers: await headers() });
 
-  if (!session || session.user.role !== "ADMIN") {
-    redirect("/pos");
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+    redirect(`/store/${await getStoreId()}/pos`);
   }
 
   const t = await getTranslations("reports");

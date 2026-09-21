@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { RotateCcw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { isFractionalUnit, unitLabel } from "@/lib/units";
 import { RefundModal } from "./refund-modal";
+import { formatReferenceValues } from "@/lib/reference-format";
+import { ManagerGate } from "@/components/pos/manager-gate";
 
 interface SaleItem {
   id: string;
   name: string;
-  quantity: number;
+  quantity: { toString(): string } | number;
+  unit?: string;
   price: { toString(): string };
   total: { toString(): string };
   notes?: string | null;
@@ -18,12 +22,14 @@ interface SaleItem {
 
 interface Sale {
   id: string;
+  documentNo: number;
   createdAt: Date;
   total: { toString(): string };
   paymentMethod: string;
   status: string;
   items: SaleItem[];
   user: { name: string } | null;
+  referenceValues?: unknown;
 }
 
 interface SalesTableProps {
@@ -33,10 +39,18 @@ interface SalesTableProps {
 export function SalesTable({ sales }: SalesTableProps) {
   const t = useTranslations("sales");
   const tr = useTranslations("receipt");
+  const locale = useLocale();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refunding, setRefunding] = useState<Sale | null>(null);
+  const [pendingRefund, setPendingRefund] = useState<Sale | null>(null);
 
-  const saleDateFormatter = new Intl.DateTimeFormat("en-US", {
+  const statusLabel: Record<string, string> = {
+    COMPLETED: t("status_completed"),
+    VOIDED: t("status_voided"),
+    REFUNDED: t("status_refunded"),
+  };
+
+  const saleDateFormatter = new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -91,7 +105,7 @@ export function SalesTable({ sales }: SalesTableProps) {
                         : "text-green-600"
                     }
                   >
-                    {sale.status}
+                    {statusLabel[sale.status] ?? sale.status}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right font-medium">
@@ -101,9 +115,9 @@ export function SalesTable({ sales }: SalesTableProps) {
                   <div className="flex items-center justify-center">
                     {sale.status === "COMPLETED" && (
                       <button
-                        onClick={() => setRefunding(sale)}
+                        onClick={() => setPendingRefund(sale)}
                         className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                        title="Issue Refund"
+                        title={t("issue_refund")}
                       >
                         <RotateCcw className="h-3 w-3" /> {t("refund")}
                       </button>
@@ -120,13 +134,16 @@ export function SalesTable({ sales }: SalesTableProps) {
             const detailRow = (
               <tr className="bg-muted/20" key={`${saleKey}-details`}>
                 <td colSpan={6} className="px-6 py-3">
+                  {formatReferenceValues(sale.referenceValues) && (
+                    <p className="mb-2 text-xs text-muted-foreground">Справочники: {formatReferenceValues(sale.referenceValues)}</p>
+                  )}
                   <table className="w-full text-xs">
                     <thead>
                       <tr>
                         <th className="text-left py-1">{tr("items")}</th>
                         <th className="text-right py-1">{tr("qty")}</th>
                         <th className="text-right py-1">{tr("price")}</th>
-                        <th className="text-right py-1">{t("total")}</th>
+                        <th className="text-right py-1">{tr("amount")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -136,7 +153,7 @@ export function SalesTable({ sales }: SalesTableProps) {
                           <>
                             <tr key={itemKey}>
                               <td className="py-1">{item.name}</td>
-                              <td className="text-right py-1">{item.quantity}</td>
+                              <td className="text-right py-1">{typeof item.quantity === "number" ? item.quantity : item.quantity.toString()}{isFractionalUnit(item.unit) ? ` ${unitLabel(item.unit, true)}` : ""}</td>
                               <td className="text-right py-1">
                                 {formatCurrency(parseFloat(item.price.toString()))}
                               </td>
@@ -164,11 +181,22 @@ export function SalesTable({ sales }: SalesTableProps) {
       </table>
     </div>
 
+    <ManagerGate
+      open={!!pendingRefund}
+      context="refund"
+      onAuthorized={() => { setRefunding(pendingRefund); setPendingRefund(null); }}
+      onCancel={() => setPendingRefund(null)}
+    />
+
     {refunding && (
       <RefundModal
         saleId={refunding.id}
+        documentNo={refunding.documentNo}
         saleTotal={parseFloat(refunding.total.toString())}
-        items={refunding.items}
+        items={refunding.items.map((item) => ({
+          ...item,
+          quantity: typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity.toString()),
+        }))}
         onClose={() => setRefunding(null)}
       />
     )}

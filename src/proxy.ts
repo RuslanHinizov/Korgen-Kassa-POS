@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
 
 // Middleware runs in Edge runtime.
 // Auth cookie presence is checked; full session validation happen in Server Components.
 
-const PUBLIC_PATHS = ["/login", "/api/auth", "/setup", "/api/setup", "/api/ping"];
+const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/setup", "/api/setup", "/api/ping"];
+
+// Matches "/store/<id>" or "/store/<id>/rest/of/path".
+const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -45,30 +49,70 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/setup", request.url));
   }
 
-  // Check auth via session cookie – no DB round-trip needed in Edge runtime.
-  // Better Auth uses "better-auth.session_token" (or __Secure- prefixed on HTTPS).
+  // Check auth via Better Auth session cookie – no DB round-trip needed in Edge runtime.
   const hasSession =
     !!request.cookies.get("better-auth.session_token")?.value ||
     !!request.cookies.get("__Secure-better-auth.session_token")?.value;
 
-  // If authenticated user tries to access /login, redirect to /pos
-  if (hasSession && pathname === "/login") {
-    return NextResponse.redirect(new URL("/pos", request.url));
-  }
+  const currentStoreId = request.cookies.get(STORE_COOKIE)?.value || DEFAULT_STORE_ID;
 
-  // Allow public paths (auth + setup wizard) - check this AFTER the redirect-if-logged-in check
+  // Allow public paths (both office and dedicated cash-register login).
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
+  // The cash monitor is normally opened with its store in the URL.  Auth pages
+  // are public, so they must be rewritten before the session redirect below;
+  // otherwise /store/:id/kasa-giris would incorrectly become a 404 (or /login).
+  const publicStoreMatch = pathname.match(STORE_PREFIX_RE);
+  const publicStoreRest = publicStoreMatch?.[2] ?? "/";
+  if (publicStoreMatch && (publicStoreRest === "/kasa-giris" || publicStoreRest === "/login")) {
+    const url = request.nextUrl.clone();
+    url.pathname = publicStoreRest;
+    const res = NextResponse.rewrite(url);
+    res.cookies.set(STORE_COOKIE, publicStoreMatch[1], { path: "/", sameSite: "lax" });
+    return res;
+  }
+
   // If not authenticated and trying to access protected route, redirect to login
   if (!hasSession) {
+    const kioskMatch = pathname.match(STORE_PREFIX_RE);
+    // A cash-monitor bookmark must never send a cashier to the office login.
+    if (kioskMatch && (kioskMatch[2] ?? "/") === "/pos") {
+      return NextResponse.redirect(new URL(`/store/${kioskMatch[1]}/kasa-giris`, request.url));
+    }
     const url = new URL("/login", request.url);
     // Optional: add ?callbackUrl=... if needed, but for POS simple redirect is fine
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  // API routes are called directly (fetch("/api/...")), never through the
+  // /store/:id prefix — they read the store id from the cookie via
+  // getStoreId(), already set below whenever the user is on a /store/:id page.
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
+
+  // Multi-store routing: the browser's address bar always shows /store/:id/...
+  // (bookmarkable, matches UMAG). A request that already carries the prefix is
+  // rewritten to the underlying (unprefixed) page/route so the existing
+  // file-based routes keep serving it unchanged; the store id is captured into
+  // a cookie so Server Components and API routes can read it via getStoreId().
+  const storeMatch = pathname.match(STORE_PREFIX_RE);
+  if (storeMatch) {
+    const storeId = storeMatch[1];
+    const rest = storeMatch[2] ?? "/";
+    const url = request.nextUrl.clone();
+    url.pathname = rest;
+    const res = NextResponse.rewrite(url);
+    res.cookies.set(STORE_COOKIE, storeId, { path: "/", sameSite: "lax" });
+    return res;
+  }
+
+  // No store prefix on an app route — redirect to the canonical store-scoped URL.
+  const url = request.nextUrl.clone();
+  url.pathname = `/store/${currentStoreId}${pathname === "/" ? "" : pathname}`;
+  return NextResponse.redirect(url);
 }
 
 export const config = {

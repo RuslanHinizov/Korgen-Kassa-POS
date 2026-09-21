@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 import { serialize } from "@/lib/serialize";
 import { SalesTable } from "@/components/sales/sales-table";
 import { SalesExportButton } from "@/components/sales/sales-export-button";
@@ -16,8 +17,10 @@ export default async function SalesPage() {
 
   let sales;
   try {
+    const storeId = await getStoreId();
     const raw = await prisma.sale.findMany({
-      include: { items: { select: { id: true, name: true, quantity: true, price: true, total: true, notes: true, productId: true } }, user: { select: { name: true } } },
+      where: { storeId },
+      include: { items: { select: { id: true, name: true, quantity: true, unit: true, price: true, total: true, notes: true, productId: true } }, user: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
       take: 100,
     });

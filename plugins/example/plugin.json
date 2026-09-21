@@ -1,9 +1,9 @@
 {
-  "id": "com.olgax.example-plugin",
+  "id": "com.korgenkassa.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
-  "description": "A no-op example plugin demonstrating the Olgax POS plugin API.",
-  "author": "Olgax Community",
+  "description": "A no-op example plugin demonstrating the Korgen Kassa POS plugin API.",
+  "author": "Korgen Kassa",
   "hooks": ["onSaleComplete", "onProductUpdate"],
   "permissions": [],
   "enabled": true

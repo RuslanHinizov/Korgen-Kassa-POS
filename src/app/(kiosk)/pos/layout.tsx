@@ -1,0 +1,64 @@
+import { redirect } from "next/navigation";
+import { unstable_noStore as noStore } from "next/cache";
+import { prisma } from "@/lib/db";
+import { setCurrencyConfig } from "@/lib/utils";
+import { StoreProvider } from "@/components/store/store-provider";
+import { getStoreId } from "@/lib/store-context";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+/** Full-screen kiosk shell for the cash register — no admin TopNav/sidebar,
+ * matching UMAG's dedicated kassa screen instead of sitting inside the admin chrome.
+ * It is reachable only by a cashier's own authenticated account. */
+export default async function KioskLayout({ children }: { children: React.ReactNode }) {
+  noStore();
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/kasa-giris");
+  if (session.user.role !== "CASHIER") redirect("/");
+
+  const storeId = await getStoreId();
+  const assigned = await prisma.userStoreAssignment.findUnique({ where: { userId_storeId: { userId: session.user.id, storeId } } });
+  if (!assigned) redirect("/profile");
+  const settings = await prisma.businessSettings.findUnique({ where: { storeId } }).catch(() => null);
+
+  const primary = settings?.primaryColor ?? "#15503A";
+  const accent = settings?.accentColor ?? "#22B24C";
+  const currencySymbol = settings?.currency ?? "$";
+  const currencyDecimals = settings?.currencyDecimals ?? 2;
+  const currencyLocale = settings?.language ?? "en";
+  setCurrencyConfig({ symbol: currencySymbol, decimals: currencyDecimals, locale: currencyLocale });
+
+  const brandingCSS = `
+    :root:not(.dark) {
+      --primary: ${primary};
+      --primary-foreground: oklch(0.985 0 0);
+    }
+    .dark {
+      --primary: ${accent};
+    }
+    :root {
+      --accent: ${accent};
+      --ring: ${accent};
+    }
+  `;
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: brandingCSS }} />
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.__olgaxCurrency=${JSON.stringify({
+            symbol: currencySymbol,
+            decimals: currencyDecimals,
+            locale: currencyLocale,
+          })}`,
+        }}
+      />
+      <StoreProvider storeId={storeId}>
+        <div className="h-screen w-screen overflow-hidden bg-background">{children}</div>
+      </StoreProvider>
+    </>
+  );
+}

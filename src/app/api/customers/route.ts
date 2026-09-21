@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { counterpartyScope } from "@/lib/counterparty-scope";
+import { getStoreId } from "@/lib/store-context";
+import { getCustomerBalances } from "@/lib/customer-balance";
+import { xlsxResponse } from "@/lib/xlsx-response";
 import { z } from "zod";
 
 // ---- GET /api/customers?q=search&page=1&limit=20 ----
@@ -14,23 +18,27 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "20");
   const skip = (page - 1) * limit;
+  const exporting = searchParams.get("export") === "xlsx";
+  const storeId = await getStoreId();
 
-  const where = q
-    ? {
-        OR: [
-          { name: { contains: q, mode: "insensitive" } as const },
-          { phone: { contains: q, mode: "insensitive" } as const },
-          { email: { contains: q, mode: "insensitive" } as const },
-        ],
-      }
-    : undefined;
+  const where = {
+    ...(await counterpartyScope(storeId)),
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } as const },
+            { phone: { contains: q, mode: "insensitive" } as const },
+            { email: { contains: q, mode: "insensitive" } as const },
+          ],
+        }
+      : {}),
+  };
 
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
       where,
       orderBy: { name: "asc" },
-      skip,
-      take: limit,
+      ...(exporting ? {} : { skip, take: limit }),
       select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true, notes: true, createdAt: true },
     }),
     prisma.customer.count({ where }),
@@ -40,12 +48,13 @@ export async function GET(req: NextRequest) {
   const customerIds = customers.map((c) => c.id);
   const salesStats = await prisma.sale.groupBy({
     by: ["customerId"],
-    where: { customerId: { in: customerIds }, status: "COMPLETED" },
+    where: { storeId, customerId: { in: customerIds }, status: "COMPLETED" },
     _sum: { total: true },
     _max: { createdAt: true },
     _count: { id: true },
   });
 
+  const balances = await getCustomerBalances(customerIds);
   const enriched = customers.map((c) => {
     const stat = salesStats.find((s) => s.customerId === c.id);
     return {
@@ -53,8 +62,20 @@ export async function GET(req: NextRequest) {
       totalSpend: stat?._sum.total?.toNumber() ?? 0,
       lastVisit: stat?._max.createdAt ?? null,
       visitCount: stat?._count.id ?? 0,
+      balance: balances.get(c.id) ?? 0,
     };
   });
+
+  if (exporting) {
+    return xlsxResponse({
+      filename: "klienty",
+      sheetName: "Клиенты",
+      rows: [
+        ["Имя", "Телефон", "Email", "Баллы", "Долг/баланс", "Визитов", "Сумма покупок", "Последний визит", "Заметки"],
+        ...enriched.map((c) => [c.name, c.phone ?? "", c.email ?? "", c.loyaltyPoints, c.balance, c.visitCount, c.totalSpend, c.lastVisit ?? "", c.notes ?? ""]),
+      ],
+    });
+  }
 
   return NextResponse.json({
     customers: enriched,
@@ -86,10 +107,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { name, phone, email, notes } = parsed.data;
+  const storeId = await getStoreId();
 
   try {
     const customer = await prisma.customer.create({
-      data: { name, phone: phone || null, email: email || null, notes: notes || null },
+      data: { storeId, name, phone: phone || null, email: email || null, notes: notes || null },
       select: { id: true, name: true, phone: true, email: true },
     });
     return NextResponse.json({ customer }, { status: 201 });

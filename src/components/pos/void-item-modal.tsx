@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { X, AlertTriangle } from "lucide-react";
 
 interface VoidItemModalProps {
@@ -11,6 +12,7 @@ interface VoidItemModalProps {
 }
 
 export function VoidItemModal({ itemName, open, onConfirm, onCancel }: VoidItemModalProps) {
+  const t = useTranslations("pos.void_item");
   const [reason, setReason] = useState("");
 
   if (!open) return null;
@@ -21,7 +23,7 @@ export function VoidItemModal({ itemName, open, onConfirm, onCancel }: VoidItemM
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-            <h2 className="font-semibold">Void Item</h2>
+            <h2 className="font-semibold">{t("title")}</h2>
           </div>
           <button onClick={onCancel} className="rounded p-1 hover:bg-accent transition-colors">
             <X className="h-4 w-4" />
@@ -29,16 +31,16 @@ export function VoidItemModal({ itemName, open, onConfirm, onCancel }: VoidItemM
         </div>
         <div className="p-4 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Remove <span className="font-medium text-foreground">{itemName}</span> from the cart?
+            {t("confirm_prefix")} <span className="font-medium text-foreground">{itemName}</span> {t("confirm_suffix")}
           </p>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Reason (optional)</label>
+            <label className="text-sm font-medium">{t("reason_label")}</label>
             <input
               autoFocus
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Customer changed mind"
+              placeholder={t("reason_placeholder")}
               className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               onKeyDown={(e) => e.key === "Enter" && onConfirm(reason)}
             />
@@ -48,13 +50,13 @@ export function VoidItemModal({ itemName, open, onConfirm, onCancel }: VoidItemM
               onClick={onCancel}
               className="rounded-md border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               onClick={() => { onConfirm(reason); setReason(""); }}
               className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors"
             >
-              Void Item
+              {t("void")}
             </button>
           </div>
         </div>

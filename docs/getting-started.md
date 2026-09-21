@@ -1,6 +1,6 @@
-# Getting Started with Olgax POS
+# Getting Started with Korgen Kassa POS
 
-> **Olgax POS** is an open-source POS system by [OLGAX](https://olgax.com). This guide covers every installation method from quick Docker deployments to full local development setups.
+> **Korgen Kassa POS** is a POS system for retail, built on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project. This guide covers every installation method from quick Docker deployments to full local development setups.
 
 ---
 
@@ -56,7 +56,7 @@ docker compose up -d
 
 The Docker Compose stack includes:
 - **PostgreSQL 16** — persistent data volume
-- **Olgax POS web** — Next.js app, listens on port 3000
+- **Korgen Kassa POS web** — Next.js app, listens on port 3000
 
 Open `http://localhost:3000` (or your server IP) and follow the [Setup Wizard](#first-run-setup-wizard).
 

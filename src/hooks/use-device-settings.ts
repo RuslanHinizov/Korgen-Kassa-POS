@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export interface DeviceSettings {
   defaultPaymentMethod: "CASH" | "CARD" | "OTHER";
   soundOnSale: boolean;
   scannerBeepEnabled: boolean;
   printerType: "serial" | "usb" | "none";
+  /** Send the ESC/POS drawer-kick pulse after a cash sale. */
+  openDrawerOnCash: boolean;
 }
 
 const STORAGE_KEY = "olgax-pos-device-settings";
@@ -16,6 +18,7 @@ const DEFAULTS: DeviceSettings = {
   soundOnSale: false,
   scannerBeepEnabled: true,
   printerType: "serial",
+  openDrawerOnCash: false,
 };
 
 export function getDeviceSettings(): DeviceSettings {
@@ -34,17 +37,23 @@ export function saveDeviceSettings(settings: Partial<DeviceSettings>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, ...settings }));
 }
 
-export function useDeviceSettings(): [DeviceSettings, (s: Partial<DeviceSettings>) => void] {
-  const [settings, setSettings] = useState<DeviceSettings>(DEFAULTS);
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    setSettings(getDeviceSettings());
-  }, []);
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getServerSnapshot(): DeviceSettings {
+  return DEFAULTS;
+}
+
+export function useDeviceSettings(): [DeviceSettings, (s: Partial<DeviceSettings>) => void] {
+  const settings = useSyncExternalStore(subscribe, getDeviceSettings, getServerSnapshot);
 
   function update(patch: Partial<DeviceSettings>) {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    saveDeviceSettings(next);
+    saveDeviceSettings({ ...settings, ...patch });
+    listeners.forEach((l) => l());
   }
 
   return [settings, update];

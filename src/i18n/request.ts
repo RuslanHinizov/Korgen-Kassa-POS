@@ -1,6 +1,7 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 
 const SUPPORTED_LOCALES = ["en", "si", "ta", "fr", "es", "de", "ar", "zh", "hi", "pt", "ja", "ko", "id", "ru"] as const;
 type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -21,8 +22,9 @@ export default getRequestConfig(async () => {
   // Fallback: read from DB business settings
   let locale: Locale = "en";
   try {
+    const storeId = await getStoreId();
     const settings = await prisma.businessSettings.findUnique({
-      where: { id: "singleton" },
+      where: { storeId },
       select: { language: true },
     });
     const lang = settings?.language ?? "en";

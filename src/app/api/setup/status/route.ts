@@ -35,7 +35,7 @@ async function probeDb(url: string): Promise<{
     }
 
     const [settingsRes, adminRes] = await Promise.all([
-      client.query(`SELECT "setupComplete" FROM "BusinessSettings" WHERE id = 'singleton' LIMIT 1`),
+      client.query(`SELECT "setupComplete" FROM "BusinessSettings" WHERE "storeId" = 'store_main' LIMIT 1`),
       client.query(`SELECT COUNT(*) AS cnt FROM "User" WHERE role = 'ADMIN'`),
     ]);
 

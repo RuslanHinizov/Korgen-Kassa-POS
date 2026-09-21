@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 
 interface AlertDialogProps {
   open: boolean;
@@ -18,12 +19,15 @@ export function AlertDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   variant = "default",
   onConfirm,
   onCancel,
 }: AlertDialogProps) {
+  const tc = useTranslations("common");
+  const confirmText = confirmLabel ?? tc("confirm");
+  const cancelText = cancelLabel ?? tc("cancel");
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -74,7 +78,7 @@ export function AlertDialog({
             onClick={onCancel}
             className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            {cancelLabel}
+            {cancelText}
           </button>
           <button
             ref={confirmRef}
@@ -85,7 +89,7 @@ export function AlertDialog({
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
           >
-            {confirmLabel}
+            {confirmText}
           </button>
         </div>
       </div>

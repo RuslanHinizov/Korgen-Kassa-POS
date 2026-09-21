@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Users } from "lucide-react";
 import { UsersTable } from "./users-table";
 import { CreateUserForm } from "./create-user-form";
@@ -9,9 +10,10 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "CASHIER";
+  role: "ADMIN" | "MANAGER" | "CASHIER" | "WAREHOUSE";
   createdAt: Date;
   emailVerified: boolean;
+  storeAssignments: { storeId: string; store: { name: string } }[];
 }
 
 interface UsersClientProps {
@@ -19,6 +21,7 @@ interface UsersClientProps {
 }
 
 export function UsersClient({ initialUsers }: UsersClientProps) {
+  const t = useTranslations("users");
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -59,13 +62,13 @@ export function UsersClient({ initialUsers }: UsersClientProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Users className="h-4 w-4" />
-          <span>{users.length} user{users.length !== 1 ? "s" : ""}</span>
+          <span>{t("count", { count: users.length })}</span>
         </div>
         <button
           onClick={() => setCreateOpen(true)}
           className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
         >
-          Add User
+          {t("add")}
         </button>
       </div>
 

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
         role: true,
         createdAt: true,
         emailVerified: true,
+        storeAssignments: { select: { storeId: true, store: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });

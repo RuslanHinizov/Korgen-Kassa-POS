@@ -15,7 +15,8 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { Loader2, AlertTriangle, Download, Printer, ChevronDown } from "lucide-react";
+import { Loader2, AlertTriangle, Download, Printer } from "lucide-react";
+import { downloadXlsx } from "@/lib/xlsx-download";
 
 type Range = "today" | "week" | "month" | "custom";
 type Tab = "overview" | "lowStock";
@@ -37,7 +38,7 @@ interface PieSlice { method: string; value: number }
 interface TopProduct { name: string; qty: number; revenue: number }
 interface LowStockProduct { id: string; name: string; sku: string | null; stock: number; lowStockThreshold: number; category: string | null }
 
-const PIE_COLORS = ["#0f2044", "#f5c518", "#4fb8a5", "#e26c1a", "#9b5cc9"];
+const PIE_COLORS = ["#15503A", "#22B24C", "#4fb8a5", "#e26c1a", "#9b5cc9"];
 
 export function ReportsDashboard() {
   const t = useTranslations("reports");
@@ -53,7 +54,6 @@ export function ReportsDashboard() {
   const [pieData, setPieData] = useState<PieSlice[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [lowStock, setLowStock] = useState<LowStockProduct[]>([]);
-  const [exportOpen, setExportOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -75,48 +75,44 @@ export function ReportsDashboard() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function handlePrint() {
-    setExportOpen(false);
     setTimeout(() => window.print(), 100);
   }
 
-  function handleExportCSV() {
-    setExportOpen(false);
+  function handleExportXlsx() {
     if (!summary) return;
-    const rangeLabel = range === "today" ? "Today" : range === "week" ? "This Week" : range === "month" ? "This Month" : `${from} to ${to}`;
-    const rows: string[][] = [];
+    const rangeLabel = range === "today" ? t("today") : range === "week" ? t("this_week") : range === "month" ? t("this_month") : `${from} – ${to}`;
+    const fileRangeLabel = range === "today" ? "today" : range === "week" ? "this-week" : range === "month" ? "this-month" : `${from}-to-${to}`;
+    const rows: (string | number)[][] = [];
 
-    rows.push(["Olgax POS — Report Export"]);
-    rows.push(["Period", rangeLabel]);
-    rows.push(["Generated", new Date().toLocaleString()]);
+    rows.push(["Korgen Kassa POS — Экспорт отчёта"]);
+    rows.push(["Период", rangeLabel]);
+    rows.push(["Сформирован", new Date().toLocaleString("ru-RU")]);
     rows.push([]);
 
-    rows.push(["SUMMARY"]);
-    rows.push(["Metric", "Value"]);
+    rows.push(["СВОДКА"]);
+    rows.push(["Показатель", "Значение"]);
     stats.forEach(s => rows.push([s.label, s.value]));
     rows.push([]);
 
-    rows.push(["TOP SELLING PRODUCTS"]);
-    rows.push(["Product", "Units Sold", "Revenue"]);
-    topProducts.forEach(p => rows.push([p.name, String(p.qty), formatCurrency(p.revenue)]));
+    rows.push(["САМЫЕ ПРОДАВАЕМЫЕ ТОВАРЫ"]);
+    rows.push([t("product"), t("units_sold"), t("revenue")]);
+    topProducts.forEach(p => rows.push([p.name, p.qty, p.revenue]));
     rows.push([]);
 
-    rows.push(["REVENUE BY DAY"]);
-    rows.push(["Date", "Revenue", "Transactions"]);
-    revenueByDay.forEach(d => rows.push([d.date, formatCurrency(d.revenue), String(d.transactions)]));
+    rows.push(["ВЫРУЧКА ПО ДНЯМ"]);
+    rows.push(["Дата", t("revenue"), t("transactions")]);
+    revenueByDay.forEach(d => rows.push([d.date, d.revenue, d.transactions]));
     rows.push([]);
 
-    rows.push(["PAYMENT METHODS"]);
-    rows.push(["Method", "Amount"]);
-    pieData.forEach(d => rows.push([d.method, formatCurrency(d.value)]));
+    rows.push(["СПОСОБЫ ОПЛАТЫ"]);
+    rows.push(["Метод", "Сумма"]);
+    pieData.forEach(d => rows.push([d.method, d.value]));
 
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `olgax-report-${rangeLabel.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void downloadXlsx({
+      filename: `korgen-kassa-report-${fileRangeLabel}-${new Date().toISOString().slice(0, 10)}`,
+      sheetName: "Сводка",
+      rows,
+    });
   }
 
   const stats = summary
@@ -141,7 +137,7 @@ export function ReportsDashboard() {
     <div className="space-y-6">
       {/* Print-only header */}
       <div className="hidden print:block mb-6">
-        <h1 className="text-2xl font-bold">Olgax POS — {t("title")}</h1>
+        <h1 className="text-2xl font-bold">Korgen Kassa POS — {t("title")}</h1>
         <p className="text-sm text-gray-500 mt-1">
           {range === "today" ? t("today") : range === "week" ? t("this_week") : range === "month" ? t("this_month") : `${from} – ${to}`}
           {" · "}
@@ -200,7 +196,7 @@ export function ReportsDashboard() {
               onChange={(e) => setFrom(e.target.value)}
               className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <span className="text-xs text-muted-foreground">to</span>
+            <span className="text-xs text-muted-foreground">{t("to").toLowerCase()}</span>
             <input
               type="date"
               value={to}
@@ -212,7 +208,7 @@ export function ReportsDashboard() {
               disabled={!from || !to}
               className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50"
             >
-              Apply
+              {t("apply")}
             </button>
           </>
         )}
@@ -234,7 +230,7 @@ export function ReportsDashboard() {
           <div className="px-4 py-3 border-b flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
             <h2 className="text-sm font-semibold">{t("low_stock_products")}</h2>
-            <span className="text-xs text-muted-foreground">({lowStock.length} items at or below threshold)</span>
+            <span className="text-xs text-muted-foreground">{t("at_or_below", { count: lowStock.length })}</span>
           </div>
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
@@ -299,13 +295,13 @@ export function ReportsDashboard() {
                   tick={{ fontSize: 10 }}
                   tickFormatter={(v) => {
                     const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+                    return d.toLocaleDateString("ru-RU", { month: "short", day: "2-digit" });
                   }}
                 />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v}`} width={48} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v)} width={48} />
                 <Tooltip
-                  formatter={(v: number | undefined) => [v !== undefined ? formatCurrency(v) : "$0.00", "Revenue"]}
-                  labelFormatter={(l) => new Date(l + "T00:00:00").toLocaleDateString()}
+                  formatter={(v: number | undefined) => [v !== undefined ? formatCurrency(v) : formatCurrency(0), t("revenue")]}
+                  labelFormatter={(l) => new Date(l + "T00:00:00").toLocaleDateString("ru-RU")}
                   contentStyle={{ fontSize: 12 }}
                 />
                 <Bar dataKey="revenue" fill="#1e3a5f" radius={[3, 3, 0, 0]} isAnimationActive={false} />
@@ -383,11 +379,11 @@ export function ReportsDashboard() {
         <div className="relative">
           <div className="flex rounded-md border overflow-hidden shadow-sm">
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportXlsx}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors border-r"
             >
               <Download className="h-4 w-4" />
-              {t("export_csv")}
+              Excel
             </button>
             <button
               onClick={handlePrint}

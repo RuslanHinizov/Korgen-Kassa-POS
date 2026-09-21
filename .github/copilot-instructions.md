@@ -1,4 +1,4 @@
-﻿# Olgax POS — Contributor Guidelines
+﻿# Korgen Kassa POS — Contributor Guidelines
 
 **Stack**: Next.js 16 App Router · TypeScript strict · shadcn/ui · Tailwind CSS 4 · Prisma + PostgreSQL · PGLite (offline) · Better Auth · Zustand · react-hook-form + Zod · Vitest + Playwright
 

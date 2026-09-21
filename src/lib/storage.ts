@@ -11,6 +11,7 @@
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { prisma } from "./db";
+import { getStoreId } from "./store-context";
 
 export interface UploadResult {
   url: string;
@@ -21,8 +22,9 @@ export async function uploadFile(
   filename: string,
   contentType: string
 ): Promise<UploadResult> {
+  const storeId = await getStoreId();
   const settings = await prisma.businessSettings.findUnique({
-    where: { id: "singleton" },
+    where: { storeId },
     select: {
       storageProvider: true,
       storageRegion: true,

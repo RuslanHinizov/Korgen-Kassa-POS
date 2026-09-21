@@ -1,7 +1,7 @@
-# Olgax POS Documentation
+# Korgen Kassa POS Documentation
 
-> **Olgax POS** is an open-source, offline-capable Point of Sale system by [OLGAX](https://olgax.com).  
-> Free forever for self-hosted deployments.
+> **Korgen Kassa POS** is an offline-capable Point of Sale system for retail,
+> built on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project (MIT).
 
 ---
 
@@ -19,15 +19,12 @@
 
 ---
 
-## Quick Links
+## Upstream
 
-- **GitHub**: [github.com/olgax/olgax-pos](https://github.com/olgax/olgax-pos)
-- **Website**: [olgax.com](https://olgax.com)
-- **Roadmap**: [olgax.com/roadmap](https://olgax.com/roadmap)
-- **Issues**: [github.com/olgax/olgax-pos/issues](https://github.com/olgax/olgax-pos/issues)
+Built on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project.
 
 ---
 
 ## License
 
-MIT © [OLGAX](https://olgax.com)
+MIT — see [LICENSE](../LICENSE).

@@ -1,9 +1,7 @@
 <div align="center">
-  <h1>Olgax POS</h1>
-  <p>Open-source, offline-capable Point of Sale system — free forever for self-hosted deployments.</p>
+  <h1>Korgen Kassa POS</h1>
+  <p>Offline-capable Point of Sale system for retail.</p>
   <p>
-    <a href="https://olgax.com">olgax.com</a> ·
-    <a href="https://discord.gg/EAXcCXgUz2">Discord Community</a> ·
     <a href="docs/getting-started.md">Getting Started</a> ·
     <a href="docs/architecture.md">Architecture</a> ·
     <a href="docs/deployment.md">Deployment</a> ·
@@ -20,9 +18,9 @@
 
 ---
 
-## What is Olgax POS?
+## What is Korgen Kassa POS?
 
-**Olgax POS** is a fast, touch-friendly, fully offline-capable Point of Sale system built by [OLGAX](https://olgax.com). It is designed to be good enough for real small businesses to use daily — for free, forever — while remaining extensible into a full-featured SaaS platform.
+**Korgen Kassa POS** is a fast, touch-friendly, fully offline-capable Point of Sale system for small businesses. It is built on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project (MIT).
 
 - **Self-hosted** — run it on your own server with Docker in minutes.
 - **Offline-first** — uses PGLite (Postgres WASM) to record sales even with no internet, then syncs automatically when connectivity returns.
@@ -82,7 +80,7 @@ The first time you open the app you will be guided through a setup wizard that m
 
 ## Quick Start (Serverless — Vercel / Netlify)
 
-You can run Olgax POS serverless without Docker or a VPS:
+You can run Korgen Kassa POS serverless without Docker or a VPS:
 
 1. **Fork or Use Template**: Click **Fork** or **Use this template** at the top of this repository to create a copy in your own account.
 2. **Deploy**: Import your copy into **Vercel** or **Netlify**.
@@ -148,22 +146,12 @@ Open [http://localhost:3000](http://localhost:3000). A setup wizard will guide y
 
 ## Roadmap
 
-The MVP (v0.1) is designed to be immediately useful for small businesses while laying clean groundwork for future features:
-
-- [ ] Multi-language (next-intl)
 - [ ] Multi-store / multi-location
-- [ ] Customer directory + loyalty points
-- [ ] Plugin system
 - [ ] Advanced reports + charts
 - [ ] Kitchen Display System (KDS)
-- [ ] Hosted SaaS at olgax.app
-
-See [OLGAX Roadmap](https://olgax.com/roadmap) for the full picture.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
-
-Built with ❤️ by [OLGAX](https://olgax.com)
+MIT — see [LICENSE](LICENSE) for details. Based on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project.

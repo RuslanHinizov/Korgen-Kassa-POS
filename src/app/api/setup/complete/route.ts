@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DEFAULT_STORE_ID } from "@/lib/store-constants";
 import { z } from "zod";
 
 const schema = z.object({
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const { prisma } = await import("@/lib/db");
     const existing = await prisma.businessSettings.findUnique({
-      where: { id: "singleton" },
+      where: { storeId: DEFAULT_STORE_ID },
       select: { setupComplete: true },
     });
     if (existing?.setupComplete) {
@@ -37,9 +38,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { prisma } = await import("@/lib/db");
 
     await prisma.businessSettings.upsert({
-      where: { id: "singleton" },
+      where: { storeId: DEFAULT_STORE_ID },
       create: {
-        id: "singleton",
+        storeId: DEFAULT_STORE_ID,
         name: businessName,
         currency,
         currencyDecimals,

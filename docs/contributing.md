@@ -1,6 +1,6 @@
-# Contributing to Olgax POS
+# Contributing to Korgen Kassa POS
 
-Thank you for your interest in contributing to Olgax POS! This guide explains how to get your environment set up, the coding standards we follow, and how to submit changes.
+Thank you for your interest in contributing to Korgen Kassa POS! This guide explains how to get your environment set up, the coding standards we follow, and how to submit changes.
 
 ---
 

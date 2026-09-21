@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productFormSchema, type ProductFormValues } from "@/lib/validations/product";
@@ -8,16 +9,21 @@ import { createProduct, updateProduct } from "@/app/actions/product-actions";
 import { cn } from "@/lib/utils";
 import { Upload, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { isFractionalUnit, unitLabel } from "@/lib/units";
 
 interface Product {
   id: string;
   name: string;
   sku: string | null;
   barcode: string | null;
+  scalePlu?: string | null;
   price: { toString(): string };
   cost: { toString(): string } | null;
-  stock: number;
+  wholesalePrice: { toString(): string } | null;
+  stock: { toString(): string } | number;
+  unit: string;
   category: string | null;
+  categoryId?: string | null;
   imageUrl: string | null;
   lowStockThreshold: number;
   active: boolean;
@@ -28,6 +34,8 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product }: ProductFormProps) {
+  const t = useTranslations("products");
+  const tf = useTranslations("products.form");
   const isEdit = !!product;
   const [uploadLoading, setUploadLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(product?.imageUrl ?? null);
@@ -37,6 +45,7 @@ export function ProductForm({ product }: ProductFormProps) {
     handleSubmit,
     setValue,
     setError,
+    watch,
     formState: { errors, isSubmitting },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<ProductFormValues, any, any>({
@@ -46,16 +55,33 @@ export function ProductForm({ product }: ProductFormProps) {
           name: product.name,
           sku: product.sku ?? "",
           barcode: product.barcode ?? "",
+          scalePlu: product.scalePlu ?? "",
           price: parseFloat(product.price.toString()),
           cost: product.cost ? parseFloat(product.cost.toString()) : undefined,
-          stock: product.stock,
+          wholesalePrice: product.wholesalePrice ? parseFloat(product.wholesalePrice.toString()) : undefined,
+          stock: typeof product.stock === "number" ? product.stock : parseFloat(product.stock.toString()),
+          unit: ["kg", "l", "m"].includes(product.unit) ? (product.unit as "kg" | "l" | "m") : "pcs",
           category: product.category ?? "",
+          categoryId: product.categoryId ?? "",
           lowStockThreshold: product.lowStockThreshold,
           imageUrl: product.imageUrl ?? "",
           active: product.active,
         }
-      : { stock: 0, lowStockThreshold: 5, active: true },
+      : { stock: 0, unit: "pcs", lowStockThreshold: 5, active: true },
   });
+
+  const unit = watch("unit");
+  const byWeight = unit === "kg";
+  const fractional = isFractionalUnit(unit);
+  const unitAbbr = unitLabel(unit);
+
+  const [categories, setCategories] = useState<{ id: string; name: string; parentId: string | null }[]>([]);
+  useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d) => setCategories(d.categories ?? []))
+      .catch(() => {});
+  }, []);
 
   async function onSubmit(values: ProductFormValues) {
     const formData = new FormData();
@@ -85,12 +111,12 @@ export function ProductForm({ product }: ProductFormProps) {
 
       // Form-level errors (not tied to a specific field)
       if (Object.keys(fieldErrors).length === 0) {
-        toast.error(formErrors[0] ?? "Failed to save product. Please try again.");
+        toast.error(formErrors[0] ?? tf("err_save"));
       }
       return;
     }
 
-    toast.success(isEdit ? "Product updated successfully" : "Product created successfully");
+    toast.success(isEdit ? tf("updated") : tf("created"));
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -134,28 +160,64 @@ export function ProductForm({ product }: ProductFormProps) {
   return (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-4">
-      {field("Name *", "name", { placeholder: "e.g. Espresso Coffee" })}
+      {field(`${t("name")} *`, "name", { placeholder: tf("name_placeholder") })}
 
       <div className="grid grid-cols-2 gap-4">
-        {field("SKU", "sku", { placeholder: "CAFE-001" })}
-        {field("Barcode", "barcode", { placeholder: "4006381333931" })}
+        {field(t("sku"), "sku", { placeholder: tf("sku_placeholder") })}
+        {field(t("barcode"), "barcode", { placeholder: tf("barcode_placeholder") })}
       </div>
+
+      {/* Unit: piece vs weight */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">{tf("unit_label")}</label>
+        <select
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...registerField("unit" as any)}
+          className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        >
+          <option value="pcs">{tf("unit_pcs")}</option>
+          <option value="kg">{tf("unit_kg")}</option>
+          <option value="l">{tf("unit_l")}</option>
+          <option value="m">{tf("unit_m")}</option>
+        </select>
+        <p className="text-xs text-muted-foreground">{tf("unit_hint")}</p>
+      </div>
+
+      {byWeight && field("PLU весового штрихкода (5 цифр)", "scalePlu", { inputMode: "numeric", maxLength: 5, placeholder: "00001" })}
 
       <div className="grid grid-cols-2 gap-4">
-        {field("Price *", "price", { type: "number", step: "0.01", min: "0", placeholder: "0.00" })}
-        {field("Cost", "cost", { type: "number", step: "0.01", min: "0", placeholder: "0.00" })}
+        {field(`${fractional ? tf("price_per_unit", { unit: unitAbbr }) : t("price")} *`, "price", { type: "number", step: "0.01", min: "0", placeholder: "0.00" })}
+        {field(fractional ? tf("cost_per_unit", { unit: unitAbbr }) : t("cost"), "cost", { type: "number", step: "0.01", min: "0", placeholder: "0.00" })}
       </div>
+
+      {field(tf("wholesale_price"), "wholesalePrice", { type: "number", step: "0.01", min: "0", placeholder: "0.00" })}
 
       <div className="grid grid-cols-2 gap-4">
-        {field("Stock", "stock", { type: "number", min: "0", step: "1" })}
-        {field("Low Stock Alert", "lowStockThreshold", { type: "number", min: "0", step: "1" })}
+        {field(fractional ? tf("stock_unit", { unit: unitAbbr }) : t("stock"), "stock", { type: "number", min: "0", step: fractional ? "0.001" : "1" })}
+        {field(fractional ? tf("low_stock_alert_unit", { unit: unitAbbr }) : tf("low_stock_alert"), "lowStockThreshold", { type: "number", min: "0", step: fractional ? "0.001" : "1" })}
       </div>
 
-      {field("Category", "category", { placeholder: "Beverages" })}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">{t("category")}</label>
+        <select
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...registerField("categoryId" as any)}
+          className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        >
+          <option value="">{tf("category_none")}</option>
+          {categories.filter((c) => !c.parentId).flatMap((parent) => [
+            <option key={parent.id} value={parent.id}>{parent.name}</option>,
+            ...categories.filter((c) => c.parentId === parent.id).map((child) => (
+              <option key={child.id} value={child.id}>— {child.name}</option>
+            )),
+          ])}
+        </select>
+        <p className="text-xs text-muted-foreground">{tf("category_manage_hint")}</p>
+      </div>
 
       {/* Image upload */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Product Image</label>
+        <label className="text-sm font-medium">{tf("image_label")}</label>
         <div className="flex items-center gap-3">
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -178,7 +240,7 @@ export function ProductForm({ product }: ProductFormProps) {
               )}
             >
               <Upload className="h-4 w-4" />
-              {uploadLoading ? "Uploading…" : "Upload image"}
+              {uploadLoading ? tf("uploading") : tf("upload_image")}
               <input
                 id="image-upload"
                 type="file"
@@ -187,7 +249,7 @@ export function ProductForm({ product }: ProductFormProps) {
                 onChange={handleImageUpload}
               />
             </label>
-            <p className="text-xs text-muted-foreground">JPEG, PNG, WebP up to 5 MB</p>
+            <p className="text-xs text-muted-foreground">{tf("image_hint")}</p>
           </div>
         </div>
         {/* Hidden field for imageUrl */}
@@ -198,7 +260,7 @@ export function ProductForm({ product }: ProductFormProps) {
       <div className="flex items-center gap-2">
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <input type="checkbox" id="active" {...registerField("active" as any)} className="h-4 w-4" />
-        <label htmlFor="active" className="text-sm font-medium">Active (visible in POS)</label>
+        <label htmlFor="active" className="text-sm font-medium">{tf("active_label")}</label>
       </div>
 
       <div className="flex gap-3 pt-2">
@@ -207,7 +269,7 @@ export function ProductForm({ product }: ProductFormProps) {
           disabled={isSubmitting}
           className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center rounded-md px-6 text-sm font-medium transition-colors disabled:opacity-50"
         >
-          {isSubmitting ? "Saving…" : isEdit ? "Update Product" : "Add Product"}
+          {isSubmitting ? tf("saving") : isEdit ? tf("update") : tf("create")}
         </button>
       </div>
     </form>

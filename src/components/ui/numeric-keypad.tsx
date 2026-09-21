@@ -2,13 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "framer-motion";
-import { Delete, Check } from "lucide-react";
+import { Delete, Check, X } from "lucide-react";
 
 interface NumericKeypadProps {
   open: boolean;
   value: string;
   label?: string;
+  /** Pieces are whole numbers; kg/litre/metre may be fractional. */
+  allowDecimal?: boolean;
+  presets?: number[];
+  unit?: string;
+  /** Available stock for this line. Omit for a manual/free-price item. */
+  max?: number;
   onValueChange: (val: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -20,10 +27,15 @@ export function NumericKeypad({
   open,
   value,
   label,
+  allowDecimal = true,
+  presets = [],
+  unit,
+  max,
   onValueChange,
   onConfirm,
   onCancel,
 }: NumericKeypadProps) {
+  const tc = useTranslations("common");
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -34,14 +46,14 @@ export function NumericKeypad({
       if (e.key === "Backspace") {
         onValueChange(value.length > 1 ? value.slice(0, -1) : "0");
       }
-      if (/^[0-9.]$/.test(e.key)) {
+      if (/^[0-9]$/.test(e.key) || (allowDecimal && e.key === ".")) {
         handleTap(e.key);
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, value]);
+  }, [open, value, allowDecimal, onCancel, onConfirm, onValueChange]);
 
   function handleTap(key: string) {
     if (key === "⌫") {
@@ -49,6 +61,7 @@ export function NumericKeypad({
       return;
     }
     if (key === ".") {
+      if (!allowDecimal) return;
       if (value.includes(".")) return;
       onValueChange(value + ".");
       return;
@@ -82,51 +95,75 @@ export function NumericKeypad({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            className="fixed bottom-0 inset-x-0 z-[9999] bg-background border-t rounded-t-2xl shadow-2xl"
+            className="fixed inset-x-0 bottom-0 z-[9999] max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-3xl border-t bg-background shadow-2xl"
             style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
           >
             {/* Display */}
-            <div className="px-4 pt-4 pb-3 border-b">
-              {label && <p className="text-xs text-muted-foreground mb-1">{label}</p>}
-              <div className="flex items-center justify-between">
-                <span className="text-3xl font-mono font-semibold tracking-tight">
+            <div className="border-b px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  {label && <p className="mb-1 text-sm font-medium text-muted-foreground">{label}</p>}
+              {Number.isFinite(max) && (
+                    <p className="mb-2 text-base text-emerald-800">
+                  В наличии: <strong>{max} {unit ?? ""}</strong> · максимум {max} {unit ?? ""}
+                </p>
+              )}
+                  <span className="text-4xl font-mono font-bold tracking-tight text-slate-900">
                   {value || "0"}
                 </span>
+                </div>
                 <button
+                  type="button"
                   onClick={onCancel}
-                  className="text-xs text-muted-foreground underline underline-offset-2"
+                  className="flex h-14 shrink-0 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-base font-semibold text-red-700 active:scale-95"
+                  aria-label={tc("cancel")}
                 >
-                  Cancel
+                  <X className="h-6 w-6" /> {tc("cancel")}
                 </button>
               </div>
             </div>
 
             {/* Key grid */}
-            <div className="grid grid-cols-3 gap-2 p-3">
-              {KEYS.map((key) => (
+            <div className="grid grid-cols-3 gap-3 p-4">
+              {(allowDecimal ? KEYS : KEYS.filter((key) => key !== ".")).map((key) => (
                 <button
                   key={key}
                   onClick={() => handleTap(key)}
-                  className={`flex h-14 items-center justify-center rounded-xl text-lg font-medium transition-colors active:scale-95
+                  className={`flex h-16 items-center justify-center rounded-2xl text-2xl font-semibold transition-colors active:scale-95
                     ${key === "⌫"
-                      ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                      ? "bg-red-100 text-red-800 hover:bg-red-200"
                       : "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-accent"
                     }`}
                 >
-                  {key === "⌫" ? <Delete className="h-5 w-5" /> : key}
+                  {key === "⌫" ? <><Delete className="mr-2 h-7 w-7" />Стереть</> : key}
                 </button>
               ))}
             </div>
 
+            {presets.length > 0 && (
+              <div className="grid grid-cols-5 gap-3 px-4 pb-4">
+                {presets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => onValueChange(String(Number.isFinite(max) ? Math.min(preset, max!) : preset))}
+                    className="h-12 rounded-xl border bg-muted/60 text-base font-semibold active:bg-accent"
+                  >
+                    {preset} {unit ?? ""}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Confirm button */}
-            <div className="px-3 pb-3">
+            <div className="px-4 pb-4">
               <button
                 ref={confirmRef}
                 onClick={onConfirm}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground text-base font-semibold transition-colors hover:bg-primary/90 active:scale-[0.98]"
+                className="flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-primary text-primary-foreground text-xl font-bold transition-colors hover:bg-primary/90 active:scale-[0.98]"
               >
-                <Check className="h-5 w-5" />
-                Confirm
+                <Check className="h-7 w-7" />
+                {tc("confirm")}
               </button>
             </div>
           </motion.div>

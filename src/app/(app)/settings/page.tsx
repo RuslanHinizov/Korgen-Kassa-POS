@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getStoreId } from "@/lib/store-context";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/lib/auth";
@@ -19,16 +20,17 @@ export default async function SettingsPage() {
   const t = await getTranslations("settings");
   const session = await auth.api.getSession({ headers: await headers() });
 
-  if (!session || session.user.role !== "ADMIN") {
-    redirect("/pos");
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+    redirect(`/store/${await getStoreId()}/pos`);
   }
 
-  // Upsert the singleton settings row so the form always has data
+  // Upsert this store's settings row so the form always has data
+  const storeId = await getStoreId();
   let settings;
   try {
     const raw = await prisma.businessSettings.upsert({
-      where: { id: "singleton" },
-      create: {},
+      where: { storeId },
+      create: { storeId },
       update: {},
     });
     settings = serialize(raw);
@@ -54,6 +56,22 @@ export default async function SettingsPage() {
         loyaltyEarnRate: settings.loyaltyEarnRate,
         loyaltyRedeemValue: settings.loyaltyRedeemValue,
         lowStockThreshold: settings.lowStockThreshold,
+        maxCashierDiscountPercent: settings.maxCashierDiscountPercent,
+        requireOpenShift: settings.requireOpenShift,
+        hasManagerPin: !!settings.managerPin,
+        allowWholesale: settings.allowWholesale,
+        autoUpdateSalePrice: settings.autoUpdateSalePrice,
+        roundSalePriceUp: settings.roundSalePriceUp,
+        backdatingDays: settings.backdatingDays,
+        mergeSameProducts: settings.mergeSameProducts,
+        bindProductToSupplier: settings.bindProductToSupplier,
+        autosaveReceiptDraft: settings.autosaveReceiptDraft,
+        autoUpdateCostPrice: settings.autoUpdateCostPrice,
+        autoUpdateBundleSalePrice: settings.autoUpdateBundleSalePrice,
+        cashbackEnabled: settings.cashbackEnabled,
+        hideStockDuringStocktake: settings.hideStockDuringStocktake,
+        hideAmountsDuringStocktake: settings.hideAmountsDuringStocktake,
+        autoRestoreDeletedProducts: settings.autoRestoreDeletedProducts,
         storageProvider: settings.storageProvider,
         storageRegion: settings.storageRegion,
         storageBucket: settings.storageBucket,

@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 import { serialize } from "@/lib/serialize";
 
 // GET /api/customers/duplicates
 // Returns groups of customers that share the same phone number (non-null)
 export async function GET() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
+    const storeId = await getStoreId();
     // Find phone numbers that appear more than once
     const phoneCounts = await prisma.customer.groupBy({
       by: ["phone"],
-      where: { phone: { not: null } },
+      where: { storeId, phone: { not: null } },
       _count: { phone: true },
       having: { phone: { _count: { gt: 1 } } },
     });
@@ -21,7 +27,7 @@ export async function GET() {
     const duplicatePhones = phoneCounts.map((g) => g.phone as string);
 
     const customers = await prisma.customer.findMany({
-      where: { phone: { in: duplicatePhones } },
+      where: { storeId, phone: { in: duplicatePhones } },
       include: {
         _count: { select: { sales: true } },
       },

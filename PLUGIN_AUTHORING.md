@@ -1,4 +1,4 @@
-# Olgax POS Plugin Authoring Guide
+# Korgen Kassa POS Plugin Authoring Guide
 
 > Version: 0.2 (Plugin API is in early preview — breaking changes possible.)
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Olgax POS supports a lightweight hook-based plugin system. Plugins can listen to key application events — such as a sale completing, a product being updated, or the checkout being rendered — and execute custom logic without modifying core application code.
+Korgen Kassa POS supports a lightweight hook-based plugin system. Plugins can listen to key application events — such as a sale completing, a product being updated, or the checkout being rendered — and execute custom logic without modifying core application code.
 
 ---
 

@@ -4,6 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { productFormSchema } from "@/lib/validations/product";
+import { getStoreId } from "@/lib/store-context";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+
+/** Server actions are directly callable endpoints — only catalogue staff may change products. */
+async function assertCatalogStaff() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) throw new Error("Forbidden");
+}
 
 /** Check if a P2002 error relates to a given field name */
 function isConstraintOn(e: any, field: string): boolean {
@@ -19,7 +28,21 @@ function isConstraintOn(e: any, field: string): boolean {
   return false;
 }
 
+/**
+ * Resolve the category fields: when a categoryId is chosen, `category` (the
+ * denormalised name the POS grid reads) follows it; otherwise fall back to any
+ * typed free-text name.
+ */
+async function resolveCategory(storeId: string, categoryId?: string, typed?: string): Promise<{ categoryId: string | null; category: string | null }> {
+  if (categoryId) {
+    const cat = await prisma.category.findFirst({ where: { id: categoryId, storeId }, select: { name: true } });
+    if (cat) return { categoryId, category: cat.name };
+  }
+  return { categoryId: null, category: typed || null };
+}
+
 export async function createProduct(formData: FormData) {
+  await assertCatalogStaff();
   const raw = Object.fromEntries(formData.entries());
   const parsed = productFormSchema.safeParse(raw);
 
@@ -27,12 +50,16 @@ export async function createProduct(formData: FormData) {
     return { error: parsed.error.flatten() };
   }
 
+  const storeId = await getStoreId();
+  const { categoryId: _cid, category: _cname, ...rest } = parsed.data;
   const data = {
-    ...parsed.data,
+    ...rest,
+    storeId,
     sku: parsed.data.sku || null,
     barcode: parsed.data.barcode || null,
-    category: parsed.data.category || null,
+    scalePlu: parsed.data.scalePlu || null,
     imageUrl: parsed.data.imageUrl || null,
+    ...(await resolveCategory(storeId, _cid, _cname)),
   };
 
   try {
@@ -52,10 +79,11 @@ export async function createProduct(formData: FormData) {
   }
 
   revalidatePath("/products");
-  redirect("/products");
+  redirect(`/store/${await getStoreId()}/products`);
 }
 
 export async function updateProduct(id: string, formData: FormData) {
+  await assertCatalogStaff();
   const raw = Object.fromEntries(formData.entries());
   const parsed = productFormSchema.safeParse(raw);
 
@@ -63,12 +91,20 @@ export async function updateProduct(id: string, formData: FormData) {
     return { error: parsed.error.flatten() };
   }
 
+  const storeId = await getStoreId();
+  const existing = await prisma.product.findFirst({ where: { id, storeId, deletedAt: null } });
+  if (!existing) {
+    return { error: { formErrors: ["Product not found"], fieldErrors: {} } };
+  }
+
+  const { categoryId: _cid, category: _cname, ...rest } = parsed.data;
   const data = {
-    ...parsed.data,
+    ...rest,
     sku: parsed.data.sku || null,
     barcode: parsed.data.barcode || null,
-    category: parsed.data.category || null,
+    scalePlu: parsed.data.scalePlu || null,
     imageUrl: parsed.data.imageUrl || null,
+    ...(await resolveCategory(storeId, _cid, _cname)),
   };
 
   try {
@@ -88,10 +124,14 @@ export async function updateProduct(id: string, formData: FormData) {
   }
 
   revalidatePath("/products");
-  redirect("/products");
+  redirect(`/store/${await getStoreId()}/products`);
 }
 
 export async function deleteProduct(id: string) {
-  await prisma.product.delete({ where: { id } });
+  await assertCatalogStaff();
+  const storeId = await getStoreId();
+  const existing = await prisma.product.findFirst({ where: { id, storeId, deletedAt: null } });
+  if (!existing) return;
+  await prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/products");
 }

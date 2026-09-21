@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -41,9 +42,13 @@ export async function GET(req: NextRequest) {
       start.setHours(0, 0, 0, 0);
   }
 
+  const storeId = await getStoreId();
   const [sales, topProducts, voidedCount, refundSummary, lowStockProducts] = await Promise.all([
     prisma.sale.findMany({
-      where: { createdAt: { gte: start, lte: end }, status: "COMPLETED" },
+      // Include refunded sales in gross revenue.  The dashboard then subtracts
+      // the matching refund rows only when the cashier selects net revenue.
+      // Excluding these sales here caused a refund to be deducted twice.
+      where: { storeId, createdAt: { gte: start, lte: end }, status: { in: ["COMPLETED", "REFUNDED"] } },
       select: {
         id: true,
         total: true,
@@ -68,26 +73,26 @@ export async function GET(req: NextRequest) {
     }),
     prisma.saleItem.groupBy({
       by: ["productId", "name"],
-      where: { sale: { createdAt: { gte: start, lte: end }, status: "COMPLETED" } },
+      where: { sale: { storeId, createdAt: { gte: start, lte: end }, status: { in: ["COMPLETED", "REFUNDED"] } } },
       _sum: { quantity: true, total: true },
       orderBy: { _sum: { total: "desc" } },
       take: 10,
     }),
-    prisma.sale.count({ where: { createdAt: { gte: start, lte: end }, status: "VOIDED" } }),
+    prisma.sale.count({ where: { storeId, createdAt: { gte: start, lte: end }, status: "VOIDED" } }),
     prisma.refund.aggregate({
-      where: { createdAt: { gte: start, lte: end } },
+      where: { sale: { storeId }, createdAt: { gte: start, lte: end } },
       _count: { id: true },
       _sum: { amount: true },
     }),
     prisma.product.findMany({
-      where: { active: true },
+      where: { active: true, deletedAt: null, storeId },
       select: { id: true, name: true, stock: true, lowStockThreshold: true, sku: true, category: true },
       orderBy: { stock: "asc" },
       take: 100,
     }),
   ]);
 
-  const lowStock = lowStockProducts.filter((p) => p.stock <= p.lowStockThreshold);
+  const lowStock = lowStockProducts.filter((p) => p.stock.lessThanOrEqualTo(p.lowStockThreshold));
 
   const byDay: Record<string, { revenue: number; transactions: number }> = {};
   let totalRevenue = 0;
@@ -109,7 +114,7 @@ export async function GET(req: NextRequest) {
     for (const item of sale.items) {
       const itemRevenue = parseFloat(item.total.toString());
       const unitCost = item.product?.cost ? parseFloat(item.product.cost.toString()) : 0;
-      totalGrossProfit += itemRevenue - unitCost * item.quantity;
+      totalGrossProfit += itemRevenue - unitCost * parseFloat(item.quantity.toString());
     }
 
     const lines = sale.paymentLines as Array<{ method: string; amount: number }> | null;

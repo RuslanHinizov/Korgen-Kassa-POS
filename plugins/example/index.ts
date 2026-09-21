@@ -1,5 +1,5 @@
 /**
- * Example Olgax POS Plugin
+ * Example Korgen Kassa POS Plugin
  *
  * This is a no-op demonstration plugin showing how to register hooks
  * with the PluginRegistry.
@@ -15,7 +15,7 @@ import manifest from "./plugin.json";
 const MANIFEST: PluginManifest = manifest as PluginManifest;
 
 /**
- * Register this plugin with the Olgax POS plugin registry.
+ * Register this plugin with the Korgen Kassa POS plugin registry.
  * Call once at application startup.
  */
 export function register(): void {

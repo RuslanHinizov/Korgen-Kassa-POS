@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useCartStore } from "@/store/cart";
+import { lineGross } from "@/lib/rounding";
 import { X, History, PackagePlus } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -10,9 +12,9 @@ interface HeldOrder {
   label: string | null;
   createdAt: string;
   cartSnapshot: {
-    items: Array<{ productId: string; name: string; price: number; quantity: number; stock: number }>;
-    discountAmount: number;
-    discountType: "fixed" | "percent";
+    items: Array<{ productId: string | null; name: string; price: number; quantity: number; stock: number; unit?: "pcs" | "kg" | "l" | "m"; categoryId?: string | null; notes?: string; lineDiscount?: number }>;
+    discountAmount?: number;
+    discountType?: "fixed" | "percent";
     paymentMethod: "CASH" | "CARD" | "OTHER";
   };
 }
@@ -23,9 +25,10 @@ interface HeldOrdersModalProps {
 }
 
 export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
+  const t = useTranslations("pos.held");
   const [orders, setOrders] = useState<HeldOrder[]>([]);
   const [loading, setLoading] = useState(false);
-  const { items, setDiscount, setPaymentMethod, addItem, clearCart } = useCartStore();
+  const { items, setDiscount, setPaymentMethod, addItem, clearCart, roundingWeight } = useCartStore();
 
   async function fetchOrders() {
     setLoading(true);
@@ -48,8 +51,8 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
   async function recallOrder(order: HeldOrder) {
     clearCart();
     const snap = order.cartSnapshot;
-    snap.items.forEach((i) => addItem(i));
-    setDiscount(snap.discountAmount, snap.discountType);
+    snap.items.forEach((i) => addItem(i, i.quantity));
+    setDiscount(snap.discountAmount ?? 0, snap.discountType ?? "fixed");
     setPaymentMethod(snap.paymentMethod);
     // Delete from server
     await fetch("/api/held-orders", {
@@ -75,7 +78,7 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-md rounded-xl bg-card border shadow-xl">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-semibold">Held Orders</h2>
+          <h2 className="font-semibold">{t("title")}</h2>
           <button onClick={onClose} className="rounded p-1 hover:bg-accent transition-colors">
             <X className="h-4 w-4" />
           </button>
@@ -83,17 +86,17 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
 
         <div className="max-h-80 overflow-y-auto p-2">
           {loading && (
-            <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           )}
           {!loading && orders.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
               <History className="h-6 w-6" />
-              <p className="text-sm">No held orders</p>
+              <p className="text-sm">{t("empty")}</p>
             </div>
           )}
           {orders.map((order) => {
             const snap = order.cartSnapshot;
-            const total = snap.items.reduce((s, i) => s + i.price * i.quantity, 0);
+            const total = snap.items.reduce((s, i) => s + lineGross(i.price, i.quantity, i.unit, roundingWeight) - (i.lineDiscount || 0), 0);
             return (
               <div
                 key={order.id}
@@ -104,7 +107,7 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
                     {order.label ?? new Date(order.createdAt).toLocaleTimeString()}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {snap.items.length} item(s) · {formatCurrency(total)}
+                    {t("items_count", { count: snap.items.length })} · {formatCurrency(total)}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -112,13 +115,13 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
                     onClick={() => recallOrder(order)}
                     className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
-                    Recall
+                    {t("recall")}
                   </button>
                   <button
                     onClick={() => deleteOrder(order.id)}
                     className="rounded border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 </div>
               </div>

@@ -3,11 +3,17 @@ export interface ReceiptItem {
   quantity: number;
   price: number;
   total: number;
+  unit?: "pcs" | "kg" | "l" | "m" | string;
   notes?: string;
 }
 
 export interface ReceiptData {
   saleId?: string;
+  documentNo?: number;
+  /** Document reference for returns that were created without an original sale receipt. */
+  referenceText?: string;
+  isRefund?: boolean;
+  reason?: string;
   customerName?: string;
   items: ReceiptItem[];
   subtotal: number;
@@ -29,21 +35,51 @@ export interface ReceiptSettings {
   currencyDecimals: number;
   taxName: string;
   receiptFooter: string;
+  /** false = compact legacy layout (one line per item); undefined/true = detailed layout. */
+  posNewReceiptFormat?: boolean;
 }
+
+import { useTranslations, useLocale } from "next-intl";
 
 interface ReceiptProps {
   data: ReceiptData;
   settings: ReceiptSettings;
 }
 
-function fmt(amount: number, currency = "$", decimals = 2) {
-  return `${currency}${amount.toFixed(decimals)}`;
+function fmt(amount: number, currency = "$", decimals = 2, locale = "en") {
+  let n: string;
+  try {
+    n = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(amount);
+  } catch {
+    n = amount.toFixed(decimals);
+  }
+  return `${currency}${n}`;
 }
 
 export function Receipt({ data, settings }: ReceiptProps) {
+  const t = useTranslations("receipt");
+  const tp = useTranslations("pos");
+  const locale = useLocale();
   const c = settings.currency;
   const d = settings.currencyDecimals;
   const now = data.createdAt ?? new Date();
+  const unitLabel = (unit?: string) => ({ pcs: "шт", kg: "кг", l: "л", m: "м" })[unit ?? "pcs"] ?? unit ?? "шт";
+  const formatQuantity = (quantity: number | string, unit?: string) => {
+    const value = Number(quantity);
+    const safeValue = Number.isFinite(value) ? value : 0;
+    const shown = Number.isInteger(safeValue) ? String(safeValue) : safeValue.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+    return `${shown} ${unitLabel(unit)}`;
+  };
+
+  const payMethod = (m: string) => {
+    const key = m.toLowerCase();
+    if (key === "cash" || key === "card" || key === "other" || key === "credit") return tp(key);
+    if (key === "refund") return t("refund_stamp");
+    return m;
+  };
 
   return (
     <div
@@ -71,32 +107,37 @@ export function Receipt({ data, settings }: ReceiptProps) {
         <span>{now.toLocaleDateString()}</span>
         <span>{now.toLocaleTimeString()}</span>
       </div>
-      {data.saleId && (
+      {data.isRefund && <p className="mb-2 text-center text-sm font-black tracking-wide">ВОЗВРАТ</p>}
+      {data.referenceText ? (
+        <p className="text-[10px] text-center mb-2">{data.referenceText}</p>
+      ) : data.documentNo != null && (
         <p className="text-[10px] text-center mb-2">
-          Sale #{data.saleId.slice(-8).toUpperCase()}
+          {data.isRefund ? `К чеку №${data.documentNo}` : t("sale_no", { id: data.documentNo })}
         </p>
       )}
       {data.customerName && (
-        <p className="text-[10px] text-center mb-2">For: {data.customerName}</p>
+        <p className="text-[10px] text-center mb-2">{t("for", { name: data.customerName })}</p>
       )}
+      {data.reason && <p className="text-[10px] text-center mb-2">Причина: {data.reason}</p>}
 
       <div className="border-t border-dashed border-black my-2" />
 
       {/* Items */}
-      <div className="space-y-1 mb-2">
-        {data.items.map((item, i) => (
-          <div key={i}>
-            <div className="flex justify-between">
-              <span className="flex-1 truncate pr-2">{item.name}</span>
-              <span>{fmt(item.total, c, d)}</span>
+      <div className="space-y-2 mb-2">
+        {data.items.map((item, i) => settings.posNewReceiptFormat === false ? (
+          <div key={i} className="flex justify-between gap-2 leading-tight">
+            <span className="break-words">{item.name} {formatQuantity(item.quantity, item.unit)}</span>
+            <span className="shrink-0">{fmt(item.total, c, d, locale)}</span>
+          </div>
+        ) : (
+          <div key={i} className="border-b border-dotted border-slate-300 pb-1.5 last:border-0">
+            <div className="break-words font-semibold leading-snug">{item.name}</div>
+            <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-600">
+              <span>{formatQuantity(item.quantity, item.unit)} × {fmt(item.price, c, d, locale)}</span>
+              <span className="shrink-0 font-bold text-black">{fmt(item.total, c, d, locale)}</span>
             </div>
-            {item.quantity > 1 && (
-              <div className="text-[10px] text-gray-500 pl-2">
-                {item.quantity} × {fmt(item.price, c, d)}
-              </div>
-            )}
             {item.notes && (
-              <div className="text-[10px] text-gray-500 pl-2 italic">{item.notes}</div>
+              <div className="mt-0.5 text-[10px] text-gray-500 italic">{item.notes}</div>
             )}
           </div>
         ))}
@@ -107,30 +148,30 @@ export function Receipt({ data, settings }: ReceiptProps) {
       {/* Totals */}
       <div className="space-y-0.5 mb-2">
         <div className="flex justify-between">
-          <span>Subtotal</span>
-          <span>{fmt(data.subtotal, c, d)}</span>
+          <span>{t("subtotal")}</span>
+          <span>{fmt(data.subtotal, c, d, locale)}</span>
         </div>
         {data.discountAmount > 0 && (
           <div className="flex justify-between">
-            <span>Discount</span>
-            <span>-{fmt(data.discountAmount, c, d)}</span>
+            <span>{t("discount")}</span>
+            <span>-{fmt(data.discountAmount, c, d, locale)}</span>
           </div>
         )}
         {data.taxAmount > 0 && (
           <div className="flex justify-between">
             <span>{settings.taxName}</span>
-            <span>{fmt(data.taxAmount, c, d)}</span>
+            <span>{fmt(data.taxAmount, c, d, locale)}</span>
           </div>
         )}
         {data.tipAmount != null && data.tipAmount > 0 && (
           <div className="flex justify-between">
-            <span>Tip</span>
-            <span>{fmt(data.tipAmount, c, d)}</span>
+            <span>{t("tip")}</span>
+            <span>{fmt(data.tipAmount, c, d, locale)}</span>
           </div>
         )}
         <div className="flex justify-between font-bold text-sm border-t border-black pt-1 mt-1">
-          <span>TOTAL</span>
-          <span>{fmt(data.total, c, d)}</span>
+          <span>{t("total")}</span>
+          <span>{fmt(data.total, c, d, locale)}</span>
         </div>
       </div>
 
@@ -139,26 +180,26 @@ export function Receipt({ data, settings }: ReceiptProps) {
         {data.paymentLines && data.paymentLines.length > 0 ? (
           data.paymentLines.map((line, i) => (
             <div key={i} className="flex justify-between">
-              <span>{line.method}</span>
-              <span>{fmt(line.amount, c, d)}</span>
+              <span>{payMethod(line.method)}</span>
+              <span>{fmt(line.amount, c, d, locale)}</span>
             </div>
           ))
         ) : (
           <div className="flex justify-between">
-            <span>Payment</span>
-            <span>{data.paymentMethod}</span>
+            <span>{t("payment")}</span>
+            <span>{payMethod(data.paymentMethod)}</span>
           </div>
         )}
         {data.amountTendered != null && data.amountTendered > 0 && !data.paymentLines?.length && (
           <div className="flex justify-between">
-            <span>Tendered</span>
-            <span>{fmt(data.amountTendered, c, d)}</span>
+            <span>{t("tendered")}</span>
+            <span>{fmt(data.amountTendered, c, d, locale)}</span>
           </div>
         )}
         {data.changeDue != null && data.changeDue > 0 && (
           <div className="flex justify-between">
-            <span>Change</span>
-            <span>{fmt(data.changeDue, c, d)}</span>
+            <span>{t("change")}</span>
+            <span>{fmt(data.changeDue, c, d, locale)}</span>
           </div>
         )}
       </div>

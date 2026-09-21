@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 
 export function SalesExportButton() {
+  const t = useTranslations("sales");
+  const tc = useTranslations("common");
+  const tr = useTranslations("reports");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [open, setOpen] = useState(false);
@@ -22,15 +26,15 @@ export function SalesExportButton() {
         className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent transition-colors"
       >
         <Download className="h-4 w-4" />
-        Export CSV
+        {t("export")}
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-2 z-30 w-72 rounded-xl border bg-card shadow-xl p-4 space-y-3">
-          <p className="text-sm font-semibold">Export Sales to CSV</p>
+          <p className="text-sm font-semibold">{t("export_title")}</p>
 
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">From</label>
+            <label className="text-xs text-muted-foreground">{tr("from")}</label>
             <input
               type="date"
               value={from}
@@ -40,7 +44,7 @@ export function SalesExportButton() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">To</label>
+            <label className="text-xs text-muted-foreground">{tr("to")}</label>
             <input
               type="date"
               value={to}
@@ -57,13 +61,13 @@ export function SalesExportButton() {
               className="flex-1 flex items-center justify-center gap-1.5 rounded-md bg-primary py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
-              Download
+              {t("download")}
             </a>
             <button
               onClick={() => setOpen(false)}
               className="rounded-md border px-3 py-2 text-xs hover:bg-accent transition-colors"
             >
-              Cancel
+              {tc("cancel")}
             </button>
           </div>
         </div>

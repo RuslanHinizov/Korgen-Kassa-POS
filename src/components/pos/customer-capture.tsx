@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { User, UserPlus, X, Search, ChevronDown } from "lucide-react";
 
 export interface CustomerSummary {
@@ -16,6 +17,7 @@ interface CustomerCaptureProps {
 }
 
 export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
+  const t = useTranslations("pos.customer");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
@@ -68,7 +70,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setCreateError(typeof data.error === "string" ? data.error : "Failed to create");
+        setCreateError(typeof data.error === "string" ? data.error : t("failed_create"));
         return;
       }
       onChange(data.customer);
@@ -105,7 +107,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
         <button
           onClick={() => onChange(null)}
           className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          aria-label="Remove customer"
+          aria-label={t("remove_aria")}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -118,7 +120,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
       {/* Trigger */}
       <button
         onClick={() => setOpen((p) => !p)}
-        aria-label="Attach customer"
+        aria-label={t("attach_aria")}
         className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${
           open
             ? "border-primary/40 bg-primary/5 text-primary"
@@ -126,7 +128,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
         }`}
       >
         <User className="h-3.5 w-3.5 shrink-0" />
-        <span className="flex-1 text-left">Attach customer (optional)</span>
+        <span className="flex-1 text-left">{t("attach")}</span>
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
@@ -146,7 +148,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
               }`}
             >
               <Search className="h-3 w-3" />
-              Search
+              {t("search_tab")}
             </button>
             <button
               onClick={() => setMode("create")}
@@ -157,7 +159,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
               }`}
             >
               <UserPlus className="h-3 w-3" />
-              New
+              {t("new_tab")}
             </button>
           </div>
 
@@ -169,15 +171,15 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Name, phone or email..."
+                  placeholder={t("search_placeholder")}
                   className="h-8 w-full rounded-md border bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 <div className="max-h-36 overflow-y-auto space-y-0.5">
                   {loading && (
-                    <p className="py-2 text-center text-[10px] text-muted-foreground">Searching...</p>
+                    <p className="py-2 text-center text-[10px] text-muted-foreground">{t("searching")}</p>
                   )}
                   {!loading && query.trim() && results.length === 0 && (
-                    <p className="py-2 text-center text-[10px] text-muted-foreground">No customers found</p>
+                    <p className="py-2 text-center text-[10px] text-muted-foreground">{t("none_found")}</p>
                   )}
                   {results.map((c) => (
                     <button
@@ -205,7 +207,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Name *"
+                  placeholder={t("name_placeholder")}
                   className="h-8 w-full rounded-md border bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
@@ -213,7 +215,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
                   type="tel"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
-                  placeholder="Phone (optional)"
+                  placeholder={t("phone_placeholder")}
                   className="h-8 w-full rounded-md border bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
@@ -225,7 +227,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
                   disabled={!newName.trim() || creating}
                   className="h-8 w-full rounded-md bg-primary text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
                 >
-                  {creating ? "Creating..." : "Create & attach"}
+                  {creating ? t("creating") : t("create_attach")}
                 </button>
               </>
             )}
@@ -236,7 +238,7 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
               onClick={handleClose}
               className="w-full text-[10px] text-muted-foreground transition-colors hover:text-foreground"
             >
-              Cancel
+              {t("cancel")}
             </button>
           </div>
         </div>

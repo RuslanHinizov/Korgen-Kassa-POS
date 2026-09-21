@@ -16,7 +16,9 @@ datasource db {
 
 enum Role {
   ADMIN
+  MANAGER
   CASHIER
+  WAREHOUSE
 }
 
 enum SaleStatus {
@@ -29,6 +31,105 @@ enum PaymentMethod {
   CASH
   CARD
   OTHER
+  CREDIT
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  IN
+  OUT
+  PAYOUT
+  DROP
+}
+
+enum InventoryMovementType {
+  OPENING_BALANCE
+  RECEIPT
+  SALE
+  SALE_RETURN
+  SUPPLIER_RETURN
+  DAMAGE
+  WASTE
+  THEFT
+  ADJUSTMENT
+  STOCKTAKE
+  IMPORT
+  TRANSFER_OUT
+  TRANSFER_IN
+}
+
+enum StoreTransferStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum StocktakeStatus {
+  DRAFT
+  COUNTING
+  REVIEWING
+  POSTED
+  CANCELLED
+}
+
+enum FinanceAccountType {
+  CASH
+  NONCASH
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+// ============================================================
+// Store (multi-store support — every store-scoped model below
+// carries a storeId; child line-item tables inherit scope from
+// their parent document and are not scoped individually)
+// ============================================================
+
+model Store {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  financeAccounts  FinanceAccount[]
+  cashboxes        Cashbox[]
+  expenseTypes     ExpenseType[]
+  payments         Payment[]
+  transfers        Transfer[]
+  businessSettings BusinessSettings?
+  categories       Category[]
+  products         Product[]
+  productArticles  ProductArticle[]
+  quickProductGroups QuickProductGroup[]
+  suppliers        Supplier[]
+  customers        Customer[]
+  consultants      Consultant[]
+  discountCards    DiscountCard[]
+  promotions       Promotion[]
+  sales            Sale[]
+  shifts           Shift[]
+  heldOrders       HeldOrder[]
+  stockIns         StockIn[]
+  writeOffs        WriteOff[]
+  customerReturns  CustomerReturn[]
+  purchaseReceipts PurchaseReceipt[]
+  supplierReturns  SupplierReturn[]
+  goodsReceipts    GoodsReceipt[]
+  stocktakes       Stocktake[]
+  auditLogs        AuditLog[]
+  cancelledItems   CancelledItem[]
+  transfersOut     StoreTransfer[] @relation("StoreTransferSource")
+  transfersIn      StoreTransfer[] @relation("StoreTransferDest")
+  referenceBooks   ReferenceBook[]
+  userAssignments  UserStoreAssignment[]
 }
 
 // ============================================================
@@ -42,6 +143,9 @@ model User {
   emailVerified Boolean   @default(false)
   image         String?
   role          Role      @default(CASHIER)
+  /// Hashed 4+ digit PIN — POS kiosk "who's working" quick-switch (display/attribution
+  /// tag only, does not change the authenticated session — see src/lib/pin.ts).
+  pin           String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -50,6 +154,41 @@ model User {
   accounts          Account[]
   stockAdjustments  StockAdjustment[]
   refunds           Refund[]
+  shifts            Shift[]
+  cashMovements     CashMovement[]
+  auditLogs         AuditLog[]
+  inventoryMovements InventoryMovement[]
+  goodsReceipts      GoodsReceipt[]
+  stocktakes         Stocktake[]
+  writeOffs          WriteOff[]
+  stockIns           StockIn[]
+  cancelledItems     CancelledItem[]
+  customerReturns    CustomerReturn[]
+  customerReturnPayments CustomerReturnPayment[]
+  purchaseReceipts   PurchaseReceipt[]
+  purchaseReceiptPayments PurchaseReceiptPayment[]
+  supplierReturns    SupplierReturn[]
+  supplierReturnPayments SupplierReturnPayment[]
+  payments           Payment[]
+  transfers          Transfer[]
+  customerPayments   CustomerPayment[]
+  storeTransfers     StoreTransfer[]
+  storeAssignments   UserStoreAssignment[]
+}
+
+/// Explicit work-location assignment. A cashier can open the POS only for a
+/// store listed here; administrators manage these assignments from Users.
+model UserStoreAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  storeId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@index([storeId])
 }
 
 model Session {
@@ -98,25 +237,252 @@ model Verification {
 // Product
 // ============================================================
 
+enum ProductType {
+  REGULAR
+  SERVICE
+  BUNDLE
+}
+
 model Product {
   id                String   @id @default(cuid())
+  storeId           String
   name              String
-  sku               String?  @unique
-  barcode           String?  @unique
+  sku               String?
+  barcode           String?
+  /// Kazakhstan national product catalogue code ("Код НКТ").
+  ntin              String?
+  additionalCode    String?
+  // Five digit PLU embedded in a store scale EAN-13 barcode (prefix 20/21/22).
+  scalePlu          String?
   price             Decimal  @db.Decimal(10, 2)
   cost              Decimal? @db.Decimal(10, 2)
-  stock             Int      @default(0)
+  wholesalePrice    Decimal? @db.Decimal(10, 2)
+  stock             Decimal  @default(0) @db.Decimal(10, 3)
+  /// "pcs" = sold per piece, "kg" = sold by weight (price is per kg)
+  unit              String   @default("pcs")
+  productType       ProductType @default(REGULAR)
+  /// BUNDLE only — extra cost folded into the computed bundle cost (Дополнительные расходы)
+  bundleExtraCost   Decimal? @db.Decimal(10, 2)
+  /// Denormalised category name (kept in sync with categoryRef.name; what the POS grid reads)
   category          String?
+  categoryId        String?
   imageUrl          String?
   lowStockThreshold Int      @default(5)
   active            Boolean  @default(true)
   supplierId        String?
+  articleId         String?
+  /// Soft delete — NULL means active. A deleted product is hidden from every catalog
+  /// browse/lookup query but its historical sale/receipt/etc. rows still resolve it by id.
+  deletedAt         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  store            Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  article          ProductArticle? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  variantValues    ProductVariantValue[]
   saleItems        SaleItem[]
   stockAdjustments StockAdjustment[]
+  inventoryMovements InventoryMovement[]
+  receiptItems      GoodsReceiptItem[]
+  stocktakeItems    StocktakeItem[]
+  promotions        Promotion[]
+  promotionBundleItems PromotionBundleItem[]
+  lots              InventoryLot[]
+  quickProducts     QuickProduct[]
+  writeOffItems     WriteOffItem[]
+  stockInItems      StockInItem[]
+  cancelledItems    CancelledItem[]
+  customerReturnItems CustomerReturnItem[]
+  storeTransferItems StoreTransferItem[]
+  purchaseReceiptItems PurchaseReceiptItem[]
+  supplierReturnItems  SupplierReturnItem[]
   supplier         Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  categoryRef      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  bundleComponents BundleItem[] @relation("BundleComponents")
+  usedInBundles    BundleItem[] @relation("BundleUsage")
+
+  @@unique([storeId, barcode])
+  @@unique([storeId, scalePlu])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([articleId])
+}
+
+/// A Комплект's (BUNDLE product's) recipe of component products + quantities.
+model BundleItem {
+  id          String  @id @default(cuid())
+  bundleId    String
+  componentId String
+  quantity    Decimal @db.Decimal(10, 3)
+
+  bundle    Product @relation("BundleComponents", fields: [bundleId], references: [id], onDelete: Cascade)
+  component Product @relation("BundleUsage", fields: [componentId], references: [id], onDelete: Restrict)
+
+  @@unique([bundleId, componentId])
+  @@index([componentId])
+}
+
+// ============================================================
+// Quick products — POS "БЫСТРЫЕ ТОВАРЫ" one-tap buttons for
+// barcode-less staples (loose bread, eggs, a plastic bag...),
+// grouped into folders, shown as their own POS button grid.
+// Always reads live price/stock from the linked Product.
+// ============================================================
+
+model QuickProductGroup {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items QuickProduct[]
+
+  @@unique([storeId, name])
+}
+
+model QuickProduct {
+  id          String   @id @default(cuid())
+  groupId     String?
+  productId   String
+  /// Optional button label override; falls back to product.name
+  displayName String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  group   QuickProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  product Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([productId])
+}
+
+// ============================================================
+// Category (tree — top level + optional sub-categories)
+// ============================================================
+
+model Category {
+  id           String   @id @default(cuid())
+  storeId      String
+  name         String
+  parentId     String?
+  sortOrder    Int      @default(0)
+  imageUrl     String?
+  defaultMarkup Float?
+  cashbackPercent Float? // per-category loyalty earn % override (BusinessSettings.cashbackEnabled)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store    Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+  promotions Promotion[]
+  saleRestrictions SaleRestriction[]
+  productArticles ProductArticle[]
+
+  @@unique([storeId, parentId, name])
+  @@index([storeId])
+  @@index([parentId])
+}
+
+// Запреты на продажу на кассе — block selling a whole category during a
+// recurring time window (e.g. Kazakhstan's alcohol-sale curfew laws).
+model SaleRestriction {
+  id         String  @id @default(cuid())
+  categoryId String
+  active     Boolean @default(true)
+  daysOfWeek String? // "1,2,3,4,5,6,7" (1=Mon); null = every day — same convention as Promotion
+  startTime  String  // "HH:MM"
+  endTime    String  // "HH:MM"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+}
+
+// ============================================================
+// Promotions & discount cards
+// ============================================================
+
+enum PromotionType {
+  PERCENT_OFF   // % off the matching lines (scope: cart | category | product)
+  AMOUNT_OFF    // fixed money off (scope: cart, with minSubtotal)
+  BUY_X_GET_Y   // buy `buyQty`, the next `getQty` are `getPercent`% off (100 = free)
+  BUNDLE_PRICE  // a set of specific products for a fixed `amount`
+}
+
+model Promotion {
+  id          String        @id @default(cuid())
+  storeId     String
+  name        String
+  type        PromotionType
+  active      Boolean       @default(true)
+  priority    Int           @default(0)
+
+  scope       String        @default("cart") // cart | category | product
+  categoryId  String?
+  productId   String?
+
+  percent     Decimal?      @db.Decimal(5, 2)
+  amount      Decimal?      @db.Decimal(10, 2)
+  buyQty      Int?
+  getQty      Int?
+  getPercent  Decimal?      @db.Decimal(5, 2)
+  minSubtotal Decimal?      @db.Decimal(10, 2)
+
+  startsAt    DateTime?
+  endsAt      DateTime?
+  daysOfWeek  String?       // "1,2,3,4,5" (1 = Monday); null = every day
+  startTime   String?       // "HH:MM"
+  endTime     String?       // "HH:MM"
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  store       Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category    Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  product     Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  bundleItems PromotionBundleItem[]
+
+  @@index([storeId])
+  @@index([active])
+}
+
+model PromotionBundleItem {
+  id          String @id @default(cuid())
+  promotionId String
+  productId   String
+  quantity    Int    @default(1)
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, productId])
+}
+
+model DiscountCard {
+  id         String   @id @default(cuid())
+  storeId    String
+  code       String
+  holderName String?
+  percent    Decimal  @db.Decimal(5, 2)
+  active     Boolean  @default(true)
+  customerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, code])
+  @@index([storeId])
 }
 
 // ============================================================
@@ -125,16 +491,25 @@ model Product {
 
 model Customer {
   id        String   @id @default(cuid())
+  storeId   String
   name      String
-  phone     String?  @unique
-  email     String?  @unique
+  phone     String?
+  email     String?
   notes     String?
   loyaltyPoints Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sales         Sale[]
   loyaltyLogs   LoyaltyLog[]
+  discountCards DiscountCard[]
+  customerReturns CustomerReturn[]
+  payments      CustomerPayment[]
+
+  @@unique([storeId, phone])
+  @@unique([storeId, email])
+  @@index([storeId])
 }
 
 // ============================================================
@@ -143,8 +518,16 @@ model Customer {
 
 model Sale {
   id             String        @id @default(cuid())
+  /// Справочники chosen at the kassa: [{ bookId, bookName, entryId, entryName }] (snapshot).
+  referenceValues Json?
+  documentNo     Int           @default(autoincrement())
+  storeId        String
   userId         String
   customerId     String?
+  consultantId   String?
+  shiftId        String?
+  /// The physical register (Cashbox) this sale was rung up on, when the terminal is paired.
+  cashboxId      String?
   subtotal       Decimal       @db.Decimal(10, 2)
   taxRate        Decimal       @default(0) @db.Decimal(5, 2)
   taxAmount      Decimal       @db.Decimal(10, 2)
@@ -158,13 +541,21 @@ model Sale {
   status         SaleStatus    @default(COMPLETED)
   voidReason     String?
   notes          String?
+  /// [{ promotionId, name, amount }] applied automatically at checkout
+  promoDetails   Json?
   createdAt      DateTime      @default(now())
 
-  user     User      @relation(fields: [userId], references: [id])
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  items    SaleItem[]
-  refunds  Refund[]
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id])
+  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  consultant Consultant? @relation(fields: [consultantId], references: [id], onDelete: SetNull)
+  shift      Shift?      @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  cashbox    Cashbox?    @relation(fields: [cashboxId], references: [id], onDelete: SetNull)
+  items      SaleItem[]
+  refunds    Refund[]
   loyaltyLogs LoyaltyLog[]
+
+  @@index([storeId])
 }
 
 model SaleItem {
@@ -173,7 +564,12 @@ model SaleItem {
   productId String?
   name      String
   price     Decimal @db.Decimal(10, 2)
-  quantity  Int
+  /// Whole units for "pcs" products, kilograms (fractional) for "kg" products
+  quantity  Decimal @db.Decimal(10, 3)
+  /// Snapshot of the product unit at the time of sale ("pcs" or "kg")
+  unit      String  @default("pcs")
+  /// Per-line discount (currency amount), matches UMAG's СКИДКА column.
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
   total     Decimal @db.Decimal(10, 2)
   notes     String?
 
@@ -187,9 +583,14 @@ model SaleItem {
 
 model HeldOrder {
   id           String   @id @default(cuid())
+  storeId      String
   label        String?
   cartSnapshot Json
   createdAt    DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
 }
 
 // ============================================================
@@ -231,7 +632,7 @@ model StockAdjustment {
   id        String         @id @default(cuid())
   productId String
   userId    String
-  delta     Int
+  delta     Decimal        @db.Decimal(10, 3)
   reason    StockAdjReason
   note      String?
   createdAt DateTime       @default(now())
@@ -240,8 +641,683 @@ model StockAdjustment {
   user    User    @relation(fields: [userId], references: [id])
 }
 
+// ============================================================
+// Списание — multi-line write-off/waste document (Товары → Списание in UMAG).
+// Draft until posted; posting writes an InventoryMovement per line and
+// decrements Product.stock (blocks if that would go negative).
+// ============================================================
+
+enum WriteOffStatus {
+  DRAFT
+  POSTED
+}
+
+enum WriteOffReason {
+  DAMAGED  // Испорчено
+  EXPIRED  // Просрочено
+  KITCHEN  // Кухня
+  OTHER    // Другое
+}
+
+model WriteOff {
+  id           String         @id @default(cuid())
+  storeId      String
+  documentNo   Int            @default(autoincrement())
+  userId       String
+  status       WriteOffStatus @default(DRAFT)
+  writeOffDate DateTime       @default(now())
+  note         String?
+  totalCost    Decimal        @default(0) @db.Decimal(12, 2)
+  postedAt     DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id])
+  items WriteOffItem[]
+
+  @@index([status, writeOffDate])
+  @@index([storeId])
+}
+
+model WriteOffItem {
+  id         String         @id @default(cuid())
+  writeOffId String
+  productId  String
+  quantity   Decimal        @db.Decimal(10, 3)
+  reason     WriteOffReason @default(OTHER)
+  unitCost   Decimal?       @db.Decimal(10, 2)
+  note       String?
+
+  writeOff WriteOff @relation(fields: [writeOffId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([writeOffId])
+  @@index([productId])
+}
+
+// ============================================================
+// Перемещение — inter-store product transfer. Stores have independent
+// catalogs, so posting doesn't move the same Product row: it decrements
+// stock at the source and finds-or-creates a barcode-matching product at
+// the destination (see recomputeTotal-style helper in the post route).
+// ============================================================
+
+model StoreTransfer {
+  id         String              @id @default(cuid())
+  storeId    String              // source store
+  documentNo Int                 @default(autoincrement())
+  toStoreId  String              // destination store
+  userId     String
+  status     StoreTransferStatus @default(DRAFT)
+  comment    String?
+  totalAmount Decimal            @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime            @default(now())
+  postedAt   DateTime?
+
+  store   Store               @relation("StoreTransferSource", fields: [storeId], references: [id], onDelete: Cascade)
+  toStore Store               @relation("StoreTransferDest", fields: [toStoreId], references: [id], onDelete: Restrict)
+  user    User                @relation(fields: [userId], references: [id])
+  items   StoreTransferItem[]
+
+  @@index([status, createdAt])
+  @@index([storeId])
+  @@index([toStoreId])
+}
+
+model StoreTransferItem {
+  id         String   @id @default(cuid())
+  transferId String
+  productId  String
+  quantity   Decimal  @db.Decimal(10, 3)
+  unitCost   Decimal? @db.Decimal(10, 2)
+  total      Decimal  @db.Decimal(12, 2)
+
+  transfer StoreTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([transferId])
+  @@index([productId])
+}
+
+// ============================================================
+// Оприходование — manual stock-in document (Товары → Оприходование in UMAG),
+// symmetric to Списание but adding stock instead of removing it. Editing a
+// line's Цена also re-prices the product catalog immediately (confirmed live
+// against UMAG), independent of when the document itself gets posted.
+// ============================================================
+
+enum StockInStatus {
+  DRAFT
+  POSTED
+  DELETED
+}
+
+model StockIn {
+  id          String        @id @default(cuid())
+  storeId     String
+  documentNo  Int           @default(autoincrement())
+  userId      String
+  status      StockInStatus @default(DRAFT)
+  stockInDate DateTime      @default(now())
+  note        String?
+  totalCost   Decimal       @default(0) @db.Decimal(12, 2)
+  postedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  store Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id])
+  items StockInItem[]
+
+  @@index([status, stockInDate])
+  @@index([storeId])
+}
+
+model StockInItem {
+  id        String   @id @default(cuid())
+  stockInId String
+  productId String
+  quantity  Decimal  @db.Decimal(10, 3)
+  unitCost  Decimal? @db.Decimal(10, 2)
+  note      String?
+
+  stockIn StockIn @relation(fields: [stockInId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([stockInId])
+  @@index([productId])
+}
+
+// ============================================================
+// Cancelled items — POS "Отменённые товары": a cart line the
+// cashier removed or reduced before the sale was ever completed
+// (honesty/shrink audit trail; distinct from a post-sale Refund).
+// ============================================================
+
+model CancelledItem {
+  id          String   @id @default(cuid())
+  storeId     String
+  productId   String?
+  productName String
+  userId      String
+  /// The physical register (Cashbox) this happened on, when the terminal is paired.
+  cashboxId   String?
+  beforeQty   Decimal  @db.Decimal(10, 3)
+  /// null = the line was removed entirely
+  afterQty    Decimal? @db.Decimal(10, 3)
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id])
+  cashbox Cashbox? @relation(fields: [cashboxId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([productId])
+  @@index([storeId])
+}
+
+// ============================================================
+// Customer returns — a standalone return document (unlike the
+// instant, one-shot Sale Refund) whose payout to the customer can
+// be settled gradually via one or more CustomerReturnPayment rows.
+// ============================================================
+
+enum CustomerReturnStatus {
+  DRAFT
+  POSTED
+}
+
+model CustomerReturn {
+  id          String               @id @default(cuid())
+  /// Справочники chosen at the kassa: [{ bookId, bookName, entryId, entryName }] (snapshot).
+  referenceValues Json?
+  storeId     String
+  documentNo  Int                  @default(autoincrement())
+  status      CustomerReturnStatus @default(DRAFT)
+  customerId  String?
+  userId      String
+  comment     String?
+  totalAmount Decimal              @default(0) @db.Decimal(10, 2)
+  createdAt   DateTime             @default(now())
+  postedAt    DateTime?
+
+  store    Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User                    @relation(fields: [userId], references: [id])
+  items    CustomerReturnItem[]
+  payments CustomerReturnPayment[]
+
+  @@index([status, createdAt])
+  @@index([storeId])
+}
+
+model CustomerReturnItem {
+  id        String  @id @default(cuid())
+  returnId  String
+  productId String?
+  name      String
+  quantity  Decimal @db.Decimal(10, 3)
+  unit      String  @default("pcs")
+  price     Decimal @db.Decimal(10, 2)
+  total     Decimal @db.Decimal(10, 2)
+
+  return  CustomerReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([returnId])
+  @@index([productId])
+}
+
+model CustomerReturnPayment {
+  id        String        @id @default(cuid())
+  returnId  String
+  amount    Decimal       @db.Decimal(10, 2)
+  method    PaymentMethod @default(CASH)
+  userId    String
+  note      String?
+  createdAt DateTime      @default(now())
+
+  return CustomerReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  user   User            @relation(fields: [userId], references: [id])
+
+  @@index([returnId])
+}
+
+// A customer paying down their "на кредит" (Sale.paymentMethod = CREDIT) debt.
+// No storeId column: scoped indirectly via the required customerId -> Customer.storeId relation.
+model CustomerPayment {
+  id         String        @id @default(cuid())
+  customerId String
+  amount     Decimal       @db.Decimal(10, 2)
+  method     PaymentMethod @default(CASH)
+  accountId  String
+  userId     String
+  note       String?
+  createdAt  DateTime      @default(now())
+
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  account  FinanceAccount @relation(fields: [accountId], references: [id])
+  user     User           @relation(fields: [userId], references: [id])
+
+  @@index([customerId])
+  @@index([accountId])
+}
+
+// Immutable stock ledger. Every new inbound/outbound operation creates a row here.
+model InventoryMovement {
+  id            String                @id @default(cuid())
+  productId     String
+  userId        String
+  supplierId    String?
+  type          InventoryMovementType
+  quantity      Decimal               @db.Decimal(10, 3) // signed: inbound + / outbound -
+  stockBefore   Decimal               @db.Decimal(10, 3)
+  stockAfter    Decimal               @db.Decimal(10, 3)
+  unitCost      Decimal?              @db.Decimal(10, 2)
+  referenceType String?
+  referenceId   String?
+  documentNo    String?
+  deliveredBy   String?
+  receivedBy    String?
+  lotNumber     String?
+  expiresAt     DateTime?
+  note          String?
+  createdAt     DateTime              @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user     User     @relation(fields: [userId], references: [id])
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([type, createdAt])
+  @@index([supplierId, createdAt])
+}
+
+/// Товары → Склад's own lightweight "Приёмка" tab (lot/expiry-tracked manual
+/// stock-in, unrelated to the accounting Закупки → Приёмка document above).
+model GoodsReceipt {
+  id          String   @id @default(cuid())
+  storeId     String
+  supplierId  String
+  userId      String
+  documentNo  String?
+  deliveredBy String?
+  receivedBy  String?
+  note        String?
+  totalCost   Decimal  @default(0) @db.Decimal(12, 2)
+  receivedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  store    Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  supplier Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  user     User               @relation(fields: [userId], references: [id])
+  items    GoodsReceiptItem[]
+
+  @@index([receivedAt])
+  @@index([supplierId, receivedAt])
+  @@index([storeId])
+}
+
+model GoodsReceiptItem {
+  id          String   @id @default(cuid())
+  receiptId   String
+  productId   String
+  quantity    Decimal  @db.Decimal(10, 3)
+  unitCost    Decimal? @db.Decimal(10, 2)
+  lotNumber   String?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  receipt GoodsReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+// ============================================================
+// Закупки → Приёмка — a direct supplier goods-receipt document
+// (1:1 with UMAG: no separate PO/send/fulfil workflow — a receipt
+// is created, priced line-by-line, posted, and paid off gradually).
+// Posting a line updates that Product's cost/price, matching UMAG's
+// real behaviour of a receipt re-pricing the catalog.
+// ============================================================
+
+enum PurchaseReceiptStatus {
+  DRAFT
+  POSTED
+}
+
+model PurchaseReceipt {
+  id          String                @id @default(cuid())
+  storeId     String
+  documentNo  Int                   @default(autoincrement())
+  status      PurchaseReceiptStatus @default(DRAFT)
+  supplierId  String?
+  userId      String
+  comment     String?
+  /// Consignment (Комиссионный товар/Реализация): goods received into stock without an
+  /// immediate debt to the supplier — the supplier is paid over time via the same
+  /// payments mechanism as a regular receipt, tracked separately under Закупки → Платежи → Консигнация.
+  isConsignment Boolean             @default(false)
+  totalAmount Decimal               @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime              @default(now())
+  postedAt    DateTime?
+
+  store    Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  supplier Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  user     User                     @relation(fields: [userId], references: [id])
+  items    PurchaseReceiptItem[]
+  payments PurchaseReceiptPayment[]
+
+  @@index([status, createdAt])
+  @@index([supplierId, createdAt])
+  @@index([storeId, isConsignment])
+  @@index([storeId])
+}
+
+model PurchaseReceiptItem {
+  id          String  @id @default(cuid())
+  receiptId   String
+  productId   String?
+  name        String
+  unit        String  @default("pcs")
+  quantity    Decimal @db.Decimal(10, 3)
+  costPrice   Decimal @db.Decimal(10, 2)
+  discountPct Decimal @default(0) @db.Decimal(5, 2)
+  salePrice   Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(12, 2)
+
+  receipt PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@index([productId])
+}
+
+model PurchaseReceiptPayment {
+  id        String        @id @default(cuid())
+  receiptId String
+  amount    Decimal       @db.Decimal(10, 2)
+  method    PaymentMethod @default(CASH)
+  accountId String
+  userId    String
+  note      String?
+  createdAt DateTime      @default(now())
+
+  receipt PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  account FinanceAccount  @relation(fields: [accountId], references: [id])
+  user    User            @relation(fields: [userId], references: [id])
+
+  @@index([receiptId])
+  @@index([accountId])
+}
+
+// ============================================================
+// Закупки → Возвраты поставщикам — a standalone document (the
+// old in-receipt "Возврат" tab is deprecated in UMAG itself), same
+// draft/posted + gradual-payment shape as CustomerReturn but it
+// decreases stock and settles what the supplier owes back to us.
+// ============================================================
+
+enum SupplierReturnStatus {
+  DRAFT
+  POSTED
+}
+
+model SupplierReturn {
+  id          String               @id @default(cuid())
+  storeId     String
+  documentNo  Int                  @default(autoincrement())
+  status      SupplierReturnStatus @default(DRAFT)
+  supplierId  String?
+  userId      String
+  comment     String?
+  totalAmount Decimal              @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime             @default(now())
+  postedAt    DateTime?
+
+  store    Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  supplier Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  user     User                    @relation(fields: [userId], references: [id])
+  items    SupplierReturnItem[]
+  payments SupplierReturnPayment[]
+
+  @@index([status, createdAt])
+  @@index([supplierId, createdAt])
+  @@index([storeId])
+}
+
+model SupplierReturnItem {
+  id        String  @id @default(cuid())
+  returnId  String
+  productId String?
+  name      String
+  unit      String  @default("pcs")
+  quantity  Decimal @db.Decimal(10, 3)
+  price     Decimal @db.Decimal(10, 2)
+  total     Decimal @db.Decimal(12, 2)
+
+  return  SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([returnId])
+  @@index([productId])
+}
+
+model SupplierReturnPayment {
+  id        String        @id @default(cuid())
+  returnId  String
+  amount    Decimal       @db.Decimal(10, 2)
+  method    PaymentMethod @default(CASH)
+  accountId String
+  userId    String
+  note      String?
+  createdAt DateTime      @default(now())
+
+  return  SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  account FinanceAccount @relation(fields: [accountId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+
+  @@index([returnId])
+  @@index([accountId])
+}
+
+// ============================================================
+// Финансы → Счета / Платежи / Типы расходов
+// ============================================================
+
+model FinanceAccount {
+  id                   String             @id @default(cuid())
+  storeId              String
+  name                 String
+  type                 FinanceAccountType @default(CASH)
+  balance              Decimal            @default(0) @db.Decimal(14, 2)
+  allowNegativeBalance Boolean            @default(false)
+  showAtPos            Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  store                   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payments                Payment[]
+  purchaseReceiptPayments PurchaseReceiptPayment[]
+  supplierReturnPayments  SupplierReturnPayment[]
+  customerPayments        CustomerPayment[]
+  cashboxes               Cashbox[] @relation("CashboxOwnAccount")
+  cashboxExtraFor         Cashbox[] @relation("CashboxExtraAccount")
+  transfersFrom           Transfer[] @relation("TransferFrom")
+  transfersTo             Transfer[] @relation("TransferTo")
+}
+
+model Cashbox {
+  id        String   @id @default(cuid())
+  storeId   String
+  no        Int      @default(autoincrement())
+  name      String
+  active    Boolean  @default(true)
+  accountId String?
+  oneTimeKey String?
+  /// When the current oneTimeKey (or its predecessor) was redeemed by a terminal.
+  pairedAt   DateTime?
+  /// Reported by the paired terminal: app version, OS/browser platform, last time it checked in.
+  appVersion String?
+  platform   String?
+  lastSyncAt DateTime?
+
+  // Настройка чека (per-cashbox receipt formatting)
+  receiptHeaderText       String  @default("")
+  receiptFooterText       String  @default("Спасибо за покупку!")
+  receiptCyrillicCodepage Int     @default(7)
+  receiptPaperWidth       Int     @default(58)
+  receiptTabularView      Boolean @default(false)
+  receiptPrintVat         Boolean @default(false)
+
+  // Счета — an optional extra non-cash account linked alongside the cashbox's own auto cash account
+  extraAccountId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  account      FinanceAccount? @relation("CashboxOwnAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  extraAccount FinanceAccount? @relation("CashboxExtraAccount", fields: [extraAccountId], references: [id], onDelete: SetNull)
+  sales        Sale[]
+  cancelledItems CancelledItem[]
+}
+
+enum CashboxAccessRole {
+  NOBODY
+  ADMIN
+  ALL
+}
+
+enum RoundingMode {
+  NONE
+  UP_1
+  DOWN_1
+  UP_5
+  DOWN_5
+  UP_10
+  DOWN_10
+  UP_50
+  DOWN_50
+  UP_100
+  DOWN_100
+}
+
+model ExpenseType {
+  id         String  @id @default(cuid())
+  storeId    String
+  name       String
+  active     Boolean @default(true)
+  manageable Boolean @default(true)
+  sortOrder  Int     @default(0)
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@unique([storeId, name])
+}
+
+model Payment {
+  id            String           @id @default(cuid())
+  storeId       String
+  documentNo    Int              @default(autoincrement())
+  direction     PaymentDirection
+  amount        Decimal          @db.Decimal(12, 2)
+  expenseTypeId String?
+  accountId     String
+  userId        String
+  comment       String?
+  createdAt     DateTime         @default(now())
+
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  expenseType ExpenseType?   @relation(fields: [expenseTypeId], references: [id])
+  account     FinanceAccount @relation(fields: [accountId], references: [id])
+  user        User           @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([accountId])
+  @@index([storeId])
+}
+
+model Transfer {
+  id            String   @id @default(cuid())
+  storeId       String
+  documentNo    Int      @default(autoincrement())
+  fromAccountId String
+  toAccountId   String
+  amount        Decimal  @db.Decimal(12, 2)
+  userId        String
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  fromAccount FinanceAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccount   FinanceAccount @relation("TransferTo", fields: [toAccountId], references: [id])
+  user        User           @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@index([storeId])
+}
+
+model InventoryLot {
+  id           String   @id @default(cuid())
+  productId    String
+  supplierId   String?
+  receiptItemId String?
+  lotNumber    String
+  expiresAt    DateTime?
+  receivedQty  Decimal  @db.Decimal(10, 3)
+  availableQty Decimal  @db.Decimal(10, 3)
+  unitCost     Decimal? @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([productId, expiresAt])
+  @@unique([productId, lotNumber])
+}
+
+model Stocktake {
+  id         String          @id @default(cuid())
+  storeId    String
+  documentNo Int             @default(autoincrement())
+  userId     String
+  status     StocktakeStatus @default(DRAFT)
+  note       String?
+  countedAt  DateTime        @default(now())
+  postedAt   DateTime?
+  createdAt  DateTime        @default(now())
+
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id])
+  items StocktakeItem[]
+
+  @@index([countedAt])
+  @@index([storeId])
+}
+
+model StocktakeItem {
+  id          String   @id @default(cuid())
+  stocktakeId String
+  productId   String
+  expectedQty Decimal  @db.Decimal(10, 3)
+  countedQty  Decimal  @db.Decimal(10, 3)
+  difference  Decimal  @db.Decimal(10, 3)
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([stocktakeId, productId])
+}
+
 model Supplier {
   id          String   @id @default(cuid())
+  storeId     String
   name        String
   contactName String?
   phone       String?
@@ -250,7 +1326,135 @@ model Supplier {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   products Product[]
+  inventoryMovements InventoryMovement[]
+  goodsReceipts GoodsReceipt[]
+  lots InventoryLot[]
+  purchaseReceipts PurchaseReceipt[]
+  supplierReturns  SupplierReturn[]
+  productArticles  ProductArticle[]
+
+  @@index([storeId])
+}
+
+// Артикул — a named group of variant products generated from one or more
+// characteristics (e.g. "Размер": S/M/L crossed with "Цвет": Красный/Синий).
+// Each combination becomes its own ordinary, independently priced Product.
+model ProductArticle {
+  id         String   @id @default(cuid())
+  storeId    String
+  name       String
+  code       String
+  categoryId String?
+  supplierId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store           Store                         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category        Category?                     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier        Supplier?                     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  characteristics ProductArticleCharacteristic[]
+  products        Product[]
+
+  @@unique([storeId, code])
+  @@index([storeId])
+}
+
+// A named property usable across articles (e.g. "Цвет", "Размер") — reused
+// so the create-article autocomplete can offer previously typed names.
+model ProductCharacteristic {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  values       ProductCharacteristicValue[]
+  articleLinks ProductArticleCharacteristic[]
+}
+
+model ProductCharacteristicValue {
+  id               String   @id @default(cuid())
+  characteristicId String
+  value            String
+  createdAt        DateTime @default(now())
+
+  characteristic ProductCharacteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+  variantValues  ProductVariantValue[]
+
+  @@unique([characteristicId, value])
+}
+
+// Join row: which characteristics an article varies by, in display order.
+model ProductArticleCharacteristic {
+  id               String @id @default(cuid())
+  articleId        String
+  characteristicId String
+  sortOrder        Int    @default(0)
+
+  article        ProductArticle        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  characteristic ProductCharacteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, characteristicId])
+}
+
+// Which characteristic value a generated variant Product carries (one row
+// per characteristic on the product, e.g. Размер=XL and Цвет=Синий).
+model ProductVariantValue {
+  id        String @id @default(cuid())
+  productId String
+  valueId   String
+
+  product Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  value   ProductCharacteristicValue @relation(fields: [valueId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, valueId])
+}
+
+// Consultants — floor staff attributed to a sale for commission/performance
+// tracking, distinct from the cashier who actually rang it up.
+model Consultant {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales Sale[]
+
+  @@index([storeId])
+}
+
+// Справочник — user-defined named value lists (e.g. "Консультанты", "Услуги")
+// that a store can tag onto a module. Values themselves are plain strings;
+// where a module actually surfaces the value for selection is a separate,
+// not-yet-built integration (see project notes).
+model ReferenceBook {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  /// Subset of "SALE" | "RETURN" this reference book applies to.
+  modules   String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  entries ReferenceBookEntry[]
+
+  @@index([storeId])
+}
+
+model ReferenceBookEntry {
+  id              String   @id @default(cuid())
+  referenceBookId String
+  name            String
+  createdAt       DateTime @default(now())
+
+  referenceBook ReferenceBook @relation(fields: [referenceBookId], references: [id], onDelete: Cascade)
+
+  @@index([referenceBookId])
 }
 
 // ============================================================
@@ -259,6 +1463,8 @@ model Supplier {
 
 model Refund {
   id         String   @id @default(cuid())
+  /// Справочники chosen at the kassa: [{ bookId, bookName, entryId, entryName }] (snapshot).
+  referenceValues Json?
   saleId     String
   userId     String
   amount     Decimal  @db.Decimal(10, 2)
@@ -272,15 +1478,76 @@ model Refund {
 }
 
 // ============================================================
+// Shifts / cash management
+// ============================================================
+
+model Shift {
+  id           String      @id @default(cuid())
+  storeId      String
+  userId       String
+  openedAt     DateTime    @default(now())
+  closedAt     DateTime?
+  openingFloat Decimal     @default(0) @db.Decimal(10, 2)
+  countedCash  Decimal?    @db.Decimal(10, 2)
+  expectedCash Decimal?    @db.Decimal(10, 2)
+  difference   Decimal?    @db.Decimal(10, 2)
+  status       ShiftStatus @default(OPEN)
+  notes        String?
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id])
+  sales         Sale[]
+  cashMovements CashMovement[]
+
+  @@index([storeId])
+}
+
+model CashMovement {
+  id        String           @id @default(cuid())
+  shiftId   String
+  userId    String
+  type      CashMovementType
+  amount    Decimal          @db.Decimal(10, 2)
+  reason    String?
+  createdAt DateTime         @default(now())
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// Audit log (voids, discount / price overrides, refunds, manager actions)
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  storeId    String
+  userId     String
+  action     String
+  entityType String?
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([storeId])
+}
+
+// ============================================================
 // Business Settings (single-row singleton)
 // ============================================================
 
 model BusinessSettings {
-  id               String   @id @default("singleton")
+  id               String   @id @default(cuid())
+  storeId          String   @unique
   name             String   @default("My Store")
   logoUrl          String?
-  primaryColor     String   @default("#0f2044")
-  accentColor      String   @default("#f5c518")
+  primaryColor     String   @default("#15503A")
+  accentColor      String   @default("#22B24C")
   currency         String   @default("$")
   currencyDecimals Int      @default(2)
   taxRate          Decimal  @default(0) @db.Decimal(5, 4)
@@ -293,6 +1560,25 @@ model BusinessSettings {
   loyaltyRedeemValue Decimal @default(100) @db.Decimal(8, 4) // points per $1 discount
   // Low-stock
   lowStockThreshold Int     @default(5)
+  // Manager controls
+  managerPin        String?  // hashed manager-override PIN
+  maxCashierDiscountPercent Decimal @default(100) @db.Decimal(5, 2)
+  requireOpenShift  Boolean  @default(false)
+  // Permissions (Настройка разрешений на сайте)
+  allowWholesale      Boolean @default(false)
+  autoUpdateSalePrice Boolean @default(true) // recompute sale price from markup % when cost changes on a receipt
+  roundSalePriceUp    Boolean @default(false) // round product sale price up to the nearest whole currency unit
+  backdatingDays      Int     @default(365) // how many days back a document's date may be set
+  mergeSameProducts       Boolean @default(true)  // merge duplicate product lines into one summed line (receipts/stock-in/write-offs)
+  bindProductToSupplier   Boolean @default(true)  // auto-link a product's supplier to the receiving supplier when it has none
+  autosaveReceiptDraft    Boolean @default(false) // autosave a purchase-receipt draft every 2 minutes
+  showContragentsPerStore Boolean @default(true)  // always true: suppliers/customers are hard-isolated per store since the multi-store migration
+  autoUpdateCostPrice        Boolean @default(true)  // write a receipt line's cost onto the product when posted
+  autoUpdateBundleSalePrice  Boolean @default(false) // recompute a Комплект's cost/sale price when a component's cost changes
+  cashbackEnabled            Boolean @default(false) // enable per-category cashback % (Category.cashbackPercent) on top of flat loyalty earnRate
+  hideStockDuringStocktake   Boolean @default(false) // hide "Ожидалось"/"Разница" columns while counting
+  hideAmountsDuringStocktake Boolean @default(false) // hide "Закуп./Прод. цена" columns while counting
+  autoRestoreDeletedProducts Boolean @default(false) // Excel/collector import restores a soft-deleted product on barcode/SKU match instead of erroring
   // Image storage
   storageProvider  String   @default("local")  // local | vercel_blob | cloudflare_r2 | s3
   storageRegion    String?
@@ -301,7 +1587,36 @@ model BusinessSettings {
   storageAccessKey String?
   storageSecretKey String?
   storagePublicUrl String?
+
+  // Настройка разрешений на кассе (store-wide POS behavior toggles)
+  posCollapseWindow       Boolean @default(true)
+  posInstantSync          Boolean @default(true)
+  posShowSalesHistory     Boolean @default(true)
+  posNewReceiptFormat     Boolean @default(true)
+  posGlobalSearch         Boolean @default(false)
+  posUniversalProduct     Boolean @default(true)
+  posEditProductAtPos     Boolean @default(true)
+  posHoldOrder            Boolean @default(true)
+  posDiscount             Boolean @default(true)
+  posCreditSale           Boolean @default(true)
+  posCashInOut            Boolean @default(true)
+  posSplitCounterparty    Boolean @default(false)
+  posWholesaleAtPos       Boolean @default(false)
+  posPriceCheck           Boolean @default(false)
+  posBanPriceDecrease     Boolean @default(false)
+  posChangePriceAtPos     Boolean @default(true)
+  posCardPayment          Boolean @default(true)
+  posSalesOverMillion     Boolean @default(true)
+  posAccessReturn         CashboxAccessRole @default(ALL)
+  posAccessReturnNoReceipt CashboxAccessRole @default(ALL)
+  posAccessDeleteItem     CashboxAccessRole @default(ALL)
+  posAccessDecreaseQty    CashboxAccessRole @default(ALL)
+  posRoundingWeightItems  RoundingMode @default(NONE)
+  posRoundingDiscount     RoundingMode @default(NONE)
+
   setupComplete    Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }

@@ -1,6 +1,6 @@
 # Configuration Reference
 
-All configuration for Olgax POS is managed through environment variables (server-side) and the in-app Settings page (business settings stored in the database).
+All configuration for Korgen Kassa POS is managed through environment variables (server-side) and the in-app Settings page (business settings stored in the database).
 
 ---
 

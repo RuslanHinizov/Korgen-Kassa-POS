@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { useTranslations } from "next-intl";
 import { pluginRegistry, PluginManifest } from "@/lib/plugins";
 import { Puzzle, Power } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,33 +21,40 @@ function saveEnabledMap(map: Record<string, boolean>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
 }
 
-export function PluginsPanel() {
-  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
-  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({});
+const listeners = new Set<() => void>();
 
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notify() {
+  listeners.forEach((l) => l());
+}
+
+function getSnapshot(): PluginManifest[] {
+  return pluginRegistry.getPlugins();
+}
+
+export function PluginsPanel() {
+  const t = useTranslations("settings.plugins");
+  const plugins = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  // Apply persisted enabled-state overrides to the registry once on mount —
+  // a mutation of the registry singleton, not component state.
   useEffect(() => {
     const stored = loadEnabledMap();
-    const list = pluginRegistry.getPlugins();
-    // Apply persisted enabled state
-    for (const p of list) {
-      if (stored[p.id] !== undefined) {
-        pluginRegistry.setEnabled(p.id, stored[p.id]);
-        p.enabled = stored[p.id];
-      }
+    for (const p of pluginRegistry.getPlugins()) {
+      if (stored[p.id] !== undefined) pluginRegistry.setEnabled(p.id, stored[p.id]);
     }
-    setPlugins(list);
-    const map: Record<string, boolean> = {};
-    for (const p of list) map[p.id] = p.enabled;
-    setEnabledMap(map);
+    notify();
   }, []);
 
   function toggle(id: string) {
-    const next = !enabledMap[id];
+    const next = !pluginRegistry.getPlugins().find((p) => p.id === id)?.enabled;
     pluginRegistry.setEnabled(id, next);
-    const newMap = { ...enabledMap, [id]: next };
-    setEnabledMap(newMap);
-    saveEnabledMap(newMap);
-    setPlugins(pluginRegistry.getPlugins());
+    saveEnabledMap({ ...loadEnabledMap(), [id]: next });
+    notify();
   }
 
   return (
@@ -54,19 +62,17 @@ export function PluginsPanel() {
       <div>
         <h2 className="text-base font-semibold flex items-center gap-2">
           <Puzzle className="h-4 w-4" />
-          Plugins
+          {t("title")}
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Installed plugins extend POS functionality via hooks. Place plugin folders in{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-[11px]">/plugins/</code>.
+          {t("subtitle")}
         </p>
       </div>
 
       {plugins.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           <Puzzle className="h-8 w-8 mx-auto mb-2 opacity-30" />
-          No plugins installed. Drop a plugin folder into{" "}
-          <code className="bg-muted rounded px-1 text-xs">/plugins/</code> and register it in your app.
+          {t("none")}
         </div>
       ) : (
         <div className="rounded-lg border divide-y overflow-hidden">
@@ -79,7 +85,7 @@ export function PluginsPanel() {
                     v{p.version}
                   </span>
                   {p.author && (
-                    <span className="text-[10px] text-muted-foreground">by {p.author}</span>
+                    <span className="text-[10px] text-muted-foreground">{t("by", { author: p.author })}</span>
                   )}
                 </div>
                 {p.description && (
@@ -101,14 +107,14 @@ export function PluginsPanel() {
                 onClick={() => toggle(p.id)}
                 className={cn(
                   "flex items-center gap-1.5 shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                  enabledMap[p.id]
+                  p.enabled
                     ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 )}
-                aria-label={enabledMap[p.id] ? "Disable plugin" : "Enable plugin"}
+                aria-label={p.enabled ? t("disable") : t("enable")}
               >
                 <Power className="h-3 w-3" />
-                {enabledMap[p.id] ? "Enabled" : "Disabled"}
+                {p.enabled ? t("enabled") : t("disabled")}
               </button>
             </div>
           ))}

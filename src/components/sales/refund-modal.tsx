@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ReferenceBookFields, useReferenceBooks } from "@/components/pos/reference-book-fields";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { X, RotateCcw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -16,6 +18,7 @@ interface RefundItem {
 
 interface RefundModalProps {
   saleId: string;
+  documentNo: number;
   saleTotal: number;
   items: {
     id: string;
@@ -27,13 +30,16 @@ interface RefundModalProps {
   onClose: () => void;
 }
 
-export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalProps) {
+export function RefundModal({ saleId, documentNo, saleTotal, items, onClose }: RefundModalProps) {
   const router = useRouter();
+  const t = useTranslations("sales.refund_modal");
+  const tc = useTranslations("common");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(items.map((i) => i.id)));
   const [qtys, setQtys] = useState<Record<string, number>>(
     Object.fromEntries(items.map((i) => [i.id, i.quantity]))
   );
   const [reason, setReason] = useState("");
+  const referenceBooks = useReferenceBooks("RETURN");
   const [restoreStock, setRestoreStock] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +64,9 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (selectedItems.length === 0) { setError("Select at least one item to refund"); return; }
+    if (selectedItems.length === 0) { setError(t("err_select")); return; }
+    const missingBook = referenceBooks.missing();
+    if (missingBook) { setError(`Выберите значение справочника «${missingBook}»`); return; }
     setSaving(true);
     setError(null);
     try {
@@ -72,11 +80,11 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
       const res = await fetch(`/api/sales/${saleId}/refund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason || undefined, restoreStock, items: refundItems }),
+        body: JSON.stringify({ reason: reason || undefined, referenceValues: referenceBooks.payload(), restoreStock, items: refundItems }),
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error ?? "Refund failed");
+        throw new Error(d.error ?? t("err_submit"));
       }
       // Save data for receipt before clearing state
       const receiptItems = selectedItems.map((i) => ({
@@ -91,7 +99,7 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
       router.refresh();
       setShowReceipt(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Refund failed");
+      setError(err instanceof Error ? err.message : t("err_submit"));
     } finally {
       setSaving(false);
     }
@@ -103,6 +111,7 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
         open={showReceipt}
         onClose={onClose}
         saleId={saleId}
+        documentNo={documentNo}
         items={committedItems}
         refundTotal={committedTotal}
         reason={committedReason || undefined}
@@ -114,8 +123,8 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
           <div className="flex items-center gap-2">
             <RotateCcw className="h-4 w-4 text-muted-foreground" />
             <div>
-              <h2 className="font-semibold">Issue Refund</h2>
-              <p className="text-xs text-muted-foreground">Sale total: {formatCurrency(saleTotal)}</p>
+              <h2 className="font-semibold">{t("title")}</h2>
+              <p className="text-xs text-muted-foreground">{t("sale_total", { amount: formatCurrency(saleTotal) })}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -131,7 +140,7 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
           {/* Items selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Items to Refund</label>
+              <label className="text-sm font-medium">{t("items_to_refund")}</label>
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-primary"
@@ -141,7 +150,7 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
                     : setSelected(new Set(items.map((i) => i.id)))
                 }
               >
-                {selected.size === items.length ? "Deselect all" : "Select all"}
+                {selected.size === items.length ? t("deselect_all") : t("select_all")}
               </button>
             </div>
             <div className="rounded-lg border divide-y max-h-56 overflow-y-auto">
@@ -181,17 +190,19 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
 
           {/* Refund total */}
           <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-2.5">
-            <span className="text-sm font-medium">Refund Amount</span>
+            <span className="text-sm font-medium">{t("refund_amount")}</span>
             <span className="text-lg font-bold text-destructive">{formatCurrency(refundTotal)}</span>
           </div>
 
+          <ReferenceBookFields state={referenceBooks} />
+
           {/* Reason */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium">Reason <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <label className="block text-sm font-medium">{t("reason")} <span className="text-muted-foreground font-normal">({tc("optional")})</span></label>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Customer returned item"
+              placeholder={t("reason_placeholder")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -204,7 +215,7 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
               onChange={(e) => setRestoreStock(e.target.checked)}
               className="h-4 w-4 accent-primary"
             />
-            <span className="text-sm">Restore stock for returned items</span>
+            <span className="text-sm">{t("restore_stock")}</span>
           </label>
 
           <div className="flex gap-3 pt-1">
@@ -213,14 +224,14 @@ export function RefundModal({ saleId, saleTotal, items, onClose }: RefundModalPr
               onClick={onClose}
               className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-accent transition-colors"
             >
-              Cancel
+              {tc("cancel")}
             </button>
             <button
               type="submit"
               disabled={saving || selectedItems.length === 0}
               className="flex-1 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60 transition-colors"
             >
-              {saving ? "Processing…" : `Refund ${formatCurrency(refundTotal)}`}
+              {saving ? t("submitting") : t("refund_btn", { amount: formatCurrency(refundTotal) })}
             </button>
           </div>
         </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -15,6 +16,7 @@ export function ChangePasswordForm({
   open,
   onOpenChange,
 }: ChangePasswordFormProps) {
+  const t = useTranslations("profile.password_form");
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     currentPassword: "",
@@ -31,12 +33,12 @@ export function ChangePasswordForm({
 
     // Client-side validation
     const newErrors: Record<string, string> = {};
-    if (!formData.currentPassword) newErrors.currentPassword = "Current password is required";
-    if (!formData.newPassword) newErrors.newPassword = "New password is required";
-    if (formData.newPassword.length < 6) newErrors.newPassword = "Password must be at least 6 characters";
-    if (!formData.confirmPassword) newErrors.confirmPassword = "Confirm password is required";
+    if (!formData.currentPassword) newErrors.currentPassword = t("err_current");
+    if (!formData.newPassword) newErrors.newPassword = t("err_new");
+    if (formData.newPassword.length < 6) newErrors.newPassword = t("err_new");
+    if (!formData.confirmPassword) newErrors.confirmPassword = t("err_mismatch");
     if (formData.newPassword !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
+      newErrors.confirmPassword = t("err_mismatch");
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -68,7 +70,7 @@ export function ChangePasswordForm({
         return;
       }
 
-      toast.success("Password changed successfully");
+      toast.success(t("changed"));
       setFormData({
         currentPassword: "",
         newPassword: "",
@@ -77,7 +79,7 @@ export function ChangePasswordForm({
       onOpenChange(false);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to change password"
+        error instanceof Error ? error.message : t("err_submit")
       );
     } finally {
       setIsLoading(false);
@@ -88,7 +90,7 @@ export function ChangePasswordForm({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-xl border bg-background shadow-2xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
-          <h2 className="font-semibold">Change Password</h2>
+          <h2 className="font-semibold">{t("title")}</h2>
           <button
             onClick={() => onOpenChange(false)}
             className="text-muted-foreground hover:text-foreground"
@@ -99,7 +101,7 @@ export function ChangePasswordForm({
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <PasswordInput
-            label="Current Password"
+            label={t("current")}
             value={formData.currentPassword}
             onChange={(e) =>
               setFormData((prev) => ({
@@ -107,12 +109,12 @@ export function ChangePasswordForm({
                 currentPassword: e.target.value,
               }))
             }
-            placeholder="Enter your current password"
+            placeholder={t("current")}
             error={errors.currentPassword}
           />
 
           <PasswordInput
-            label="New Password"
+            label={t("new")}
             value={formData.newPassword}
             onChange={(e) =>
               setFormData((prev) => ({
@@ -120,12 +122,12 @@ export function ChangePasswordForm({
                 newPassword: e.target.value,
               }))
             }
-            placeholder="Enter new password"
+            placeholder={t("new")}
             error={errors.newPassword}
           />
 
           <PasswordInput
-            label="Confirm Password"
+            label={t("confirm")}
             value={formData.confirmPassword}
             onChange={(e) =>
               setFormData((prev) => ({
@@ -133,7 +135,7 @@ export function ChangePasswordForm({
                 confirmPassword: e.target.value,
               }))
             }
-            placeholder="Confirm new password"
+            placeholder={t("confirm")}
             error={errors.confirmPassword}
           />
 
@@ -143,7 +145,7 @@ export function ChangePasswordForm({
               onClick={() => onOpenChange(false)}
               className="px-4 py-2 rounded-lg border border-input hover:bg-muted transition-colors text-sm font-medium"
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               type="submit"
@@ -151,7 +153,7 @@ export function ChangePasswordForm({
               className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium inline-flex items-center gap-2"
             >
               {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isLoading ? "Changing..." : "Change Password"}
+              {isLoading ? t("submitting") : t("submit")}
             </button>
           </div>
         </form>

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-How to deploy Olgax POS in production.
+How to deploy Korgen Kassa POS in production.
 
 ---
 
@@ -20,7 +20,7 @@ How to deploy Olgax POS in production.
 
 ## Docker Compose (Recommended)
 
-The included `docker-compose.yml` runs both PostgreSQL and the Olgax POS web app.
+The included `docker-compose.yml` runs both PostgreSQL and the Korgen Kassa POS web app.
 
 ```bash
 # 1. Clone the repo
@@ -44,13 +44,13 @@ The web service will be available on port **3000**. Put it behind Nginx or Caddy
 
 ## Serverless Deployments (Vercel / Netlify)
 
-Olgax POS can be deployed on serverless hosting platforms like Vercel or Netlify without needing Docker, a VPS, or a virtual machine. 
+Korgen Kassa POS can be deployed on serverless hosting platforms like Vercel or Netlify without needing Docker, a VPS, or a virtual machine. 
 
 ### Deploying on Vercel (Recommended)
 
 Vercel provides native, optimized support for Next.js applications:
 
-1. **Fork or Use Template**: Click **Fork** or **Use this template** at the top of the [Olgax POS GitHub Repository](https://github.com/olgax/olgax-pos) to create a copy of the project in your own GitHub/GitLab account.
+1. **Fork or Use Template**: Click **Fork** or **Use this template** at the top of the [Korgen Kassa POS GitHub Repository](https://github.com/olgax/olgax-pos) to create a copy of the project in your own GitHub/GitLab account.
 2. **Import Project**: Open the [Vercel Dashboard](https://vercel.com), click **Add New** -> **Project**, and select your imported/forked repository.
 3. **Configure Settings**:
    - **Framework Preset**: Select **Next.js**.

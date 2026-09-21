@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { setCurrencyConfig } from "@/lib/utils";
 import { AppShell } from "@/components/layout/app-shell";
+import { StoreProvider } from "@/components/store/store-provider";
+import { getStoreId } from "@/lib/store-context";
 
 export const dynamic = "force-dynamic";
 
@@ -18,26 +21,42 @@ export default async function AppLayout({
   if (!session) {
     redirect("/login");
   }
+  // Cashiers have a separate account page and cash-register login. Warehouse
+  // workers use the same responsive shell, but only see the receipt module.
+  if (!['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(session.user.role ?? '')) {
+    redirect('/profile');
+  }
+
+  const storeId = await getStoreId();
 
   const settings = await prisma.businessSettings
-    .findUnique({ where: { id: "singleton" } })
+    .findUnique({ where: { storeId } })
     .catch(() => null);
 
   // Inject branding CSS vars from business settings.
   //
   // IMPORTANT: --primary must NOT be injected via inline style because inline
-  // styles override CSS class rules (.dark), causing dark navy primary on dark
-  // backgrounds. Instead we use a <style> tag with :root:not(.dark) so the
-  // override only applies in light mode. Dark mode keeps its yellow primary
-  // from globals.css automatically.
-  const primary = settings?.primaryColor ?? "#0f2044";
-  const accent = settings?.accentColor ?? "#f5c518";
+  // styles override CSS class rules (.dark), causing the wrong primary on dark
+  // backgrounds. Instead we use a <style> tag: light mode gets the (darker)
+  // primary colour, dark mode gets the brighter accent colour so filled buttons
+  // stay legible on the near-black dark background.
+  const primary = settings?.primaryColor ?? "#15503A";
+  const accent = settings?.accentColor ?? "#22B24C";
+
+  // Currency symbol / decimals for `formatCurrency` (server render).
+  const currencySymbol = settings?.currency ?? "$";
+  const currencyDecimals = settings?.currencyDecimals ?? 2;
+  const currencyLocale = settings?.language ?? "en";
+  setCurrencyConfig({ symbol: currencySymbol, decimals: currencyDecimals, locale: currencyLocale });
 
   // brandingCSS injected as a <style> tag (server-rendered, no flash).
   const brandingCSS = `
     :root:not(.dark) {
       --primary: ${primary};
       --primary-foreground: oklch(0.985 0 0);
+    }
+    .dark {
+      --primary: ${accent};
     }
     :root {
       --sidebar: ${primary};
@@ -59,9 +78,21 @@ export default async function AppLayout({
     <>
       {/* eslint-disable-next-line react/no-danger */}
       <style dangerouslySetInnerHTML={{ __html: brandingCSS }} />
-      <AppShell user={session.user} cssVars={cssVars}>
-        {children}
-      </AppShell>
+      {/* Currency config for client-side formatCurrency (set before hydration) */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.__olgaxCurrency=${JSON.stringify({
+            symbol: currencySymbol,
+            decimals: currencyDecimals,
+            locale: currencyLocale,
+          })}`,
+        }}
+      />
+      <StoreProvider storeId={storeId}>
+        <AppShell user={session.user} businessName={settings?.name ?? "Korgen Kassa"} cssVars={cssVars}>
+          {children}
+        </AppShell>
+      </StoreProvider>
     </>
   );
 }

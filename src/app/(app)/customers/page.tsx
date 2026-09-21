@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import { StoreLink as Link } from "@/components/store/store-link";
 import { formatCurrency } from "@/lib/utils";
-import { Search, Plus, Loader2, Edit, Trash2, ChevronLeft, ChevronRight, GitMerge, Phone, AlertTriangle, Check } from "lucide-react";
+import { Download, Search, Plus, Loader2, Edit, Trash2, ChevronLeft, ChevronRight, GitMerge, Phone, AlertTriangle, Check } from "lucide-react";
 
 type Customer = {
   id: string;
@@ -17,6 +17,7 @@ type Customer = {
   lastVisit: string | null;
   visitCount: number;
   createdAt: string;
+  balance: number;
 };
 
 export default function CustomersPage() {
@@ -73,7 +74,7 @@ export default function CustomersPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error ?? "Merge failed");
+        alert(d.error ?? t("merge.failed"));
         return;
       }
       // Remove the merged group from the list
@@ -138,7 +139,7 @@ export default function CustomersPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save");
+      if (!res.ok) throw new Error(data.error || t("err_save"));
 
       setModalOpen(false);
       setEditingCustomer(null);
@@ -153,14 +154,14 @@ export default function CustomersPage() {
 
   // Handle Delete
   async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this customer?")) return;
+    if (!confirm(t("confirm_delete_simple"))) return;
     try {
       const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       fetchCustomers();
     } catch (err) {
       console.error(err);
-      alert("Failed to delete customer");
+      alert(t("err_delete"));
     }
   }
 
@@ -182,13 +183,14 @@ export default function CustomersPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
-          <p className="text-muted-foreground text-sm">Manage your customer database and view history.</p>
+          <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => window.open(`/api/customers?export=xlsx&q=${encodeURIComponent(debouncedQuery)}`, "_blank")} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent"><Download className="h-4 w-4" /> Экспорт</button>
           <button
             onClick={loadDuplicates}
             disabled={mergeLoading}
@@ -228,13 +230,14 @@ export default function CustomersPage() {
                 <th className="px-4 py-3 text-right">{t("visits")}</th>
                 <th className="px-4 py-3 text-right">{t("last_visit")}</th>
                 <th className="px-4 py-3 text-right">{t("loyalty_points")}</th>
+                <th className="px-4 py-3 text-right">{t("balance")}</th>
                 <th className="px-4 py-3 text-center w-24">{tc("edit")}/{tc("delete")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {t("loading")}
@@ -243,7 +246,7 @@ export default function CustomersPage() {
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     {t("no_customers_found")}
                   </td>
                 </tr>
@@ -273,19 +276,22 @@ export default function CustomersPage() {
                     <td className="px-4 py-3 text-right font-mono text-xs">
                         {c.loyaltyPoints}
                     </td>
+                    <td className={`px-4 py-3 text-right font-medium ${c.balance > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                        {c.balance > 0 ? formatCurrency(c.balance) : "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => openEdit(c)}
                           className="p-1.5 hover:bg-muted rounded text-foreground/80 hover:text-foreground transition-colors"
-                          title="Edit"
+                          title={tc("edit")}
                         >
                           <Edit className="h-3.5 w-3.5" />
                         </button>
                         <button
                           onClick={() => handleDelete(c.id)}
                           className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive transition-colors"
-                          title="Delete"
+                          title={tc("delete")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -329,10 +335,10 @@ export default function CustomersPage() {
               <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <GitMerge className="h-5 w-5 text-primary" />
-                  Merge Duplicate Customers
+                  {t("merge.title")}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Customers with the same phone number are listed below. Choose which record to keep.
+                  {t("merge.subtitle")}
                 </p>
               </div>
             </div>
@@ -343,8 +349,8 @@ export default function CustomersPage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
                     <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
                   </div>
-                  <p className="font-medium">No duplicate phone numbers found</p>
-                  <p className="text-sm text-muted-foreground">Your customer database looks clean!</p>
+                  <p className="font-medium">{t("merge.none_title")}</p>
+                  <p className="text-sm text-muted-foreground">{t("merge.none_subtitle")}</p>
                 </div>
               ) : (
                 mergeGroups.map((group) => (
@@ -353,7 +359,7 @@ export default function CustomersPage() {
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <Phone className="h-3.5 w-3.5 shrink-0" />
                       <span>{group.phone}</span>
-                      <span className="text-xs font-normal text-muted-foreground ml-auto">{group.customers.length} records share this number</span>
+                      <span className="text-xs font-normal text-muted-foreground ml-auto">{t("merge.records_share", { count: group.customers.length })}</span>
                     </div>
 
                     <div className="space-y-2">
@@ -378,14 +384,14 @@ export default function CustomersPage() {
                               <p className="text-sm font-medium truncate">{c.name}</p>
                               <p className="text-xs text-muted-foreground">
                                 {c.email && <span className="mr-2">{c.email}</span>}
-                                <span>{c.salesCount} sale{c.salesCount !== 1 ? "s" : ""}</span>
+                                <span>{t("merge.sales_count", { count: c.salesCount })}</span>
                                 <span className="mx-1">·</span>
-                                <span>{c.loyaltyPoints} pts</span>
+                                <span>{t("merge.points_count", { count: c.loyaltyPoints })}</span>
                               </p>
                             </div>
                             {isKeep && (
                               <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 rounded px-1.5 py-0.5">
-                                Keep
+                                {t("merge.keep")}
                               </span>
                             )}
                           </button>
@@ -396,7 +402,7 @@ export default function CustomersPage() {
                     <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/40 rounded px-3 py-2">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
                       <span>
-                        Sales history, loyalty points, and loyalty logs from the other record(s) will be merged into the kept customer. Duplicate records will be deleted.
+                        {t("merge.warning")}
                       </span>
                     </div>
 
@@ -411,7 +417,7 @@ export default function CustomersPage() {
                         ) : (
                           <GitMerge className="h-3.5 w-3.5" />
                         )}
-                        Merge into kept record
+                        {t("merge.action")}
                       </button>
                     </div>
                   </div>
@@ -448,7 +454,7 @@ export default function CustomersPage() {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    placeholder="John Doe"
+                    placeholder={t("name_placeholder")}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -458,7 +464,7 @@ export default function CustomersPage() {
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      placeholder="+1 (555)..."
+                      placeholder={t("phone_placeholder")}
                     />
                   </div>
                   <div className="space-y-2">
@@ -468,7 +474,7 @@ export default function CustomersPage() {
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      placeholder="john@example.com"
+                      placeholder={t("email_placeholder")}
                     />
                   </div>
                 </div>
@@ -479,7 +485,7 @@ export default function CustomersPage() {
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-                    placeholder="Customer preferences..."
+                    placeholder={t("notes_placeholder")}
                   />
                 </div>
 

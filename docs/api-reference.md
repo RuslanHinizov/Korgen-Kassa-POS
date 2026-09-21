@@ -1,6 +1,6 @@
 # API Reference
 
-Internal REST API endpoints used by the Olgax POS application. These are not a public external API — they are called by the app's own frontend.
+Internal REST API endpoints used by the Korgen Kassa POS application. These are not a public external API — they are called by the app's own frontend.
 
 > All endpoints return `application/json`. Unless noted, the request body must be `Content-Type: application/json`.
 > All endpoints except `/api/auth/*`, `/api/settings` (GET), and `/api/setup/*` require an authenticated session (cookie set by Better Auth).

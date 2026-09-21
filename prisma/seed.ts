@@ -75,8 +75,8 @@ async function main() {
     where: { id: "singleton" },
     create: {
       name: "My Store",
-      primaryColor: "#0f2044",
-      accentColor: "#f5c518",
+      primaryColor: "#15503A",
+      accentColor: "#22B24C",
       currency: "$",
       currencyDecimals: 2,
       taxRate: 0.1, // 10%

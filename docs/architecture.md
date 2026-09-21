@@ -1,6 +1,6 @@
 # Architecture
 
-Technical overview of the current Olgax POS codebase.
+Technical overview of the current Korgen Kassa POS codebase.
 
 Last validated against code: 2026-03-14.
 

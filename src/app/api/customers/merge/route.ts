@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { counterpartyScope } from "@/lib/counterparty-scope";
+import { getStoreId } from "@/lib/store-context";
 
 export async function POST(req: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { keepId, mergeId } = body as { keepId: string; mergeId: string };
@@ -13,10 +21,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "keepId and mergeId must be different" }, { status: 400 });
     }
 
-    // Fetch both customers to confirm they exist
+    const storeId = await getStoreId();
+    // Fetch both customers to confirm they exist in the current store
     const [keepCustomer, mergeCustomer] = await Promise.all([
-      prisma.customer.findUnique({ where: { id: keepId } }),
-      prisma.customer.findUnique({ where: { id: mergeId } }),
+      prisma.customer.findFirst({ where: { id: keepId, ...(await counterpartyScope(storeId)) } }),
+      prisma.customer.findFirst({ where: { id: mergeId, ...(await counterpartyScope(storeId)) } }),
     ]);
 
     if (!keepCustomer) return NextResponse.json({ error: "Keep customer not found" }, { status: 404 });

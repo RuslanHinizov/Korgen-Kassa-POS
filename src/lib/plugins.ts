@@ -80,6 +80,11 @@ export interface PluginManifest {
 class PluginRegistry {
   private handlers = new Map<HookName, Handler<HookName>[]>();
   private manifests: PluginManifest[] = [];
+  // getPlugins() is read via useSyncExternalStore, which requires a stable
+  // reference across calls when nothing changed — otherwise React treats
+  // every render as a store update and loops (Maximum update depth exceeded).
+  private snapshot: PluginManifest[] = [];
+  private snapshotStale = true;
 
   /**
    * Register a plugin manifest. The registry uses this for the settings UI.
@@ -91,6 +96,7 @@ class PluginRegistry {
     } else {
       this.manifests.push(manifest);
     }
+    this.snapshotStale = true;
   }
 
   /**
@@ -137,7 +143,11 @@ class PluginRegistry {
    * Get registered plugin manifests (for settings UI).
    */
   getPlugins(): PluginManifest[] {
-    return [...this.manifests];
+    if (this.snapshotStale) {
+      this.snapshot = [...this.manifests];
+      this.snapshotStale = false;
+    }
+    return this.snapshot;
   }
 
   /**
@@ -148,6 +158,7 @@ class PluginRegistry {
   setEnabled(pluginId: string, enabled: boolean): void {
     const manifest = this.manifests.find((m) => m.id === pluginId);
     if (manifest) manifest.enabled = enabled;
+    this.snapshotStale = true;
   }
 }
 

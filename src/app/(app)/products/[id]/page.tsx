@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { StoreLink as Link } from "@/components/store/store-link";
 import { notFound } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 import { serialize } from "@/lib/serialize";
 import { formatCurrency } from "@/lib/utils";
 import { Edit, Package, TrendingUp, TrendingDown } from "lucide-react";
 import { StockAdjustButton } from "@/components/products/stock-adjust-button";
+import { BarcodeLabelButton } from "@/components/products/barcode-label-button";
 import { DbError } from "@/components/ui/db-error";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { getTranslations, getLocale } from "next-intl/server";
+import { unitLabel } from "@/lib/units";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +22,8 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const product = await prisma.product.findUnique({ where: { id }, select: { name: true } }).catch(() => null);
+  const storeId = await getStoreId();
+  const product = await prisma.product.findFirst({ where: { id, storeId }, select: { name: true } }).catch(() => null);
   return { title: product ? `${product.name} — Inventory` : "Product" };
 }
 
@@ -29,8 +34,9 @@ export default async function ProductDetailPage({ params }: Props) {
   let product;
   let adjustments;
   try {
-    const rawProduct = await prisma.product.findUnique({
-      where: { id },
+    const storeId = await getStoreId();
+    const rawProduct = await prisma.product.findFirst({
+      where: { id, storeId },
       include: { supplier: { select: { id: true, name: true } } },
     });
     if (!rawProduct) notFound();
@@ -48,24 +54,31 @@ export default async function ProductDetailPage({ params }: Props) {
     return <DbError page="product" />;
   }
 
+  const t = await getTranslations("products.detail");
+  const ts = await getTranslations("products.stockAdj");
+  const tp = await getTranslations("products");
+  const locale = await getLocale();
+
   const reasonLabel: Record<string, string> = {
-    RECEIVED: "Received",
-    DAMAGED: "Damaged",
-    THEFT: "Theft",
-    CORRECTION: "Correction",
-    OPENING_COUNT: "Opening Count",
+    RECEIVED: ts("reason_received"),
+    DAMAGED: ts("reason_damaged"),
+    THEFT: ts("reason_theft"),
+    CORRECTION: ts("reason_correction"),
+    OPENING_COUNT: ts("reason_opening_count"),
   };
 
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const formatter = new Intl.DateTimeFormat(locale, {
     year: "numeric", month: "short", day: "2-digit",
     hour: "2-digit", minute: "2-digit",
   });
+  const stock = parseFloat(product.stock.toString());
+  const isLowStock = stock <= product.lowStockThreshold;
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Breadcrumb */}
       <Breadcrumb items={[
-        { label: "Products", href: "/products" },
+        { label: tp("title"), href: "/products" },
         { label: product.name },
       ]} />
 
@@ -74,13 +87,15 @@ export default async function ProductDetailPage({ params }: Props) {
         <StockAdjustButton
           productId={product.id}
           productName={product.name}
-          currentStock={product.stock}
+          currentStock={stock}
+          unit={["kg", "l", "m"].includes(product.unit) ? (product.unit as "kg" | "l" | "m") : "pcs"}
         />
+        <BarcodeLabelButton productId={product.id} productName={product.name} initialBarcode={product.barcode} price={parseFloat(String(product.price))} unit={product.unit} />
         <Link
           href={`/products/${id}/edit`}
           className="flex items-center gap-2 border border-border bg-background text-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-muted transition-colors"
         >
-          <Edit className="h-3.5 w-3.5" /> Edit
+          <Edit className="h-3.5 w-3.5" /> {t("edit")}
         </Link>
       </div>
 
@@ -102,36 +117,36 @@ export default async function ProductDetailPage({ params }: Props) {
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold truncate">{product.name}</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
-              {product.sku && <span>SKU: <span className="font-mono">{product.sku}</span></span>}
-              {product.barcode && <span>Barcode: <span className="font-mono">{product.barcode}</span></span>}
-              {product.category && <span>Category: {product.category}</span>}
-              {product.supplier && <span>Supplier: {product.supplier.name}</span>}
+              {product.sku && <span>{tp("sku")}: <span className="font-mono">{product.sku}</span></span>}
+              {product.barcode && <span>{tp("barcode")}: <span className="font-mono">{product.barcode}</span></span>}
+              {product.category && <span>{tp("category")}: {product.category}</span>}
+              {product.supplier && <span>{tp("supplier")}: {product.supplier.name}</span>}
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 border-t">
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground uppercase font-medium">Current Stock</p>
-            <p className={`text-2xl font-bold ${product.stock <= product.lowStockThreshold ? "text-amber-600 dark:text-amber-400" : ""}`}>
-              {product.stock}
-              {product.stock <= product.lowStockThreshold && (
-                <span className="ml-2 text-xs font-normal bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">Low</span>
+            <p className="text-xs text-muted-foreground uppercase font-medium">{t("current_stock")}</p>
+            <p className={`text-2xl font-bold ${isLowStock ? "text-amber-600 dark:text-amber-400" : ""}`}>
+              {stock} {unitLabel(product.unit)}
+              {isLowStock && (
+                <span className="ml-2 text-xs font-normal bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">{t("low")}</span>
               )}
             </p>
           </div>
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground uppercase font-medium">Sale Price</p>
+            <p className="text-xs text-muted-foreground uppercase font-medium">{t("sale_price")}</p>
             <p className="text-2xl font-bold">{formatCurrency(parseFloat(String(product.price)))}</p>
           </div>
           {product.cost && (
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase font-medium">Cost</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">{tp("cost")}</p>
               <p className="text-2xl font-bold">{formatCurrency(parseFloat(String(product.cost)))}</p>
             </div>
           )}
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground uppercase font-medium">Low Stock At</p>
+            <p className="text-xs text-muted-foreground uppercase font-medium">{t("low_stock_at")}</p>
             <p className="text-2xl font-bold">{product.lowStockThreshold}</p>
           </div>
         </div>
@@ -140,25 +155,25 @@ export default async function ProductDetailPage({ params }: Props) {
       {/* Inventory Log */}
       <div className="rounded-lg border bg-card overflow-hidden">
         <div className="px-4 py-3 border-b">
-          <h2 className="text-sm font-semibold">Inventory Adjustment Log</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">All stock movements for this product</p>
+          <h2 className="text-sm font-semibold">{t("stock_history")}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("log_subtitle")}</p>
         </div>
 
         {adjustments.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
             <Package className="h-10 w-10 opacity-30" />
-            <p className="text-sm">No stock adjustments yet</p>
-            <p className="text-xs">Use the &quot;Adjust Stock&quot; button to record stock movements</p>
+            <p className="text-sm">{t("no_adjustments")}</p>
+            <p className="text-xs">{t("no_adjustments_hint")}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr className="text-xs text-muted-foreground uppercase font-medium">
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-left">Reason</th>
-                <th className="px-4 py-3 text-right">Change</th>
-                <th className="px-4 py-3 text-left">Note</th>
-                <th className="px-4 py-3 text-left">By</th>
+                <th className="px-4 py-3 text-left">{t("date")}</th>
+                <th className="px-4 py-3 text-left">{t("reason")}</th>
+                <th className="px-4 py-3 text-right">{t("change")}</th>
+                <th className="px-4 py-3 text-left">{t("note")}</th>
+                <th className="px-4 py-3 text-left">{t("by")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">

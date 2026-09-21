@@ -6,26 +6,75 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Global currency defaults, populated from BusinessSettings.
+ *
+ * - On the server the app layout calls `setCurrencyConfig` (module state).
+ * - On the client the app layout injects an inline <script> that sets
+ *   `window.__olgaxCurrency` before hydration, which `formatCurrency` reads.
+ *
+ * This avoids threading currency settings through every component and is
+ * robust against bundler module duplication (window is a true singleton).
+ */
+interface CurrencyConfig {
+  symbol: string;
+  decimals: number;
+  locale: string;
+}
+
+declare global {
+  interface Window {
+    __olgaxCurrency?: Partial<CurrencyConfig>;
+  }
+}
+
+const serverCurrencyConfig: CurrencyConfig = { symbol: "$", decimals: 2, locale: "en" };
+
+export function setCurrencyConfig(cfg: {
+  symbol?: string | null;
+  decimals?: number | null;
+  locale?: string | null;
+}): void {
+  if (cfg.symbol != null && cfg.symbol !== "") serverCurrencyConfig.symbol = cfg.symbol;
+  if (cfg.decimals != null && !Number.isNaN(cfg.decimals)) serverCurrencyConfig.decimals = cfg.decimals;
+  if (cfg.locale) serverCurrencyConfig.locale = cfg.locale;
+  if (typeof window !== "undefined") {
+    window.__olgaxCurrency = { ...window.__olgaxCurrency, ...serverCurrencyConfig };
+  }
+}
+
+function activeCurrencyConfig(): CurrencyConfig {
+  if (typeof window !== "undefined" && window.__olgaxCurrency) {
+    return { ...serverCurrencyConfig, ...window.__olgaxCurrency };
+  }
+  return serverCurrencyConfig;
+}
+
+/**
  * Format a number as currency using the business settings.
  * Uses Intl.NumberFormat for locale-aware thousand separators / decimal point.
  * The symbol is prepended (custom, not ISO code).
+ * When symbol/decimals/locale are omitted, the values from `setCurrencyConfig` are used.
  */
 export function formatCurrency(
   amount: number | string,
-  symbol = "$",
-  decimals = 2,
-  locale = "en"
+  symbol?: string,
+  decimals?: number,
+  locale?: string
 ): string {
+  const cfg = activeCurrencyConfig();
+  const sym = symbol ?? cfg.symbol;
+  const dec = decimals ?? cfg.decimals;
+  const loc = locale ?? cfg.locale;
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  if (isNaN(num)) return `${symbol}0.${"0".repeat(decimals)}`;
+  if (isNaN(num)) return `${sym}0.${"0".repeat(dec)}`;
   try {
-    const formatted = new Intl.NumberFormat(locale, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
+    const formatted = new Intl.NumberFormat(loc, {
+      minimumFractionDigits: dec,
+      maximumFractionDigits: dec,
     }).format(num);
-    return `${symbol}${formatted}`;
+    return `${sym}${formatted}`;
   } catch {
-    return `${symbol}${num.toFixed(decimals)}`;
+    return `${sym}${num.toFixed(dec)}`;
   }
 }
 
