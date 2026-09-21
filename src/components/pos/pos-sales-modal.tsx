@@ -46,6 +46,10 @@ export function POSSalesPanel({ mode, canReturnWithReceipt, canReturnWithoutRece
       const searched = (queryOverride ?? query).trim();
       if (searched) sp.set("q", searched);
       const r = await fetch(`/api/pos/sales?${sp}`);
+      // A signed-out browser gets the login page (HTML) instead of JSON.
+      if (r.status === 401 || r.redirected || !(r.headers.get("content-type") ?? "").includes("json")) {
+        throw new Error("Сессия завершена. Войдите в кассу заново (страница «Вход для кассира»).");
+      }
       if (!r.ok) throw new Error("Не удалось загрузить продажи");
       const data = await r.json();
       setSales(data.sales ?? []);
