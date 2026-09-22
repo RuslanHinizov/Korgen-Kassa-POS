@@ -7,7 +7,6 @@ import { AlertTriangle, Bell, Check, ChevronDown, Globe2, Loader2, LogOut } from
 import { signOut } from "@/lib/auth-client";
 import { setLocale } from "@/app/actions/locale-actions";
 import { cn } from "@/lib/utils";
-import { SyncStatusBadge } from "./sync-status-badge";
 import { DarkModeToggle } from "./dark-mode-toggle";
 import { navForRole, isProductsNsKey, type NavItem } from "./nav-config";
 import { StoreLink } from "@/components/store/store-link";
@@ -164,8 +163,11 @@ export function TopNav({ user, businessName }: TopNavProps) {
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Korgen Kassa</span>
         </StoreLink>
 
-        {/* Nav items */}
-        <nav className="flex flex-1 items-center gap-0.5">
+        {/* Nav items — min-w-0 lets this shrink below its content width instead of the
+            right-side cluster (notifications/language/avatar) being pushed off-screen;
+            overflow-x-auto makes it scroll horizontally on narrow viewports/high zoom
+            instead of silently clipping. */}
+        <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
           {items.map((item) => {
             const active = isActive(item);
             if (!item.children) {
@@ -307,7 +309,6 @@ export function TopNav({ user, businessName }: TopNavProps) {
           </div>
           <StoreSwitcher currentPath={pathname} businessName={businessName} />
           <DarkModeToggle />
-          <SyncStatusBadge />
 
           {/* User menu */}
           <div className="relative ml-1">

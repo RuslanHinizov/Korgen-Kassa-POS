@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Menu, ShoppingCart, Package, ReceiptText, BarChart3, Settings, Warehouse } from "lucide-react";
 import { AppSidebar } from "./app-sidebar";
 import { TopNav } from "./top-nav";
-import { SyncStatusBadge } from "./sync-status-badge";
 import { DarkModeToggle } from "./dark-mode-toggle";
 import { cn } from "@/lib/utils";
 import { StoreLink } from "@/components/store/store-link";
@@ -60,7 +59,6 @@ export function AppShell({ user, businessName, cssVars, children }: AppShellProp
         />
         <span className="flex-1 text-sm font-semibold text-white">Korgen Kassa POS</span>
         <DarkModeToggle />
-        <SyncStatusBadge />
       </header>
 
       {/* Mobile sidebar overlay */}
