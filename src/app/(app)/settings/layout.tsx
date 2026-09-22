@@ -12,11 +12,13 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const t = useTranslations("settings");
   const { data: session } = useSession();
   const role = session?.user?.role;
-  const isAdmin = role === "ADMIN";
   const isPrivileged = role === "ADMIN" || role === "MANAGER";
 
+  // No "Users" tab here: it used to link out to /management/employees — a
+  // different section entirely with its own tab bar — which just duplicated
+  // the Управление → Пользователи menu item and made this bar feel like it
+  // randomly teleported you elsewhere when clicked.
   const tabs = [
-    { label: t("tab_users"), href: "/management/employees", id: "users", show: isAdmin },
     { label: t("tab_audit"), href: "/settings/audit", id: "audit", show: isPrivileged },
     { label: t("tab_profile"), href: "/settings/profile", id: "profile", show: true },
   ];
