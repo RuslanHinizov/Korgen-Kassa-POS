@@ -38,6 +38,7 @@ export function TopNav({ user, businessName }: TopNavProps) {
   const t = useTranslations("nav");
   const tp = useTranslations("products");
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [openPos, setOpenPos] = useState<{ top: number; left: number } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -54,6 +55,7 @@ export function TopNav({ user, businessName }: TopNavProps) {
     function onDocClick(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpenKey(null);
+        setOpenPos(null);
         setUserMenuOpen(false);
         setNotificationsOpen(false);
         setLanguageMenuOpen(false);
@@ -62,6 +64,7 @@ export function TopNav({ user, businessName }: TopNavProps) {
     function onEscape(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setOpenKey(null);
+        setOpenPos(null);
         setUserMenuOpen(false);
         setNotificationsOpen(false);
         setLanguageMenuOpen(false);
@@ -102,7 +105,7 @@ export function TopNav({ user, businessName }: TopNavProps) {
   const [prevPathname, setPrevPathname] = useState(pathname);
   if (prevPathname !== pathname) {
     setPrevPathname(pathname);
-    if (openKey !== null) setOpenKey(null);
+    if (openKey !== null) { setOpenKey(null); setOpenPos(null); }
     if (userMenuOpen) setUserMenuOpen(false);
     if (notificationsOpen) setNotificationsOpen(false);
     if (languageMenuOpen) setLanguageMenuOpen(false);
@@ -191,7 +194,16 @@ export function TopNav({ user, businessName }: TopNavProps) {
             return (
               <div key={item.key} className="relative shrink-0">
                 <button
-                  onClick={() => setOpenKey(open ? null : item.key)}
+                  onClick={(e) => {
+                    if (open) {
+                      setOpenKey(null);
+                      setOpenPos(null);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setOpenPos({ top: rect.bottom + 4, left: rect.left });
+                      setOpenKey(item.key);
+                    }
+                  }}
                   className={cn(
                     "inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     active
@@ -204,14 +216,20 @@ export function TopNav({ user, businessName }: TopNavProps) {
                     className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
                   />
                 </button>
-                {open && (
-                  <div className="bg-card absolute top-full left-0 z-50 mt-1 min-w-48 rounded-md border py-1 shadow-lg">
+                {/* fixed (not absolute) positioning: this nav scrolls horizontally on
+                    narrow/zoomed viewports (overflow-x-auto), which clips an absolutely
+                    positioned dropdown to the nav's own box — fixed escapes that. */}
+                {open && openPos && (
+                  <div
+                    style={{ top: openPos.top, left: openPos.left }}
+                    className="bg-card fixed z-50 min-w-48 rounded-md border py-1 shadow-lg"
+                  >
                     {item.children.map((child) => (
                       <StoreLink
                         key={child.href}
                         href={child.href}
                         prefetch={false}
-                        onClick={() => setOpenKey(null)}
+                        onClick={() => { setOpenKey(null); setOpenPos(null); }}
                         className={cn(
                           "hover:bg-accent block px-3.5 py-2 text-sm",
                           pathname === child.href || pathname.startsWith(child.href + "/")
@@ -330,28 +348,12 @@ export function TopNav({ user, businessName }: TopNavProps) {
                   <p className="text-muted-foreground truncate text-xs">{user.email}</p>
                 </div>
                 <StoreLink
-                  href="/pos"
-                  prefetch={false}
-                  onClick={() => setUserMenuOpen(false)}
-                  className="hover:bg-accent block px-3.5 py-2 text-sm"
-                >
-                  {t("pos")}
-                </StoreLink>
-                <StoreLink
                   href="/settings/profile"
                   prefetch={false}
                   onClick={() => setUserMenuOpen(false)}
                   className="hover:bg-accent block px-3.5 py-2 text-sm"
                 >
                   {t("store_menu_profile")}
-                </StoreLink>
-                <StoreLink
-                  href="/settings"
-                  prefetch={false}
-                  onClick={() => setUserMenuOpen(false)}
-                  className="hover:bg-accent block px-3.5 py-2 text-sm"
-                >
-                  {t("store_menu_settings")}
                 </StoreLink>
                 <button
                   onClick={handleSignOut}

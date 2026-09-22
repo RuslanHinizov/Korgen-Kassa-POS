@@ -16,7 +16,6 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const isPrivileged = role === "ADMIN" || role === "MANAGER";
 
   const tabs = [
-    { label: t("tab_general"), href: "/settings", id: "general", show: isPrivileged },
     { label: t("tab_users"), href: "/management/employees", id: "users", show: isAdmin },
     { label: t("tab_audit"), href: "/settings/audit", id: "audit", show: isPrivileged },
     { label: t("tab_profile"), href: "/settings/profile", id: "profile", show: true },

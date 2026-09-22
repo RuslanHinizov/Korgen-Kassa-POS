@@ -112,6 +112,7 @@ export const NAV: NavItem[] = [
     icon: Grid3x3,
     children: [
       { key: "management_users", href: "/management/employees", roles: ["ADMIN"] },
+      { key: "management_settings", href: "/management/settings" },
       { key: "management_receipt", href: "/management/receipt" },
       { key: "management_registers", href: "/management/cashboxes" },
       { key: "management_consultants", href: "/management/consultants" },
