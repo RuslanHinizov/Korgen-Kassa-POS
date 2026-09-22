@@ -58,6 +58,13 @@ export function SalesTable({ sales }: SalesTableProps) {
     minute: "2-digit",
     timeZone: "UTC",
   });
+  const saleDateFormatterShort = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
 
   if (sales.length === 0) {
     return (
@@ -69,7 +76,8 @@ export function SalesTable({ sales }: SalesTableProps) {
 
   return (
     <>
-      <div className="rounded-lg border overflow-x-auto text-sm">
+      {/* Desktop/tablet table */}
+      <div className="hidden sm:block rounded-lg border overflow-x-auto text-sm">
       <table className="w-full">
         <thead className="border-b bg-muted/50">
           <tr>
@@ -179,6 +187,79 @@ export function SalesTable({ sales }: SalesTableProps) {
           })}
         </tbody>
       </table>
+    </div>
+
+    {/* Mobile card list */}
+    <div className="sm:hidden space-y-2">
+      {sales.map((sale, idx) => {
+        const saleTimestamp = new Date(sale.createdAt).getTime();
+        const saleKey = `${sale.id ?? "no-id"}-${saleTimestamp}-${idx}`;
+        const isExpanded = expanded === sale.id;
+        return (
+          <div key={saleKey} className="rounded-lg border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setExpanded(isExpanded ? null : sale.id)}
+              className="w-full space-y-1.5 px-3 py-2.5 text-left active:bg-muted/40"
+            >
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{saleDateFormatterShort.format(new Date(sale.createdAt))}</span>
+                <span
+                  className={`font-medium ${sale.status === "VOIDED" ? "text-destructive" : "text-green-600"}`}
+                >
+                  {statusLabel[sale.status] ?? sale.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm text-muted-foreground">
+                  {sale.user?.name ?? "—"} · {sale.paymentMethod}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums">
+                  {formatCurrency(parseFloat(sale.total.toString()))}
+                </span>
+              </div>
+            </button>
+
+            {isExpanded && (
+              <div className="border-t bg-muted/20 px-3 py-2.5 space-y-2">
+                {sale.status === "COMPLETED" && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setPendingRefund(sale); }}
+                    className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  >
+                    <RotateCcw className="h-3 w-3" /> {t("refund")}
+                  </button>
+                )}
+                {formatReferenceValues(sale.referenceValues) && (
+                  <p className="text-xs text-muted-foreground">Справочники: {formatReferenceValues(sale.referenceValues)}</p>
+                )}
+                <div className="space-y-1.5">
+                  {sale.items.map((item, i) => {
+                    const itemKey = `${item.id ?? "no-item-id"}-${saleKey}-${i}`;
+                    return (
+                      <div key={itemKey} className="text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{item.name}</span>
+                          <span className="shrink-0 font-medium tabular-nums">
+                            {formatCurrency(parseFloat(item.total.toString()))}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {typeof item.quantity === "number" ? item.quantity : item.quantity.toString()}
+                          {isFractionalUnit(item.unit) ? ` ${unitLabel(item.unit, true)}` : ""}
+                          {" × "}
+                          {formatCurrency(parseFloat(item.price.toString()))}
+                        </div>
+                        {item.notes && <div className="italic text-muted-foreground">{item.notes}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
 
     <ManagerGate
