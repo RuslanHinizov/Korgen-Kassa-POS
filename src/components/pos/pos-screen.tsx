@@ -14,6 +14,7 @@ import {
   Settings2,
   ShoppingBag,
   Trash2,
+  User,
   X,
   Zap,
 } from "lucide-react";
@@ -90,7 +91,7 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
   });
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
-  const [consultants, setConsultants] = useState<{ id: string; name: string }[]>([]);
+  const [consultants, setConsultants] = useState<{ id: string; name: string; photoUrl: string | null }[]>([]);
   const [consultantId, setConsultantId] = useState("");
 
   useEffect(() => {
@@ -526,7 +527,17 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
             <span className="rounded-md border px-2 py-1.5 text-xs">{customer.name}</span>
           ) : null}
           {consultantId ? (
-            <span className="rounded-md border px-2 py-1.5 text-xs">
+            <span className="flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs">
+              {consultants.find((c) => c.id === consultantId)?.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={consultants.find((c) => c.id === consultantId)!.photoUrl!}
+                  alt=""
+                  className="h-5 w-5 rounded-full object-cover"
+                />
+              ) : (
+                <User className="text-muted-foreground h-4 w-4" />
+              )}
               {consultants.find((c) => c.id === consultantId)?.name}
             </span>
           ) : (
@@ -736,18 +747,42 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
               <label className="text-muted-foreground mb-1 block text-xs font-medium">
                 Консультант
               </label>
-              <select
-                value={consultantId}
-                onChange={(e) => setConsultantId(e.target.value)}
-                className="bg-background h-9 w-full rounded-md border px-2 text-sm"
-              >
-                <option value="">Не выбран</option>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1">
+                <button
+                  type="button"
+                  onClick={() => setConsultantId("")}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                    consultantId === "" && "bg-muted"
+                  )}
+                >
+                  <span className="bg-muted text-muted-foreground flex h-6 w-6 items-center justify-center rounded-full">
+                    <User className="h-3.5 w-3.5" />
+                  </span>
+                  Не выбран
+                </button>
                 {consultants.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <button
+                    type="button"
+                    key={c.id}
+                    onClick={() => setConsultantId(c.id)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                      consultantId === c.id && "bg-muted"
+                    )}
+                  >
+                    {c.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.photoUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+                    ) : (
+                      <span className="bg-muted text-muted-foreground flex h-6 w-6 items-center justify-center rounded-full">
+                        <User className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                     {c.name}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
           )}
           {(permissions.posPriceCheck || permissions.posGlobalSearch || permissions.posCollapseWindow) && (

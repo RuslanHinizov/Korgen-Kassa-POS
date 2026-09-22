@@ -392,7 +392,7 @@ export function StoreTransferDetail({ id }: { id: string }) {
               {canSeeCost && visible.cost && <SortableTh label="Закупочная цена, ₮" active={sort?.key === "unitCost"} dir={sort?.key === "unitCost" ? sort.dir : undefined} onClick={() => toggleSort("unitCost")} />}
               {canSeeCost && visible.markup && <SortableTh label="Наценка, %" active={sort?.key === "markup"} dir={sort?.key === "markup" ? sort.dir : undefined} onClick={() => toggleSort("markup")} />}
               {visible.price && <SortableTh label="Продажная цена, ₮" active={sort?.key === "salePrice"} dir={sort?.key === "salePrice" ? sort.dir : undefined} onClick={() => toggleSort("salePrice")} />}
-              <SortableTh label="Итого, ₮" active={sort?.key === "total"} dir={sort?.key === "total" ? sort.dir : undefined} onClick={() => toggleSort("total")} />
+              {canSeeCost && <SortableTh label="Итого, ₮" active={sort?.key === "total"} dir={sort?.key === "total" ? sort.dir : undefined} onClick={() => toggleSort("total")} />}
               <th className="w-16 px-2 py-2 text-right">
                 <button ref={columns.anchorRef} onClick={columns.toggle} className="rounded p-1 hover:bg-accent" aria-label="Настроить столбцы"><Settings2 className="h-4 w-4" /></button>
               </th>
@@ -419,7 +419,7 @@ export function StoreTransferDetail({ id }: { id: string }) {
                 {canSeeCost && visible.cost && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.unitCost ?? 0)}</td>}
                 {canSeeCost && visible.markup && <td className="px-3 py-2 text-right tabular-nums">{markupPct(item.unitCost, item.salePrice).toFixed(2)}%</td>}
                 {visible.price && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.salePrice)}</td>}
-                <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(item.total)}</td>
+                {canSeeCost && <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(item.total)}</td>}
                 {draft && (
                   <td className="px-2 py-2 text-right">
                     <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="Удалить"><X className="h-3.5 w-3.5" /></button>
@@ -490,7 +490,7 @@ export function StoreTransferDetail({ id }: { id: string }) {
             {[25, 50, 100, 500].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
-        <div className="font-semibold">Итого: <span className="tabular-nums">{sumQty}</span> <span className="ml-3 tabular-nums">{formatCurrency(sumTotal)}</span></div>
+        <div className="font-semibold">Итого: <span className="tabular-nums">{sumQty}</span>{canSeeCost && <span className="ml-3 tabular-nums">{formatCurrency(sumTotal)}</span>}</div>
       </div>
 
       {catalogPicker && (
