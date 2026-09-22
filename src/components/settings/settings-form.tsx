@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,10 +10,11 @@ import { updateSettings } from "@/app/actions/settings-actions";
 import { setLocale } from "@/app/actions/locale-actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { ImageOff } from "lucide-react";
 
 const settingsSchema = z.object({
   name: z.string().min(1, "Business name is required"),
-  logoUrl: z.string().url().optional().or(z.literal("")),
+  logoUrl: z.string().max(500).optional().or(z.literal("")),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color"),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color"),
   currency: z.string().min(1).max(5),
@@ -144,10 +146,13 @@ interface Props {
 export function SettingsForm({ settings }: Props) {
   const router = useRouter();
   const t = useTranslations("settings");
+  const [uploading, setUploading] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SettingsFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -195,6 +200,19 @@ export function SettingsForm({ settings }: Props) {
   });
 
   const storageProvider = watch("storageProvider");
+  const logoUrl = watch("logoUrl");
+
+  async function uploadLogo(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось загрузить логотип"); return; }
+      setValue("logoUrl", d.url, { shouldDirty: true });
+    } finally { setUploading(false); }
+  }
 
   async function onSubmit(values: SettingsFormValues) {
     const fd = new FormData();
@@ -242,7 +260,38 @@ export function SettingsForm({ settings }: Props) {
       <section className="space-y-4">
         <h2 className="text-base font-semibold border-b pb-2">{t("section_business")}</h2>
         {field(`${t("business_name")} *`, "name", { placeholder: t("business_name_placeholder") })}
-        {field(t("logo_url"), "logoUrl", { type: "url", placeholder: "https://…" })}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">{t("logo_url")}</label>
+          <input type="hidden" {...register("logoUrl")} />
+          <div className="flex items-center gap-3">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" className="h-16 w-16 rounded-lg border object-contain bg-white" />
+            ) : (
+              <span className="text-muted-foreground flex h-16 w-16 items-center justify-center rounded-lg border">
+                <ImageOff className="h-6 w-6" />
+              </span>
+            )}
+            <input
+              ref={logoFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ""; }}
+            />
+            <button
+              type="button"
+              onClick={() => logoFileRef.current?.click()}
+              disabled={uploading}
+              className="hover:bg-accent h-9 rounded-md border px-4 text-sm font-medium disabled:opacity-50"
+            >
+              {uploading ? "Загрузка…" : logoUrl ? "Заменить логотип" : "Загрузить логотип"}
+            </button>
+          </div>
+          {errors.logoUrl && (
+            <p className="text-xs text-destructive">{String(errors.logoUrl?.message)}</p>
+          )}
+        </div>
       </section>
 
       {/* Appearance */}
