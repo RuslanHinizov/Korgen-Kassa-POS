@@ -26,7 +26,10 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col">
       {/* Navigation tabs */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
+      {/* z-30, not z-40: this sticky bar sits in the page content, a DOM sibling of
+          the app's <header> (also z-40) — with equal z-index the later sibling wins,
+          which let this bar paint over the header's open dropdown menus. */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-30">
         <div className="flex max-w-4xl px-4 sm:px-6">
           {visibleTabs.map((tab) => (
             <Link
