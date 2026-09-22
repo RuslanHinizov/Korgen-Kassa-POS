@@ -332,6 +332,11 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
 
       <div className="flex justify-end gap-2">
         {draft && (
+          <Link href={`/purchases/${id}/scan`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
+            <ScanLine className="h-4 w-4" /> Сканирование
+          </Link>
+        )}
+        {draft && (
           <button onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
             <Upload className="h-4 w-4" /> Импорт товаров
           </button>

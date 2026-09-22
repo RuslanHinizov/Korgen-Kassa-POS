@@ -6,7 +6,7 @@ import { useStoreRouter as useRouter } from "@/components/store/use-store-router
 import { useSession } from "@/lib/auth-client";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Download, Loader2, Pencil, Plus, Printer, Settings2, SlidersHorizontal, X, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Download, Loader2, Pencil, Plus, Printer, ScanLine, Settings2, SlidersHorizontal, X, Zap } from "lucide-react";
 import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
 
 interface Row {
@@ -145,6 +145,13 @@ export function PurchaseReceiptList() {
     router.push(`/purchases/${d.receipt.id}`);
   }
 
+  async function startScan() {
+    const r = await fetch("/api/purchase-receipts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    if (!r.ok) { toast.error("Не удалось создать документ"); return; }
+    const d = await r.json();
+    router.push(`/purchases/${d.receipt.id}/scan`);
+  }
+
   async function duplicateSelected() {
     if (selected.size === 0) { toast.error("Выберите приёмки для копирования"); return; }
     action.close();
@@ -200,6 +207,9 @@ export function PurchaseReceiptList() {
         <Link href="/purchases/quick" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
           <Zap className="h-4 w-4" /> Быстрая приёмка
         </Link>
+        <button onClick={startScan} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
+          <ScanLine className="h-4 w-4" /> Сканирование
+        </button>
         <button ref={filter.anchorRef} onClick={filter.toggle} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
           <SlidersHorizontal className="h-4 w-4" /> Фильтр
         </button>
