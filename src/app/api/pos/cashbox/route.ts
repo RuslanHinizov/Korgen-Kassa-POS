@@ -50,7 +50,11 @@ export async function POST(req: NextRequest) {
 
   const jar = await cookies();
   jar.set(CASHBOX_DEVICE_COOKIE, issueCashboxDeviceToken(cashbox.id), {
-    httpOnly: true, secure: true, sameSite: "strict", path: "/", maxAge: MAX_AGE,
+    // Not `secure`: this app is deployed over plain http (self-hosted, no TLS — see
+    // BETTER_AUTH_URL). A Secure cookie is silently dropped by the browser off `localhost`,
+    // which made the kiosk's cashbox pairing "disappear" on every reload/restart. Match the
+    // other kiosk cookies (manager-token, acting-cashier): httpOnly + sameSite lax only.
+    httpOnly: true, sameSite: "lax", path: "/", maxAge: MAX_AGE,
   });
 
   return NextResponse.json({ cashbox: { id: cashbox.id, no: cashbox.no, name: cashbox.name, active: cashbox.active } });
