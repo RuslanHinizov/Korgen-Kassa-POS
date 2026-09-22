@@ -146,6 +146,7 @@ function AccountHistory({ id }: { id: string }) {
         </div>
       )}
 
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -178,6 +179,7 @@ function AccountHistory({ id }: { id: string }) {
           </tfoot>
         )}
       </table>
+      </div>
     </div>
   );
 }

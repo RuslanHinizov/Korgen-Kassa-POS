@@ -117,6 +117,7 @@ export function ConsultantsManager() {
             <p className="text-xs">Чтобы добавить консультанта, нажмите на кнопку выше</p>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 text-muted-foreground border-b text-xs font-medium">
@@ -144,6 +145,7 @@ export function ConsultantsManager() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

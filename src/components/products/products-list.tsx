@@ -80,6 +80,7 @@ export function ProductsList() {
 
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [newCategoryOpen, setNewCategoryOpen] = useState(false);
@@ -241,10 +242,39 @@ export function ProductsList() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activeCategoryName = categoryId === "uncategorized" ? "Незаданные" : categoryId ? categories.find((c) => c.id === categoryId)?.name : null;
 
+  const categoryListBody = (onSelect?: () => void) => (
+    <div className="flex-1 space-y-0.5 overflow-y-auto text-sm">
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => { setCategoryId(null); setPage(1); onSelect?.(); }}
+          className={`flex-1 rounded-md px-2 py-1.5 text-left ${!categoryId ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+        >
+          Все категории
+        </button>
+        <button onClick={() => setNewCategoryOpen(true)} className="rounded-full p-1 text-primary hover:bg-primary/10" aria-label="Добавить категорию"><Plus className="h-4 w-4" /></button>
+      </div>
+      {filteredCategories.map((c) => (
+        <button
+          key={c.id}
+          onClick={() => { setCategoryId(c.id); setPage(1); onSelect?.(); }}
+          className={`block w-full truncate rounded-md px-2 py-1.5 text-left ${categoryId === c.id ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+        >
+          {c.name}
+        </button>
+      ))}
+      <button
+        onClick={() => { setCategoryId("uncategorized"); setPage(1); onSelect?.(); }}
+        className={`block w-full rounded-md px-2 py-1.5 text-left ${categoryId === "uncategorized" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+      >
+        Незаданные
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex h-full">
-      {/* Category rail / panel */}
-      <div className={sidebarOpen ? "w-64 shrink-0 border-r bg-card" : "w-8 shrink-0 border-r bg-primary/10"}>
+      {/* Category rail / panel — desktop only; on mobile it's a drawer opened via the toolbar button below */}
+      <div className={`hidden sm:block ${sidebarOpen ? "w-64 shrink-0 border-r bg-card" : "w-8 shrink-0 border-r bg-primary/10"}`}>
         {sidebarOpen ? (
           <div className="flex h-full flex-col p-3">
             <button onClick={toggleSidebar} className="mb-3 text-left text-xs font-medium text-muted-foreground hover:text-foreground">Скрыть категории</button>
@@ -252,32 +282,7 @@ export function ProductsList() {
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} placeholder="Поиск" className="h-8 w-full rounded-md border bg-background pl-8 pr-2 text-sm" />
             </div>
-            <div className="flex-1 space-y-0.5 overflow-y-auto text-sm">
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => { setCategoryId(null); setPage(1); }}
-                  className={`flex-1 rounded-md px-2 py-1.5 text-left ${!categoryId ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                >
-                  Все категории
-                </button>
-                <button onClick={() => setNewCategoryOpen(true)} className="rounded-full p-1 text-primary hover:bg-primary/10" aria-label="Добавить категорию"><Plus className="h-4 w-4" /></button>
-              </div>
-              {filteredCategories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { setCategoryId(c.id); setPage(1); }}
-                  className={`block w-full truncate rounded-md px-2 py-1.5 text-left ${categoryId === c.id ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                >
-                  {c.name}
-                </button>
-              ))}
-              <button
-                onClick={() => { setCategoryId("uncategorized"); setPage(1); }}
-                className={`block w-full rounded-md px-2 py-1.5 text-left ${categoryId === "uncategorized" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-              >
-                Незаданные
-              </button>
-            </div>
+            {categoryListBody()}
           </div>
         ) : (
           <button onClick={toggleSidebar} className="flex h-full w-full flex-col items-center justify-start gap-1 pt-4 text-xs font-medium text-primary">
@@ -286,11 +291,32 @@ export function ProductsList() {
         )}
       </div>
 
+      {/* Category drawer — mobile only */}
+      {mobileCategoryOpen && (
+        <div className="sm:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileCategoryOpen(false)} />
+          <div className="relative z-10 flex h-full w-72 flex-col bg-card p-3 shadow-lg">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-semibold">Категории</span>
+              <button onClick={() => setMobileCategoryOpen(false)} className="rounded p-1 hover:bg-accent" aria-label="Закрыть"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="relative mb-3">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} placeholder="Поиск" className="h-8 w-full rounded-md border bg-background pl-8 pr-2 text-sm" />
+            </div>
+            {categoryListBody(() => setMobileCategoryOpen(false))}
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <div className="min-w-0 flex-1 space-y-4 p-4 sm:p-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">Список товаров</h1>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setMobileCategoryOpen(true)} className="sm:hidden inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+            {activeCategoryName ?? "Все категории"}
+          </button>
           <Link href="/products/new" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             <Plus className="h-4 w-4" /> Товар
           </Link>

@@ -81,7 +81,7 @@ export function ProductPickerModal({ title, supplierId, type, onClose, onSelect 
             </div>
           </div>
 
-          <div className="max-h-[26rem] overflow-y-auto rounded-md border">
+          <div className="max-h-[26rem] overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <tr>

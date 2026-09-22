@@ -166,6 +166,7 @@ export default async function ProductDetailPage({ params }: Props) {
             <p className="text-xs">{t("no_adjustments_hint")}</p>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr className="text-xs text-muted-foreground uppercase font-medium">
@@ -203,6 +204,7 @@ export default async function ProductDetailPage({ params }: Props) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

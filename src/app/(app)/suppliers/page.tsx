@@ -165,7 +165,7 @@ export default function SuppliersPage() {
           {t("no_suppliers")}
         </div>
       ) : (
-        <div className="rounded-lg border overflow-hidden overflow-x-auto">
+        <div className="rounded-lg border overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>

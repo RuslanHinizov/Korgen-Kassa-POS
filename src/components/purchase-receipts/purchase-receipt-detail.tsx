@@ -572,7 +572,7 @@ function PaymentsSection({ doc, onPaid }: { doc: Doc; onPaid: () => void }) {
       )}
 
       {doc.payments.length > 0 && (
-        <div className="border-t pt-3">
+        <div className="border-t pt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

@@ -173,7 +173,7 @@ export function StocktakeDetail({ id }: { id: string }) {
         const canSeeCost = role !== "WAREHOUSE";
         const colCount = 2 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
         return (
-      <div className="rounded-lg border bg-card overflow-hidden overflow-x-auto">
+      <div className="rounded-lg border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">

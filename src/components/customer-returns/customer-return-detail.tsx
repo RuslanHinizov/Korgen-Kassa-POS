@@ -158,7 +158,7 @@ export function CustomerReturnDetail({ id }: { id: string }) {
 
       {draft && <ProductPicker onPick={addProduct} busy={busy} />}
 
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-lg border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -275,7 +275,7 @@ function PaymentsSection({ doc, onPaid }: { doc: Doc; onPaid: () => void }) {
       )}
 
       {doc.payments.length > 0 && (
-        <div className="border-t pt-3">
+        <div className="border-t pt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

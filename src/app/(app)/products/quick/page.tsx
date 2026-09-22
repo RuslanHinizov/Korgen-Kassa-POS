@@ -200,7 +200,7 @@ export default function QuickProductsPage() {
         {/* ---- items in the selected group ---- */}
         <div className="rounded-lg border bg-card">
           <ProductPicker onPick={addItem} busy={busy} />
-          <div className="border-t">
+          <div className="border-t overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">

@@ -118,7 +118,7 @@ export function WriteOffDetail({ id, canSeeCost = true }: { id: string; canSeeCo
 
       {draft && <ProductPicker onPick={addProduct} busy={busy} />}
 
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-lg border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
