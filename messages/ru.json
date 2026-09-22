@@ -39,6 +39,7 @@
     "products_sku": "Артикул",
     "products_write_off": "Списание",
     "products_stock_in": "Оприходование",
+    "products_warehouse_stock": "Склад",
     "products_stocktake": "Инвентаризация",
     "products_transfer": "Перемещение",
     "finance_accounts": "Обзор по счетам",

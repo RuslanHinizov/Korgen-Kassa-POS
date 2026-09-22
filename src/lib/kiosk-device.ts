@@ -11,7 +11,9 @@ import { getStoreId } from "./store-context";
  */
 export async function hasKioskAccess(): Promise<boolean> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || session.user.role !== "CASHIER") return false;
+  // Складской работник can also be issued a kassa PIN (UMAG gates this behind a paid
+  // tariff; self-hosted, we don't need to).
+  if (!session || !["CASHIER", "WAREHOUSE"].includes(session.user.role ?? "")) return false;
 
   const account = await prisma.user.findUnique({ where: { id: session.user.id }, select: { allowCashierLogin: true, firedAt: true } });
   if (!account || !account.allowCashierLogin || account.firedAt) return false;

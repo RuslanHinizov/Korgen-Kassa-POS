@@ -45,43 +45,48 @@ export const NAV: NavItem[] = [
     ],
   },
   {
+    // UMAG's own Складской работник sees only "Возврат покупателя" under Продажи
+    // (no История продаж / Отмененные товары — those stay office-only below).
     key: "sales",
-    roles: ["ADMIN", "MANAGER", "CASHIER"],
+    roles: ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"],
     icon: ClipboardList,
     children: [
-      { key: "sales_history", href: "/sales" },
-      { key: "sales_voided", href: "/sales/voided" },
+      { key: "sales_history", href: "/sales", roles: ["ADMIN", "MANAGER", "CASHIER"] },
+      { key: "sales_voided", href: "/sales/voided", roles: ["ADMIN", "MANAGER", "CASHIER"] },
       { key: "sales_returns", href: "/sales/returns" },
     ],
   },
   {
+    // UMAG gives Складской работник Приёмка + Возвраты поставщикам, but not Платежи.
     key: "purchases",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "MANAGER", "WAREHOUSE"],
     icon: ShoppingCart,
     children: [
       { key: "purchases_receiving", href: "/purchases" },
       { key: "purchases_returns", href: "/purchases/returns" },
-      { key: "purchases_payments", href: "/purchases/payments" },
+      { key: "purchases_payments", href: "/purchases/payments", roles: ["ADMIN", "MANAGER"] },
     ],
   },
   {
+    // UMAG hides the catalog itself (Список товаров/Артикул) and Комплекты/Наценка
+    // config from Складской работник — only the physical-stock documents + Склад.
     key: "products",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "MANAGER", "WAREHOUSE"],
     icon: Package,
     children: [
-      { key: "products_list", href: "/products" },
-      { key: "categories_link", href: "/products/categories" },
-      { key: "products_sku", href: "/products/sku" },
+      { key: "products_list", href: "/products", roles: ["ADMIN", "MANAGER"] },
+      { key: "categories_link", href: "/products/categories", roles: ["ADMIN", "MANAGER"] },
+      { key: "products_sku", href: "/products/sku", roles: ["ADMIN", "MANAGER"] },
       { key: "quick_products_link", href: "/products/quick" },
-      { key: "inventory", href: "/inventory" },
+      { key: "products_warehouse_stock", href: "/products/stock", roles: ["WAREHOUSE"] },
+      { key: "inventory", href: "/inventory", roles: ["ADMIN", "MANAGER"] },
       { key: "products_write_off", href: "/products/write-off" },
       { key: "products_stock_in", href: "/products/stock-in" },
       { key: "products_stocktake", href: "/products/stocktake" },
       { key: "products_transfer", href: "/products/transfer" },
-      { key: "promotions", href: "/promotions" },
+      { key: "promotions", href: "/promotions", roles: ["ADMIN", "MANAGER"] },
     ],
   },
-  { key: "products_stock_in", href: "/products/stock-in", roles: ["WAREHOUSE"], icon: Package },
   {
     key: "finance",
     roles: ["ADMIN", "MANAGER"],
@@ -94,7 +99,7 @@ export const NAV: NavItem[] = [
   },
   {
     key: "contragents",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "MANAGER", "WAREHOUSE"],
     icon: Users,
     children: [
       { key: "customers", href: "/customers" },

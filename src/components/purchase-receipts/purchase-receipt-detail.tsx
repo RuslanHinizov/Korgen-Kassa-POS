@@ -10,6 +10,7 @@ import { ImportItemsModal } from "@/components/ui/import-items-modal";
 import { ProductPickerModal, type PickableProduct } from "@/components/ui/product-picker-modal";
 import { isFractionalUnit, parseQuantityInput, unitLabel } from "@/lib/units";
 import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
+import { useSession } from "@/lib/auth-client";
 
 interface Item {
   id: string; productId: string | null; name: string; barcode: string | null; unit: string;
@@ -33,6 +34,8 @@ function toLocalInput(iso: string) {
 
 export function PurchaseReceiptDetail({ id }: { id: string }) {
   const router = useRouter();
+  // UMAG never shows Закупочная цена/Наценка to Складской работник.
+  const canSeeCost = useSession().data?.user.role !== "WAREHOUSE";
   const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -348,9 +351,9 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
               <th className="px-3 py-2 text-right">Кол-во</th>
               <th className="px-3 py-2 text-right">Остаток</th>
               <th className="px-3 py-2 text-left">Ед. изм</th>
-              <th className="px-3 py-2 text-right">Цена по накладной</th>
+              {canSeeCost && <th className="px-3 py-2 text-right">Цена по накладной</th>}
               <th className="px-3 py-2 text-right">Скидка %</th>
-              <th className="px-3 py-2 text-right">Наценка %</th>
+              {canSeeCost && <th className="px-3 py-2 text-right">Наценка %</th>}
               <th className="px-3 py-2 text-right">Продажная цена</th>
               <th className="px-3 py-2 text-right">Итого</th>
               {draft && <th className="px-3 py-2"></th>}
@@ -358,10 +361,10 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
           </thead>
           <tbody className="divide-y">
             {doc.items.map((item, idx) => (
-              <PurchaseReceiptItemRow key={item.id} index={idx + 1} item={item} draft={draft} onChange={(patch) => updateItem(item.id, patch)} onDelete={() => deleteItem(item.id)} />
+              <PurchaseReceiptItemRow key={item.id} index={idx + 1} item={item} draft={draft} canSeeCost={canSeeCost} onChange={(patch) => updateItem(item.id, patch)} onDelete={() => deleteItem(item.id)} />
             ))}
             {doc.items.length === 0 && (
-              <tr><td colSpan={draft ? 12 : 11} className="px-3 py-8 text-center text-muted-foreground">Товаров пока нет</td></tr>
+              <tr><td colSpan={(draft ? 12 : 11) - (canSeeCost ? 0 : 2)} className="px-3 py-8 text-center text-muted-foreground">Товаров пока нет</td></tr>
             )}
           </tbody>
         </table>
@@ -410,8 +413,8 @@ export function PurchaseReceiptDetail({ id }: { id: string }) {
   );
 }
 
-function PurchaseReceiptItemRow({ item, index, draft, onChange, onDelete }: {
-  item: Item; index: number; draft: boolean;
+function PurchaseReceiptItemRow({ item, index, draft, canSeeCost, onChange, onDelete }: {
+  item: Item; index: number; draft: boolean; canSeeCost: boolean;
   onChange: (patch: { quantity?: number; costPrice?: number; discountPct?: number; salePrice?: number }) => void;
   onDelete: () => void;
 }) {
@@ -439,15 +442,17 @@ function PurchaseReceiptItemRow({ item, index, draft, onChange, onDelete }: {
       </td>
       <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.stock != null ? item.stock : "—"}</td>
       <td className="px-3 py-2 text-muted-foreground">{unitLabel(item.unit)}</td>
-      <td className="px-3 py-2 text-right">
-        {draft ? (
-          <input
-            type="number" min="0" step="0.01" defaultValue={item.costPrice} key={item.costPrice}
-            onBlur={(e) => { const v = Number(e.target.value); if (v >= 0 && v !== item.costPrice) onChange({ costPrice: v }); }}
-            className="h-8 w-24 rounded-md border bg-background px-2 text-right text-xs"
-          />
-        ) : formatCurrency(item.costPrice)}
-      </td>
+      {canSeeCost && (
+        <td className="px-3 py-2 text-right">
+          {draft ? (
+            <input
+              type="number" min="0" step="0.01" defaultValue={item.costPrice} key={item.costPrice}
+              onBlur={(e) => { const v = Number(e.target.value); if (v >= 0 && v !== item.costPrice) onChange({ costPrice: v }); }}
+              className="h-8 w-24 rounded-md border bg-background px-2 text-right text-xs"
+            />
+          ) : formatCurrency(item.costPrice)}
+        </td>
+      )}
       <td className="px-3 py-2 text-right">
         {draft ? (
           <input
@@ -457,19 +462,21 @@ function PurchaseReceiptItemRow({ item, index, draft, onChange, onDelete }: {
           />
         ) : `${item.discountPct}%`}
       </td>
-      <td className="px-3 py-2 text-right">
-        {draft ? (
-          <input
-            type="number" step="0.01" defaultValue={markupPct.toFixed(2)} key={markupPct}
-            onBlur={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isNaN(v) || Math.abs(v - markupPct) < 0.005) return;
-              onChange({ salePrice: Math.round(item.costPrice * (1 + v / 100) * 100) / 100 });
-            }}
-            className="h-8 w-20 rounded-md border bg-background px-2 text-right text-xs"
-          />
-        ) : `${markupPct.toFixed(2)}%`}
-      </td>
+      {canSeeCost && (
+        <td className="px-3 py-2 text-right">
+          {draft ? (
+            <input
+              type="number" step="0.01" defaultValue={markupPct.toFixed(2)} key={markupPct}
+              onBlur={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isNaN(v) || Math.abs(v - markupPct) < 0.005) return;
+                onChange({ salePrice: Math.round(item.costPrice * (1 + v / 100) * 100) / 100 });
+              }}
+              className="h-8 w-20 rounded-md border bg-background px-2 text-right text-xs"
+            />
+          ) : `${markupPct.toFixed(2)}%`}
+        </td>
+      )}
       <td className="px-3 py-2 text-right">
         {draft ? (
           <input

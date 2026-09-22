@@ -12,7 +12,7 @@ const updateSchema = z.object({
 
 async function requirePrivileged() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) return null;
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) return null;
   return session;
 }
 

@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 // POST /api/write-offs — create an empty draft
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));

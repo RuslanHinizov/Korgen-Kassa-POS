@@ -12,6 +12,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function AppHomePage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
+  if (session.user.role === "WAREHOUSE") redirect(`/store/${await getStoreId()}/purchases`);
   if (!["ADMIN", "MANAGER"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
 
   const t = await getTranslations("dashboard");

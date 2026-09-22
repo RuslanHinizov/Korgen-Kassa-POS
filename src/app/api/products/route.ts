@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Purchase cost and margins are back-office data; cashiers get the sell price only.
-  const canSeeCost = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "");
+  // Purchase cost and margins are back-office data; cashiers and warehouse staff
+  // (UMAG never shows Складской работник a Закупочная цена anywhere) get the sell price only.
+  const canSeeCost = ["ADMIN", "MANAGER"].includes(session.user.role ?? "");
 
   const sp = req.nextUrl.searchParams;
   const q = sp.get("q")?.trim();

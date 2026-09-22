@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
 import { Loader2, Search, X } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
 
 export interface PickableProduct {
   id: string; name: string; barcode: string | null; unit: string; price: number; cost: number | null; stock: number;
@@ -23,6 +24,8 @@ export function ProductPickerModal({ title, supplierId, type, onClose, onSelect 
   const [selected, setSelected] = useState<Map<string, PickableProduct>>(new Map());
   const pageSize = 50;
   const requestId = useRef(0);
+  // UMAG never shows Закупочная цена to Складской работник.
+  const canSeeCost = useSession().data?.user.role !== "WAREHOUSE";
 
   const load = useCallback(async () => {
     const thisRequest = ++requestId.current;
@@ -85,7 +88,7 @@ export function ProductPickerModal({ title, supplierId, type, onClose, onSelect 
                   <th className="w-10 px-3 py-2"></th>
                   <th className="px-3 py-2 text-left">Название товара</th>
                   <th className="px-3 py-2 text-left">Штрихкод</th>
-                  <th className="px-3 py-2 text-right">Закуп. цена</th>
+                  {canSeeCost && <th className="px-3 py-2 text-right">Закуп. цена</th>}
                   <th className="px-3 py-2 text-right">Прод. цена</th>
                   <th className="px-3 py-2 text-left">Ед. изм</th>
                 </tr>
@@ -101,7 +104,7 @@ export function ProductPickerModal({ title, supplierId, type, onClose, onSelect 
                       <td className="px-3 py-2"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggle(p)} onClick={(e) => e.stopPropagation()} /></td>
                       <td className="px-3 py-2 text-primary">{p.name}</td>
                       <td className="px-3 py-2 text-muted-foreground tabular-nums">{p.barcode ?? "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(p.cost ?? p.price)}</td>
+                      {canSeeCost && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(p.cost ?? p.price)}</td>}
                       <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(p.price)}</td>
                       <td className="px-3 py-2">{unitLabel(p.unit)}</td>
                     </tr>

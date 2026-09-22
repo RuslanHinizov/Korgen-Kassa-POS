@@ -16,7 +16,7 @@ const schema = z.object({
 // POST /api/purchase-receipts/:id/payments — record a payment toward a posted receipt's balance
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id: receiptId } = await params;

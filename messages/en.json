@@ -39,6 +39,7 @@
     "products_sku": "SKU groups",
     "products_write_off": "Write-off",
     "products_stock_in": "Stock in",
+    "products_warehouse_stock": "Stock",
     "products_stocktake": "Stocktake",
     "products_transfer": "Transfer",
     "finance_accounts": "Accounts overview",

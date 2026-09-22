@@ -31,6 +31,10 @@ export async function getStockInActor(): Promise<StockInActor | null> {
   return { userId: session.user.id, role, storeId };
 }
 
-export function stockInOwnerFilter(actor: StockInActor) {
-  return actor.role === "WAREHOUSE" ? { userId: actor.userId } : {};
+/**
+ * Store-wide, not per-user: UMAG's real Складской работник sees every Оприходование
+ * in the store (same as Приёмка), not just documents they personally created.
+ */
+export function stockInOwnerFilter(_actor: StockInActor) {
+  return {};
 }

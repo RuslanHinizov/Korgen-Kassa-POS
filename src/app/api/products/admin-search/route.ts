@@ -9,12 +9,14 @@ const PRODUCT_SELECT = {
 } as const;
 
 // GET /api/products/admin-search?q=&supplierId=&page=&pageSize= — Товары поставщика / Номенклатура
-// picker for purchasing documents (admin/manager only — exposes cost).
+// picker for purchasing/warehouse documents. Складской работник gets this too (they use it
+// to add lines to Приёмка/Оприходование/Перемещение) but never sees cost — see canSeeCost below.
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const canSeeCost = ["ADMIN", "MANAGER"].includes(session.user.role ?? "");
 
   const sp = req.nextUrl.searchParams;
   const q = sp.get("q")?.trim() ?? "";
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({
-    products: products.map((p) => ({ ...p, price: Number(p.price), cost: p.cost != null ? Number(p.cost) : null, stock: Number(p.stock) })),
+    products: products.map((p) => ({ ...p, price: Number(p.price), cost: canSeeCost && p.cost != null ? Number(p.cost) : null, stock: Number(p.stock) })),
     total,
   });
 }

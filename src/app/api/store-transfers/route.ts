@@ -66,7 +66,7 @@ const createSchema = z.object({ toStoreId: z.string().min(1), comment: z.string(
 // POST /api/store-transfers — create an empty draft (Черновик)
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const parsed = createSchema.safeParse(await req.json());

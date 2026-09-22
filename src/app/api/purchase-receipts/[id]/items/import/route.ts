@@ -18,7 +18,7 @@ function lineTotal(quantity: number, costPrice: number, discountPct: number) {
 // «Автовосстановление удаленных товаров при приемке» is on.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id: receiptId } = await params;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
+import { useSession } from "@/lib/auth-client";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Download, Loader2, Pencil, Plus, Printer, Settings2, SlidersHorizontal, X, Zap } from "lucide-react";
@@ -74,7 +75,9 @@ export function PurchaseReceiptList() {
   const action = useAnchoredPopover();
   const print = useAnchoredPopover();
   const columns = useAnchoredPopover();
-  const [visible, setVisible] = useState({ supplier: true, account: true, total: true, paid: true, remaining: true, purchaseValue: true, saleValue: true, comment: true });
+  // UMAG never shows Складской работник "Сумма по закупочной" (the same number as "Сумма" restated).
+  const canSeeCost = useSession().data?.user.role !== "WAREHOUSE";
+  const [visible, setVisible] = useState({ supplier: true, account: true, total: true, paid: true, remaining: true, purchaseValue: canSeeCost, saleValue: true, comment: true });
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
     const sp = new URLSearchParams({ from: appliedFilters.from.toISOString(), to: appliedFilters.to.toISOString(), ...extra });
@@ -300,7 +303,7 @@ export function PurchaseReceiptList() {
               {visible.total && <th className="px-4 py-2.5 text-right">Сумма, ₸</th>}
               {visible.paid && <th className="px-4 py-2.5 text-right">Оплачено, ₸</th>}
               {visible.remaining && <th className="px-4 py-2.5 text-right">Осталось, ₸</th>}
-              {visible.purchaseValue && <th className="px-4 py-2.5 text-right">Сумма по закупочной, ₸</th>}
+              {canSeeCost && visible.purchaseValue && <th className="px-4 py-2.5 text-right">Сумма по закупочной, ₸</th>}
               {visible.saleValue && <th className="px-4 py-2.5 text-right">Сумма по продажной, ₸</th>}
               {visible.comment && <th className="px-4 py-2.5 text-left">Комментарий</th>}
               <th className="w-16 px-2 py-2 text-right">
@@ -335,7 +338,7 @@ export function PurchaseReceiptList() {
                       {visible.total && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.totalAmount)}</td>}
                       {visible.paid && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.paidAmount)}</td>}
                       {visible.remaining && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.remainingAmount)}</td>}
-                      {visible.purchaseValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.totalAmount)}</td>}
+                      {canSeeCost && visible.purchaseValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.totalAmount)}</td>}
                       {visible.saleValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(row.saleValue)}</td>}
                       {visible.comment && <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[12rem]">{row.comment ?? ""}</td>}
                       <td className="px-2 py-2 text-right">
@@ -362,7 +365,7 @@ export function PurchaseReceiptList() {
                 {visible.total && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.totalAmount)}</td>}
                 {visible.paid && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.paidAmount)}</td>}
                 {visible.remaining && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.remainingAmount)}</td>}
-                {visible.purchaseValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.totalAmount)}</td>}
+                {canSeeCost && visible.purchaseValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.totalAmount)}</td>}
                 {visible.saleValue && <td className="px-4 py-2.5 text-right tabular-nums">{formatCurrency(totals.saleValue)}</td>}
                 {visible.comment && <td></td>}
                 <td></td>
@@ -377,10 +380,10 @@ export function PurchaseReceiptList() {
           <p className="mb-1 font-semibold">Видимость столбцов</p>
           <p className="mb-2 text-xs text-muted-foreground">Настройте таблицу под себя и ваш выбор сохранится</p>
           <div className="space-y-1.5">
-            {([
+            {(([
               ["supplier", "Поставщик"], ["account", "Счет"], ["total", "Сумма"], ["paid", "Оплачено"],
               ["remaining", "Осталось"], ["purchaseValue", "Сумма по закупочной"], ["saleValue", "Сумма по продажной"], ["comment", "Комментарий"],
-            ] as const).map(([key, label]) => (
+            ] as const).filter(([key]) => canSeeCost || key !== "purchaseValue")).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 font-normal">
                 <input type="checkbox" checked={visible[key]} onChange={(e) => setVisible((v) => ({ ...v, [key]: e.target.checked }))} /> {label}
               </label>

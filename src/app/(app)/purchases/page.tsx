@@ -6,6 +6,6 @@ import { PurchaseReceiptList } from "@/components/purchase-receipts/purchase-rec
 
 export default async function PurchasesPage() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
   return <PurchaseReceiptList />;
 }

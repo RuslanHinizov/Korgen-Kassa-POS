@@ -21,7 +21,7 @@ interface Doc {
 }
 interface PickProduct { id: string; name: string; price: number; stock: number; unit?: string; barcode?: string | null }
 
-export function WriteOffDetail({ id }: { id: string }) {
+export function WriteOffDetail({ id, canSeeCost = true }: { id: string; canSeeCost?: boolean }) {
   const router = useRouter();
   const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,8 +126,8 @@ export function WriteOffDetail({ id }: { id: string }) {
               <th className="px-3 py-2 text-left">Причина</th>
               <th className="px-3 py-2 text-right">Кол-во</th>
               <th className="px-3 py-2 text-right">Тек. ост.</th>
-              <th className="px-3 py-2 text-right">Цена</th>
-              <th className="px-3 py-2 text-right">Итого</th>
+              {canSeeCost && <th className="px-3 py-2 text-right">Цена</th>}
+              {canSeeCost && <th className="px-3 py-2 text-right">Итого</th>}
               {draft && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -159,8 +159,8 @@ export function WriteOffDetail({ id }: { id: string }) {
                   ) : `${item.quantity} ${item.unit}`}
                 </td>
                 <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.currentStock} {item.unit}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{item.unitCost != null ? formatCurrency(item.unitCost) : "—"}</td>
-                <td className="px-3 py-2 text-right font-medium tabular-nums">{item.total != null ? formatCurrency(item.total) : "—"}</td>
+                {canSeeCost && <td className="px-3 py-2 text-right tabular-nums">{item.unitCost != null ? formatCurrency(item.unitCost) : "—"}</td>}
+                {canSeeCost && <td className="px-3 py-2 text-right font-medium tabular-nums">{item.total != null ? formatCurrency(item.total) : "—"}</td>}
                 {draft && (
                   <td className="px-3 py-2 text-right">
                     <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="Удалить">
@@ -175,10 +175,12 @@ export function WriteOffDetail({ id }: { id: string }) {
             )}
           </tbody>
         </table>
-        <div className="flex justify-between border-t px-4 py-2.5 text-sm font-semibold">
-          <span>Итого</span>
-          <span>{formatCurrency(doc.totalCost)}</span>
-        </div>
+        {canSeeCost && (
+          <div className="flex justify-between border-t px-4 py-2.5 text-sm font-semibold">
+            <span>Итого</span>
+            <span>{formatCurrency(doc.totalCost)}</span>
+          </div>
+        )}
       </div>
     </div>
   );

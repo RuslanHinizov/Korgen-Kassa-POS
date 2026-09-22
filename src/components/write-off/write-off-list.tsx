@@ -6,6 +6,7 @@ import { useStoreRouter as useRouter } from "@/components/store/use-store-router
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ArrowLeft, Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
 
 interface Row {
   id: string; documentNo: number; status: "DRAFT" | "POSTED"; writeOffDate: string;
@@ -64,6 +65,9 @@ export function WriteOffList() {
   }, [rows]);
 
   const grandTotal = rows.reduce((s, r) => s + r.totalCost, 0);
+  // UMAG never shows Складской работник the cost value of a write-off, only quantities.
+  const canSeeCost = useSession().data?.user.role !== "WAREHOUSE";
+  const cols = canSeeCost ? "grid-cols-[1fr_auto_auto_auto_2rem]" : "grid-cols-[1fr_auto_auto_2rem]";
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -80,11 +84,11 @@ export function WriteOffList() {
       </button>
 
       <div className="rounded-lg border bg-card overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto_auto_auto_2rem] gap-3 border-b bg-muted/50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className={`grid ${cols} gap-3 border-b bg-muted/50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground`}>
           <span>Номер / Пользователь</span>
           <span>Дата</span>
           <span>Статус</span>
-          <span className="text-right">Сумма</span>
+          {canSeeCost && <span className="text-right">Сумма</span>}
           <span />
         </div>
         {loading ? (
@@ -98,7 +102,7 @@ export function WriteOffList() {
               <div key={day}>
                 <div className="divide-y">
                   {dayRows.map((row) => (
-                    <div key={row.id} className="grid grid-cols-[1fr_auto_auto_auto_2rem] items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40">
+                    <div key={row.id} className={`grid ${cols} items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40`}>
                       <Link href={`/products/write-off/${row.id}`} className="min-w-0">
                         <p className="font-medium text-primary truncate">№{row.documentNo}</p>
                         <p className="text-xs text-muted-foreground truncate">{row.userName} · {row.itemCount} тов.</p>
@@ -107,7 +111,7 @@ export function WriteOffList() {
                       <span className={row.status === "POSTED" ? "rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" : "rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"}>
                         {row.status === "POSTED" ? "Проведён" : "Черновик"}
                       </span>
-                      <span className="text-right font-medium tabular-nums">{formatCurrency(row.totalCost)}</span>
+                      {canSeeCost && <span className="text-right font-medium tabular-nums">{formatCurrency(row.totalCost)}</span>}
                       {row.status === "DRAFT" ? (
                         <button onClick={() => deleteDraft(row.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="Удалить">
                           <Trash2 className="h-3.5 w-3.5" />
@@ -116,15 +120,17 @@ export function WriteOffList() {
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between border-t bg-muted/30 px-4 py-1.5 text-xs font-medium text-muted-foreground">
-                  <span>Итого {day}</span>
-                  <span>{formatCurrency(dayTotal)}</span>
-                </div>
+                {canSeeCost && (
+                  <div className="flex justify-between border-t bg-muted/30 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+                    <span>Итого {day}</span>
+                    <span>{formatCurrency(dayTotal)}</span>
+                  </div>
+                )}
               </div>
             );
           })
         )}
-        {rows.length > 0 && (
+        {rows.length > 0 && canSeeCost && (
           <div className="flex justify-between border-t px-4 py-2.5 text-sm font-semibold">
             <span>Итого</span>
             <span>{formatCurrency(grandTotal)}</span>

@@ -16,7 +16,8 @@ export default async function KioskLayout({ children }: { children: React.ReactN
   noStore();
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/kasa-giris");
-  if (session.user.role !== "CASHIER") redirect("/");
+  // Складской работник can also be issued a kassa PIN (see hasKioskAccess) — same screen.
+  if (!["CASHIER", "WAREHOUSE"].includes(session.user.role)) redirect("/");
 
   const storeId = await getStoreId();
   const assigned = await prisma.userStoreAssignment.findUnique({ where: { userId_storeId: { userId: session.user.id, storeId } } });

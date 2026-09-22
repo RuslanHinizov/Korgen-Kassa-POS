@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
+import { useSession } from "@/lib/auth-client";
 import { useStoreId } from "@/components/store/store-provider";
 import { formatCurrency } from "@/lib/utils";
 import { isFractionalUnit, parseQuantityInput, unitLabel, UNIT_OPTIONS } from "@/lib/units";
@@ -43,6 +44,8 @@ function markupPct(cost: number | null, price: number) {
 }
 
 export function StoreTransferDetail({ id }: { id: string }) {
+  // UMAG never shows Закупочная цена/Наценка to Складской работник.
+  const canSeeCost = useSession().data?.user.role !== "WAREHOUSE";
   const router = useRouter();
   const currentStoreId = useStoreId();
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -60,7 +63,7 @@ export function StoreTransferDetail({ id }: { id: string }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [visible, setVisible] = useState<Record<ColKey, boolean>>({ barcode: true, stock: true, unit: true, cost: true, markup: true, price: true });
+  const [visible, setVisible] = useState<Record<ColKey, boolean>>({ barcode: true, stock: true, unit: true, cost: canSeeCost, markup: canSeeCost, price: true });
 
   const [catalogPicker, setCatalogPicker] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -386,8 +389,8 @@ export function StoreTransferDetail({ id }: { id: string }) {
               <SortableTh label="Кол-во" active={sort?.key === "quantity"} dir={sort?.key === "quantity" ? sort.dir : undefined} onClick={() => toggleSort("quantity")} />
               {visible.stock && <SortableTh label="Остаток" active={sort?.key === "currentStock"} dir={sort?.key === "currentStock" ? sort.dir : undefined} onClick={() => toggleSort("currentStock")} />}
               {visible.unit && <th className="px-3 py-2 text-left">Ед. изм</th>}
-              {visible.cost && <SortableTh label="Закупочная цена, ₮" active={sort?.key === "unitCost"} dir={sort?.key === "unitCost" ? sort.dir : undefined} onClick={() => toggleSort("unitCost")} />}
-              {visible.markup && <SortableTh label="Наценка, %" active={sort?.key === "markup"} dir={sort?.key === "markup" ? sort.dir : undefined} onClick={() => toggleSort("markup")} />}
+              {canSeeCost && visible.cost && <SortableTh label="Закупочная цена, ₮" active={sort?.key === "unitCost"} dir={sort?.key === "unitCost" ? sort.dir : undefined} onClick={() => toggleSort("unitCost")} />}
+              {canSeeCost && visible.markup && <SortableTh label="Наценка, %" active={sort?.key === "markup"} dir={sort?.key === "markup" ? sort.dir : undefined} onClick={() => toggleSort("markup")} />}
               {visible.price && <SortableTh label="Продажная цена, ₮" active={sort?.key === "salePrice"} dir={sort?.key === "salePrice" ? sort.dir : undefined} onClick={() => toggleSort("salePrice")} />}
               <SortableTh label="Итого, ₮" active={sort?.key === "total"} dir={sort?.key === "total" ? sort.dir : undefined} onClick={() => toggleSort("total")} />
               <th className="w-16 px-2 py-2 text-right">
@@ -413,8 +416,8 @@ export function StoreTransferDetail({ id }: { id: string }) {
                 </td>
                 {visible.stock && <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.currentStock}</td>}
                 {visible.unit && <td className="px-3 py-2 text-muted-foreground">{unitLabel(item.unit)}</td>}
-                {visible.cost && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.unitCost ?? 0)}</td>}
-                {visible.markup && <td className="px-3 py-2 text-right tabular-nums">{markupPct(item.unitCost, item.salePrice).toFixed(2)}%</td>}
+                {canSeeCost && visible.cost && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.unitCost ?? 0)}</td>}
+                {canSeeCost && visible.markup && <td className="px-3 py-2 text-right tabular-nums">{markupPct(item.unitCost, item.salePrice).toFixed(2)}%</td>}
                 {visible.price && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.salePrice)}</td>}
                 <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(item.total)}</td>
                 {draft && (
@@ -467,7 +470,7 @@ export function StoreTransferDetail({ id }: { id: string }) {
         <AnchoredPopover pos={columns.pos} onClose={columns.close} className="w-56">
           <p className="mb-1 font-semibold">Видимость столбцов</p>
           <div className="space-y-1.5">
-            {([["barcode", "Штрихкод"], ["stock", "Остаток"], ["unit", "Ед. изм"], ["cost", "Закупочная цена"], ["markup", "Наценка"], ["price", "Продажная цена"]] as const).map(([key, label]) => (
+            {(([["barcode", "Штрихкод"], ["stock", "Остаток"], ["unit", "Ед. изм"], ["cost", "Закупочная цена"], ["markup", "Наценка"], ["price", "Продажная цена"]] as const).filter(([key]) => canSeeCost || (key !== "cost" && key !== "markup"))).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 font-normal">
                 <input type="checkbox" checked={visible[key]} onChange={(e) => setVisible((v) => ({ ...v, [key]: e.target.checked }))} /> {label}
               </label>

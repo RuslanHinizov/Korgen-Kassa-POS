@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { ArrowLeft, Check, ChevronLeft, Loader2, Search, Trash2 } from "lucide-react";
 import { isFractionalUnit, parseQuantityInput } from "@/lib/units";
+import { useSession } from "@/lib/auth-client";
 
 type Status = "DRAFT" | "COUNTING" | "REVIEWING" | "POSTED" | "CANCELLED";
 const STATUS_LABEL: Record<Status, string> = {
@@ -28,6 +29,7 @@ export function StocktakeDetail({ id }: { id: string }) {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const role = useSession().data?.user.role;
   const [hideStock, setHideStock] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
 
@@ -167,6 +169,8 @@ export function StocktakeDetail({ id }: { id: string }) {
       {(() => {
         const hideStockCols = editable && hideStock;
         const hideAmountCols = editable && hideAmounts;
+        // UMAG never shows Закупочная цена to Складской работник, regardless of the inventory-hide setting.
+        const canSeeCost = role !== "WAREHOUSE";
         const colCount = 2 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
         return (
       <div className="rounded-lg border bg-card overflow-hidden overflow-x-auto">
@@ -177,7 +181,7 @@ export function StocktakeDetail({ id }: { id: string }) {
               {!hideStockCols && <th className="px-3 py-2 text-right">Ожидалось</th>}
               <th className="px-3 py-2 text-right">Факт</th>
               {!hideStockCols && <th className="px-3 py-2 text-right">Разница</th>}
-              {!hideAmountCols && <th className="px-3 py-2 text-right">Закуп. цена</th>}
+              {!hideAmountCols && canSeeCost && <th className="px-3 py-2 text-right">Закуп. цена</th>}
               {!hideAmountCols && <th className="px-3 py-2 text-right">Прод. цена</th>}
               {editable && <th className="px-3 py-2"></th>}
             </tr>
@@ -204,7 +208,7 @@ export function StocktakeDetail({ id }: { id: string }) {
                     {item.difference > 0 ? "+" : ""}{item.difference}
                   </td>
                 )}
-                {!hideAmountCols && <td className="px-3 py-2 text-right tabular-nums">{item.cost != null ? formatCurrency(item.cost) : "—"}</td>}
+                {!hideAmountCols && canSeeCost && <td className="px-3 py-2 text-right tabular-nums">{item.cost != null ? formatCurrency(item.cost) : "—"}</td>}
                 {!hideAmountCols && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.price)}</td>}
                 {editable && (
                   <td className="px-3 py-2 text-right">

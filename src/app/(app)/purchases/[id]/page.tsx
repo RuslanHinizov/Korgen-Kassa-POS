@@ -6,7 +6,7 @@ import { PurchaseReceiptDetail } from "@/components/purchase-receipts/purchase-r
 
 export default async function PurchaseReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
   const { id } = await params;
   return <PurchaseReceiptDetail id={id} />;
 }

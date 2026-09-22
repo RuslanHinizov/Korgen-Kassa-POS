@@ -8,5 +8,12 @@ export default async function StockInDetailPage({ params }: { params: Promise<{ 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) redirect(`/store/${await getStoreId()}/pos`);
   const { id } = await params;
-  return <StockInDetail id={id} canPost={["ADMIN", "MANAGER"].includes(session.user.role ?? "")} />;
+  return (
+    <StockInDetail
+      id={id}
+      // UMAG lets Складской работник post/close their own Оприходование too — just never see cost.
+      canPost={["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")}
+      canSeeCost={["ADMIN", "MANAGER"].includes(session.user.role ?? "")}
+    />
+  );
 }

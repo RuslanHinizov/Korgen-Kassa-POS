@@ -42,7 +42,7 @@ const COLUMN_DEFS = [
 ] as const;
 type ColumnKey = (typeof COLUMN_DEFS)[number]["key"];
 
-export function StockInDetail({ id, canPost = false }: { id: string; canPost?: boolean }) {
+export function StockInDetail({ id, canPost = false, canSeeCost = true }: { id: string; canPost?: boolean; canSeeCost?: boolean }) {
   const router = useRouter();
   const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,8 +53,10 @@ export function StockInDetail({ id, canPost = false }: { id: string; canPost?: b
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [visible, setVisible] = useState<Record<ColumnKey, boolean>>({
-    quantity: true, currentStock: true, unit: true, cost: true, markup: true, price: true, unitCost: true, total: true, comment: true,
+    quantity: true, currentStock: true, unit: true, cost: canSeeCost, markup: canSeeCost, price: true, unitCost: canSeeCost, total: canSeeCost, comment: true,
   });
+  // UMAG never shows Закупочная цена/Наценка/Итого to Складской работник — don't let them toggle it back on.
+  const columnDefs = canSeeCost ? COLUMN_DEFS : COLUMN_DEFS.filter((c) => !["cost", "markup", "unitCost", "total"].includes(c.key));
 
   const action = useAnchoredPopover();
   const exportMenu = useAnchoredPopover();
@@ -325,7 +327,7 @@ export function StockInDetail({ id, canPost = false }: { id: string; canPost?: b
       {columns.open && columns.pos && (
         <AnchoredPopover pos={columns.pos} onClose={columns.close} className="w-56 space-y-1 p-3">
           <p className="mb-1 text-xs font-semibold">Видимость столбцов</p>
-          {COLUMN_DEFS.map((c) => (
+          {columnDefs.map((c) => (
             <label key={c.key} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-accent">
               <input type="checkbox" checked={visible[c.key]} onChange={() => setVisible((v) => ({ ...v, [c.key]: !v[c.key] }))} className="h-3.5 w-3.5 accent-primary" />
               {c.label}
