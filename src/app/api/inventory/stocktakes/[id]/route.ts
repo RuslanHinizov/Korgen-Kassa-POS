@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
 
-const PRODUCT_SELECT = { id: true, name: true, barcode: true, unit: true, stock: true, cost: true, price: true } as const;
+const PRODUCT_SELECT = { id: true, name: true, barcode: true, unit: true, stock: true, cost: true, price: true, productType: true } as const;
 
 // GET /api/inventory/stocktakes/:id — full document with lines
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,10 +24,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({
     stocktake: {
       id: stocktake.id, documentNo: stocktake.documentNo, status: stocktake.status, note: stocktake.note,
+      valuateAtCost: stocktake.valuateAtCost,
       countedAt: stocktake.countedAt, postedAt: stocktake.postedAt, userName: stocktake.user.name,
       items: stocktake.items.map((i) => ({
         id: i.id, productId: i.productId, productName: i.product.name, barcode: i.product.barcode,
-        unit: i.product.unit, currentStock: Number(i.product.stock),
+        unit: i.product.unit, productType: i.product.productType, currentStock: Number(i.product.stock),
         cost: i.product.cost != null ? Number(i.product.cost) : null, price: Number(i.product.price),
         expectedQty: Number(i.expectedQty),
         countedQty: i.countedQty != null ? Number(i.countedQty) : null,
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 const patchSchema = z.object({
   countedAt: z.coerce.date().optional(),
   note: z.string().max(1000).optional().nullable(),
+  valuateAtCost: z.boolean().optional(),
 });
 
 // PATCH /api/inventory/stocktakes/:id — edit header fields while still DRAFT/COUNTING
@@ -68,6 +70,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data: {
       ...(parsed.data.countedAt !== undefined ? { countedAt: parsed.data.countedAt } : {}),
       ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {}),
+      ...(parsed.data.valuateAtCost !== undefined ? { valuateAtCost: parsed.data.valuateAtCost } : {}),
     },
   });
   return NextResponse.json({ stocktake });

@@ -5,9 +5,11 @@ import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { AlertCircle, ArrowLeft, Check, Download, Loader2, Search, Trash2 } from "lucide-react";
-import { isFractionalUnit, parseQuantityInput } from "@/lib/units";
+import { AlertCircle, Check, Download, Loader2, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { isFractionalUnit, parseQuantityInput, unitLabel } from "@/lib/units";
 import { useSession } from "@/lib/auth-client";
+import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
+import { ImportItemsModal } from "@/components/ui/import-items-modal";
 import { AddProductsModal } from "./add-products-modal";
 
 type Status = "DRAFT" | "COUNTING" | "REVIEWING" | "POSTED" | "CANCELLED";
@@ -17,15 +19,23 @@ const STATUS_LABEL: Record<Status, string> = {
 const dateTimeFmt = (iso: string) => new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 interface Item {
-  id: string; productId: string; productName: string; barcode: string | null; unit: string;
+  id: string; productId: string; productName: string; barcode: string | null; unit: string; productType: string;
   currentStock: number; cost: number | null; price: number; expectedQty: number; countedQty: number | null; difference: number | null;
   scannedAt: string | null;
 }
 interface Doc {
-  id: string; documentNo: number; status: Status; note: string | null;
+  id: string; documentNo: number; status: Status; note: string | null; valuateAtCost: boolean;
   countedAt: string; postedAt: string | null; userName: string; items: Item[];
 }
 interface PickProduct { id: string; name: string; price: number; stock: number; unit?: string; barcode?: string | null }
+
+function itemType(item: Item): string {
+  if (item.productType === "SERVICE") return "service";
+  if (item.productType === "BUNDLE") return "bundle";
+  if (item.unit === "kg") return "weight";
+  if (item.barcode?.startsWith("290")) return "internal";
+  return "factory";
+}
 
 export function StocktakeDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -36,6 +46,19 @@ export function StocktakeDetail({ id }: { id: string }) {
   const [hideStock, setHideStock] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductBarcode, setNewProductBarcode] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [typeFilter, setTypeFilter] = useState("");
+  const [diffFilter, setDiffFilter] = useState("");
+
+  const action = useAnchoredPopover();
+  const filter = useAnchoredPopover();
+  const method = useAnchoredPopover();
+  const exportMenu = useAnchoredPopover();
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
@@ -49,6 +72,7 @@ export function StocktakeDetail({ id }: { id: string }) {
     if (!r.ok) { toast.error("Документ не найден"); router.push("/products/stocktake"); return; }
     const d = await r.json();
     setDoc(d.stocktake);
+    setSelected(new Set());
     setLoading(false);
   }, [id, router]);
   useEffect(() => { load(); }, [load]);
@@ -86,6 +110,81 @@ export function StocktakeDetail({ id }: { id: string }) {
     } finally { setBusy(false); }
   }
 
+  async function deleteSelectedItems() {
+    if (selected.size === 0) return;
+    action.close();
+    if (!confirm(`Удалить выбранные строки (${selected.size})?`)) return;
+    setBusy(true);
+    try {
+      await Promise.all([...selected].map((itemId) => fetch(`/api/inventory/stocktakes/${id}/items/${itemId}`, { method: "DELETE" })));
+      load();
+    } finally { setBusy(false); }
+  }
+
+  function toggleSelected(itemId: string) {
+    setSelected((s) => { const next = new Set(s); if (next.has(itemId)) next.delete(itemId); else next.add(itemId); return next; });
+  }
+  function toggleSelectAll(rows: Item[]) {
+    setSelected((s) => (s.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+  }
+
+  async function createProduct() {
+    if (!newProductName.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/products/quick-create", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newProductName.trim(), barcode: newProductBarcode.trim() || undefined }),
+      });
+      if (!r.ok) { toast.error((await r.json()).error ?? "Не удалось создать товар"); return; }
+      const d = await r.json();
+      const ar = await fetch(`/api/inventory/stocktakes/${id}/items`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: d.product.id }),
+      });
+      if (!ar.ok) { toast.error("Товар создан, но не добавлен в подсчёт"); return; }
+      setNewProductName(""); setNewProductBarcode("");
+      load();
+    } finally { setBusy(false); }
+  }
+
+  async function importItems(rows: { barcode: string; quantity: number }[]) {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/inventory/stocktakes/${id}/items/import`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: rows }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось импортировать"); return; }
+      setImportOpen(false);
+      if (d.notFound?.length > 0) toast.error(`Добавлено: ${d.added}. Не найдено по штрихкоду: ${d.notFound.length}`);
+      else toast.success(`Добавлено товаров: ${d.added}`);
+      load();
+    } finally { setBusy(false); }
+  }
+
+  function openComment() {
+    setCommentDraft(doc?.note ?? "");
+    setCommentOpen(true);
+  }
+  async function saveComment() {
+    const r = await fetch(`/api/inventory/stocktakes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: commentDraft }) });
+    if (!r.ok) { toast.error("Не удалось сохранить комментарий"); return; }
+    setCommentOpen(false);
+    load();
+  }
+
+  async function toggleValuateAtCost(next: boolean) {
+    method.close();
+    setDoc((d) => (d ? { ...d, valuateAtCost: next } : d));
+    const r = await fetch(`/api/inventory/stocktakes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valuateAtCost: next }) });
+    if (!r.ok) { toast.error("Не удалось изменить метод оприходования"); load(); }
+  }
+
+  async function saveDoc() {
+    setBusy(true);
+    try { await load(); toast.success("Изменения сохранены"); } finally { setBusy(false); }
+  }
+
   async function postDoc() {
     if (!doc) return;
     if (!confirm(`Провести инвентаризацию №${doc.documentNo}? Остатки товаров будут скорректированы.`)) return;
@@ -109,55 +208,154 @@ export function StocktakeDetail({ id }: { id: string }) {
     return <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin inline" /></div>;
   }
 
+  // Matches real UMAG: Остаток/Разница are shown openly at every stage — the
+  // business setting is the only thing that hides them, same as Прод./Закуп. цена.
+  const hideStockCols = hideStock;
+  const hideAmountCols = editable && hideAmounts;
+  // UMAG never shows Закупочная цена to Складской работник, regardless of the inventory-hide setting.
+  const canSeeCost = role !== "WAREHOUSE";
+
+  const rows = doc.items.filter((item) => {
+    if (typeFilter && itemType(item) !== typeFilter) return false;
+    const diff = item.difference ?? 0;
+    if (diffFilter === "diff" && diff === 0) return false;
+    if (diffFilter === "nodiff" && diff !== 0) return false;
+    if (diffFilter === "surplus" && diff <= 0) return false;
+    if (diffFilter === "shortage" && diff >= 0) return false;
+    return true;
+  });
+  const colCount = 3 + (hideStockCols ? 0 : 2) + 1 + (hideAmountCols ? 0 : (canSeeCost ? 2 : 1)) + (editable ? 2 : 1);
+  const totalCost = rows.reduce((s, i) => s + (i.difference ?? 0) * (i.cost ?? 0), 0);
+  const totalSale = rows.reduce((s, i) => s + (i.difference ?? 0) * i.price, 0);
+
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    <div className="p-4 sm:p-6 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/products/stocktake" className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-accent transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Инвентаризации
-        </Link>
         <h1 className="text-xl font-bold">Инвентаризация №{doc.documentNo}</h1>
         <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{STATUS_LABEL[doc.status]}</span>
-        <span className="text-xs text-muted-foreground">Создатель: {doc.userName}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {editable && doc.items.length > 0 && (
-            <button onClick={postDoc} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Провести
+        <span className="ml-auto text-xs text-muted-foreground">Создатель: {doc.userName}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {editable && doc.items.length > 0 && (
+          <button onClick={postDoc} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Провести
+          </button>
+        )}
+        {editable && (
+          <button onClick={saveDoc} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50">
+            Сохранить
+          </button>
+        )}
+        <Link href="/products/stocktake" className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+          Закрыть
+        </Link>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {editable && (
+            <button ref={method.anchorRef} onClick={method.toggle} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+              Метод оприходования
             </button>
           )}
-          <button onClick={() => window.open(`/api/inventory/stocktakes/${id}/export`, "_blank")} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
-            <Download className="h-4 w-4" /> Экспорт
-          </button>
+          {editable && (
+            <button onClick={openComment} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+              {doc.note ? "Изменить комментарий" : "Добавить комментарий"}
+            </button>
+          )}
           {editable && (
             <button onClick={deleteDoc} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-destructive/30 px-3 text-sm font-medium text-destructive hover:bg-destructive/10">
-              <Trash2 className="h-4 w-4" /> Удалить
+              Удалить инвентаризацию
             </button>
           )}
+          <button ref={exportMenu.anchorRef} onClick={exportMenu.toggle} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+            <Download className="h-4 w-4" /> Экспорт
+          </button>
         </div>
       </div>
 
-      {editable && (
-        <textarea
-          defaultValue={doc.note ?? ""}
-          placeholder="Комментарий"
-          onBlur={(e) => fetch(`/api/inventory/stocktakes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: e.target.value }) })}
-          className="w-full rounded-md border bg-background p-2 text-sm"
-        />
+      {doc.note && !editable && <p className="text-sm text-muted-foreground">Комментарий: {doc.note}</p>}
+
+      {method.open && method.pos && (
+        <AnchoredPopover pos={method.pos} onClose={method.close} className="w-72">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={doc.valuateAtCost} onChange={(e) => toggleValuateAtCost(e.target.checked)} />
+            Оприходовать по закупочной цене
+          </label>
+        </AnchoredPopover>
+      )}
+
+      {exportMenu.open && exportMenu.pos && (
+        <AnchoredPopover pos={exportMenu.pos} onClose={exportMenu.close} className="w-44 p-1">
+          <button onClick={() => { exportMenu.close(); window.open(`/api/inventory/stocktakes/${id}/export`, "_blank"); }} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent">
+            Экспорт в Excel
+          </button>
+        </AnchoredPopover>
+      )}
+
+      {commentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border bg-background p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Добавить комментарий</h2>
+              <button onClick={() => setCommentOpen(false)} className="rounded p-1 text-muted-foreground hover:bg-accent"><X className="h-5 w-5" /></button>
+            </div>
+            <textarea
+              value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} rows={3} autoFocus
+              placeholder="Введите свой комментарий для обозначения данной операции"
+              className="w-full resize-none rounded-md border bg-background p-2 text-sm"
+            />
+            <button onClick={saveComment} className="mt-3 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              Добавить
+            </button>
+          </div>
+        </div>
       )}
 
       {editable && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <button ref={action.anchorRef} onClick={action.toggle} disabled={selected.size === 0} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-50">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded bg-muted px-1 text-xs">{selected.size}</span> Действие
+          </button>
+          <button ref={filter.anchorRef} onClick={filter.toggle} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+            <SlidersHorizontal className="h-4 w-4" /> Фильтр
+          </button>
+          <div className="flex-1 min-w-[16rem]">
             <ProductPicker onPick={addProduct} busy={busy} existingIds={doc.items.map((i) => i.productId)} />
           </div>
-          <button
-            type="button"
-            onClick={() => setAddModalOpen(true)}
-            disabled={busy}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-50"
-          >
-            Добавить из номенклатуры
-          </button>
         </div>
+      )}
+
+      {action.open && action.pos && (
+        <AnchoredPopover pos={action.pos} onClose={action.close} className="w-52 p-1">
+          <button onClick={deleteSelectedItems} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive hover:bg-destructive/10">
+            Удалить выбранное
+          </button>
+        </AnchoredPopover>
+      )}
+
+      {filter.open && filter.pos && (
+        <AnchoredPopover pos={filter.pos} onClose={filter.close} className="w-72 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Тип товара</label>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+              <option value="">Все</option>
+              <option value="factory">Заводские</option>
+              <option value="weight">Весовые</option>
+              <option value="internal">Внутренние</option>
+              <option value="service">Услуга</option>
+              <option value="bundle">Комплект</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Количество и разница</label>
+            <select value={diffFilter} onChange={(e) => setDiffFilter(e.target.value)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+              <option value="">Не выбрано</option>
+              <option value="diff">С расхождением</option>
+              <option value="nodiff">Без расхождения</option>
+              <option value="surplus">Излишек</option>
+              <option value="shortage">Недостача</option>
+            </select>
+          </div>
+        </AnchoredPopover>
       )}
 
       {addModalOpen && (
@@ -168,64 +366,32 @@ export function StocktakeDetail({ id }: { id: string }) {
           onAdded={load}
         />
       )}
-
-      {(() => {
-        // Matches real UMAG: Ожидалось (system stock) is shown openly at every
-        // stage — the business setting is the only thing that hides it, same as
-        // it always was for Прод./Закуп. цена. No phase-based blind-count hiding.
-        const hideStockCols = hideStock;
-        const hideAmountCols = editable && hideAmounts;
-        // UMAG never shows Закупочная цена to Складской работник, regardless of the inventory-hide setting.
-        const canSeeCost = role !== "WAREHOUSE";
-        const colCount = 3 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
-
-        const reconciliation = !editable ? (() => {
-          const surplus = doc.items.filter((i) => (i.difference ?? 0) > 0);
-          const shortage = doc.items.filter((i) => (i.difference ?? 0) < 0);
-          const surplusValue = surplus.reduce((s, i) => s + (i.difference ?? 0) * i.price, 0);
-          const shortageValue = shortage.reduce((s, i) => s + Math.abs(i.difference ?? 0) * i.price, 0);
-          return { surplusCount: surplus.length, shortageCount: shortage.length, surplusValue, shortageValue };
-        })() : null;
-
-        return (
-      <>
-        {reconciliation && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border bg-card p-3">
-              <p className="text-xs text-muted-foreground">Посчитано</p>
-              <p className="text-lg font-semibold">{doc.items.length}</p>
-            </div>
-            <div className="rounded-lg border bg-card p-3">
-              <p className="text-xs text-muted-foreground">Без расхождений</p>
-              <p className="text-lg font-semibold">{doc.items.length - reconciliation.surplusCount - reconciliation.shortageCount}</p>
-            </div>
-            <div className="rounded-lg border bg-card p-3">
-              <p className="text-xs text-muted-foreground">Излишек</p>
-              <p className="text-lg font-semibold text-emerald-600">{reconciliation.surplusCount} <span className="text-sm font-normal">/ {formatCurrency(reconciliation.surplusValue)}</span></p>
-            </div>
-            <div className="rounded-lg border bg-card p-3">
-              <p className="text-xs text-muted-foreground">Недостача</p>
-              <p className="text-lg font-semibold text-red-600">{reconciliation.shortageCount} <span className="text-sm font-normal">/ {formatCurrency(reconciliation.shortageValue)}</span></p>
-            </div>
-          </div>
-        )}
+      {importOpen && <ImportItemsModal busy={busy} onClose={() => setImportOpen(false)} onImport={importItems} />}
 
       <div className="rounded-lg border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 text-left">Товар</th>
+              {editable && (
+                <th className="w-10 px-3 py-2">
+                  <input type="checkbox" checked={rows.length > 0 && selected.size === rows.length} onChange={() => toggleSelectAll(rows)} />
+                </th>
+              )}
+              <th className="px-3 py-2 text-left">№</th>
+              <th className="px-3 py-2 text-left">Название товара</th>
+              <th className="px-3 py-2 text-left">Штрихкод</th>
               <th className="px-3 py-2 text-left">Время сканирования</th>
               <th className="px-3 py-2 text-right">Сканировано</th>
               {!hideStockCols && <th className="px-3 py-2 text-right">Остаток на время сканирования</th>}
               {!hideStockCols && <th className="px-3 py-2 text-right">Разница</th>}
+              <th className="px-3 py-2 text-left">Ед. изм</th>
               {!hideAmountCols && canSeeCost && <th className="px-3 py-2 text-right">Сумма закуп. цены и за ед</th>}
               {!hideAmountCols && <th className="px-3 py-2 text-right">Сумма прод. цены и за ед</th>}
               {editable && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {doc.items.map((item) => {
+            {rows.map((item, idx) => {
               // Matches real UMAG: a line not yet actually scanned shows a warning
               // once its (0-default) count leaves a nonzero difference — not "hidden",
               // just openly flagged so it isn't mistaken for a confirmed count.
@@ -233,10 +399,14 @@ export function StocktakeDetail({ id }: { id: string }) {
               const diff = item.difference ?? 0;
               return (
               <tr key={item.id} className="hover:bg-muted/40">
+                {editable && (
+                  <td className="px-3 py-2"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)} /></td>
+                )}
+                <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
                 <td className="px-3 py-2">
-                  <p className="font-medium">{item.productName}</p>
-                  <p className="text-xs text-muted-foreground tabular-nums">{item.barcode ?? "—"}</p>
+                  <Link href={`/products/${item.productId}/edit`} target="_blank" className="font-medium text-primary hover:underline">{item.productName}</Link>
                 </td>
+                <td className="px-3 py-2 text-muted-foreground tabular-nums">{item.barcode ?? "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground tabular-nums">
                   {item.scannedAt ? dateTimeFmt(item.scannedAt) : "—"}
                 </td>
@@ -247,9 +417,14 @@ export function StocktakeDetail({ id }: { id: string }) {
                       onBlur={(e) => { const v = parseQuantityInput(e.target.value, item.unit, true); if (v !== null && v !== item.countedQty) updateCounted(item.id, v); }}
                       className="h-8 w-24 rounded-md border bg-background px-2 text-right text-xs"
                     />
-                  ) : `${item.countedQty ?? 0} ${item.unit}`}
+                  ) : (
+                    <>
+                      {unscanned && <span className="mr-1 text-xs text-muted-foreground">(будет обнулен)</span>}
+                      {item.countedQty ?? 0}
+                    </>
+                  )}
                 </td>
-                {!hideStockCols && <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.expectedQty} {item.unit}</td>}
+                {!hideStockCols && <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.expectedQty}</td>}
                 {!hideStockCols && (
                   <td className="px-3 py-2 text-right">
                     <span className={`inline-flex items-center gap-1 font-medium tabular-nums ${diff > 0 ? "text-emerald-600" : diff < 0 ? "text-red-600" : "text-muted-foreground"}`}>
@@ -258,6 +433,7 @@ export function StocktakeDetail({ id }: { id: string }) {
                     </span>
                   </td>
                 )}
+                <td className="px-3 py-2 text-muted-foreground">{unitLabel(item.unit)}</td>
                 {!hideAmountCols && canSeeCost && (
                   <td className="px-3 py-2 text-right tabular-nums">
                     {item.cost != null ? (
@@ -284,15 +460,37 @@ export function StocktakeDetail({ id }: { id: string }) {
               </tr>
               );
             })}
-            {doc.items.length === 0 && (
+            {rows.length === 0 && (
               <tr><td colSpan={colCount} className="px-3 py-8 text-center text-muted-foreground">Товаров пока нет</td></tr>
             )}
           </tbody>
         </table>
+
+        {editable && (
+          <div className="flex flex-wrap items-center gap-2 border-t p-3">
+            <span className="text-xs font-medium text-muted-foreground">Добавление товара</span>
+            <input value={newProductName} onChange={(e) => setNewProductName(e.target.value)} placeholder="Поиск по названию" className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
+            <input value={newProductBarcode} onChange={(e) => setNewProductBarcode(e.target.value)} placeholder="Штрихкод" className="h-9 w-40 rounded-md border bg-background px-2 text-sm" />
+            <button onClick={() => setAddModalOpen(true)} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50">
+              Добавить из номенклатуры
+            </button>
+            <button onClick={createProduct} disabled={busy || !newProductName.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-40">
+              <Plus className="h-4 w-4" /> Создать товар
+            </button>
+            <button onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary px-3 text-sm font-medium text-primary hover:bg-primary/10">
+              <Upload className="h-4 w-4" /> Импорт товаров
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-between border-t px-4 py-2.5 text-sm font-semibold">
+          <span>Итого</span>
+          <span className="flex gap-8">
+            {!hideAmountCols && canSeeCost && <span>{formatCurrency(totalCost)}</span>}
+            {!hideAmountCols && <span>{formatCurrency(totalSale)}</span>}
+          </span>
+        </div>
       </div>
-      </>
-        );
-      })()}
     </div>
   );
 }
@@ -321,17 +519,15 @@ function ProductPicker({ onPick, busy, existingIds }: { onPick: (p: PickProduct)
   }
 
   return (
-    <div className="rounded-lg border p-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q} onChange={handleChange}
-          placeholder="Найти товар и добавить в подсчёт…"
-          className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        value={q} onChange={handleChange}
+        placeholder="Поиск товаров по названию/штрихкоду"
+        className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+      />
       {q.trim() && (
-        <div className="mt-2 max-h-56 overflow-y-auto rounded-md border divide-y">
+        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-popover shadow-md divide-y">
           {loading ? (
             <p className="px-3 py-3 text-center text-xs text-muted-foreground">Поиск…</p>
           ) : results.length === 0 ? (

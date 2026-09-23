@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const storeId = await getStoreId();
 
-  const stocktake = await prisma.stocktake.findFirst({ where: { id, storeId }, include: { items: true } });
+  const stocktake = await prisma.stocktake.findFirst({ where: { id, storeId }, include: { items: { include: { product: { select: { cost: true, price: true } } } } } });
   if (!stocktake) return NextResponse.json({ error: "Документ не найден" }, { status: 404 });
   if (stocktake.status !== "DRAFT" && stocktake.status !== "COUNTING") {
     return NextResponse.json({ error: "Документ уже проведён или отменён" }, { status: 409 });
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             userId: session.user.id,
             type: "STOCKTAKE",
             quantity: delta,
+            unitCost: stocktake.valuateAtCost ? Number(item.product.cost ?? item.product.price) : Number(item.product.price),
             referenceType: "Stocktake",
             referenceId: stocktake.id,
             documentNo: String(stocktake.documentNo),

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/utils";
 
-interface Row { id: string; name: string; barcode: string | null; stock: number; categoryName: string | null; supplierName: string | null; unit: string }
+interface Row { id: string; name: string; barcode: string | null; stock: number; categoryName: string | null; supplierName: string | null; unit: string; cost: number; price: number }
 interface CategoryOption { id: string; name: string }
 interface SupplierOption { id: string; name: string }
 
@@ -89,17 +90,17 @@ export function AddProductsModal({ stocktakeId, existingIds, onClose, onAdded }:
 
         <div className="grid grid-cols-2 gap-3 border-b p-4 sm:grid-cols-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Категория</label>
-            <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
-              <option value="">Все</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">По поставщикам</label>
             <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setPage(1); }} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
               <option value="">Все</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Категория</label>
+            <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+              <option value="">Все</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -135,8 +136,10 @@ export function AddProductsModal({ stocktakeId, existingIds, onClose, onAdded }:
                   <th className="w-10 px-3 py-2"><input type="checkbox" checked={allPageSelected} onChange={toggleAll} /></th>
                   <th className="px-3 py-2 text-left">Название</th>
                   <th className="px-3 py-2 text-left">Штрихкод</th>
-                  <th className="px-3 py-2 text-left">Категория</th>
                   <th className="px-3 py-2 text-left">Поставщик</th>
+                  <th className="px-3 py-2 text-right">Цена по накладной</th>
+                  <th className="px-3 py-2 text-right">Продажная цена</th>
+                  <th className="px-3 py-2 text-left">Категория</th>
                   <th className="px-3 py-2 text-right">Остаток</th>
                 </tr>
               </thead>
@@ -148,8 +151,10 @@ export function AddProductsModal({ stocktakeId, existingIds, onClose, onAdded }:
                       <td className="px-3 py-2"><input type="checkbox" disabled={already} checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} /></td>
                       <td className="px-3 py-2">{r.name}{already && <span className="ml-2 text-xs text-muted-foreground">уже добавлен</span>}</td>
                       <td className="px-3 py-2 text-muted-foreground tabular-nums">{r.barcode ?? "—"}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{r.categoryName ?? "—"}</td>
                       <td className="px-3 py-2 text-muted-foreground">{r.supplierName ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.cost)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.price)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.categoryName ?? "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.stock} {r.unit}</td>
                     </tr>
                   );

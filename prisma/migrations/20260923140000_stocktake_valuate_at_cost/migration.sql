@@ -1,0 +1,1 @@
+ALTER TABLE "Stocktake" ADD COLUMN "valuateAtCost" BOOLEAN NOT NULL DEFAULT false;

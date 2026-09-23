@@ -1297,6 +1297,9 @@ model Stocktake {
   userId     String
   status     StocktakeStatus @default(DRAFT)
   note       String?
+  // UMAG's "Метод оприходования: Оприходовать по закупочной цене" toggle —
+  // which unit cost a surplus/shortage line gets valued at on the ledger.
+  valuateAtCost Boolean      @default(false)
   countedAt  DateTime        @default(now())
   postedAt   DateTime?
   createdAt  DateTime        @default(now())
