@@ -42,6 +42,7 @@ export const NAV: NavItem[] = [
       { key: "reports_cash_flow", href: "/reports/cash-flow" },
       { key: "reports_profit_loss", href: "/reports/profit-loss" },
       { key: "reports_abc", href: "/reports/abc" },
+      { key: "reports_full_export", href: "/reports/full-export" },
     ],
   },
   {
