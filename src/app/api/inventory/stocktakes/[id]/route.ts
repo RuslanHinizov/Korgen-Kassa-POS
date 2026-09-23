@@ -29,7 +29,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         id: i.id, productId: i.productId, productName: i.product.name, barcode: i.product.barcode,
         unit: i.product.unit, currentStock: Number(i.product.stock),
         cost: i.product.cost != null ? Number(i.product.cost) : null, price: Number(i.product.price),
-        expectedQty: Number(i.expectedQty), countedQty: Number(i.countedQty), difference: Number(i.difference),
+        expectedQty: Number(i.expectedQty),
+        countedQty: i.countedQty != null ? Number(i.countedQty) : null,
+        difference: i.difference != null ? Number(i.difference) : null,
       })),
     },
   });

@@ -34,7 +34,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const expectedQty = Number(product.stock);
   const [item] = await prisma.$transaction([
     prisma.stocktakeItem.create({
-      data: { stocktakeId, productId: parsed.data.productId, expectedQty, countedQty: expectedQty, difference: 0 },
+      // Blind count: countedQty/difference start null (not counted yet), never
+      // pre-filled with the system's own expected quantity.
+      data: { stocktakeId, productId: parsed.data.productId, expectedQty, countedQty: null, difference: null },
     }),
     ...(stocktake.status === "DRAFT" ? [prisma.stocktake.update({ where: { id: stocktakeId }, data: { status: "COUNTING" } })] : []),
   ]);

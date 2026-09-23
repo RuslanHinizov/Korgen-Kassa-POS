@@ -18,6 +18,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (stocktake.status !== "COUNTING") return NextResponse.json({ error: "Сначала добавьте и посчитайте товары" }, { status: 409 });
   if (stocktake._count.items === 0) return NextResponse.json({ error: "Добавьте хотя бы один товар" }, { status: 400 });
 
+  // Blind count: a row left untouched (countedQty still null) must never
+  // silently pass through as "no difference" — reject the transition instead.
+  const uncounted = await prisma.stocktakeItem.count({ where: { stocktakeId: id, countedQty: null } });
+  if (uncounted > 0) {
+    return NextResponse.json({ error: `Есть неподсчитанные товары (${uncounted} шт.) — посчитайте все позиции перед завершением` }, { status: 409 });
+  }
+
   const updated = await prisma.stocktake.update({ where: { id }, data: { status: "REVIEWING" } });
   return NextResponse.json({ stocktake: updated });
 }

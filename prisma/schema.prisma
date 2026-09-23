@@ -1314,8 +1314,9 @@ model StocktakeItem {
   stocktakeId String
   productId   String
   expectedQty Decimal  @db.Decimal(10, 3)
-  countedQty  Decimal  @db.Decimal(10, 3)
-  difference  Decimal  @db.Decimal(10, 3)
+  // null = not yet counted (blind count — never pre-filled from expectedQty).
+  countedQty  Decimal? @db.Decimal(10, 3)
+  difference  Decimal? @db.Decimal(10, 3)
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)

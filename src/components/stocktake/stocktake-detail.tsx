@@ -5,7 +5,7 @@ import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { ArrowLeft, Check, ChevronLeft, Loader2, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronLeft, Download, Loader2, Search, Trash2 } from "lucide-react";
 import { isFractionalUnit, parseQuantityInput } from "@/lib/units";
 import { useSession } from "@/lib/auth-client";
 
@@ -16,8 +16,9 @@ const STATUS_LABEL: Record<Status, string> = {
 
 interface Item {
   id: string; productId: string; productName: string; barcode: string | null; unit: string;
-  currentStock: number; cost: number | null; price: number; expectedQty: number; countedQty: number; difference: number;
+  currentStock: number; cost: number | null; price: number; expectedQty: number; countedQty: number | null; difference: number | null;
 }
+interface CategoryOption { id: string; name: string }
 interface Doc {
   id: string; documentNo: number; status: Status; note: string | null;
   countedAt: string; postedAt: string | null; userName: string; items: Item[];
@@ -32,12 +33,15 @@ export function StocktakeDetail({ id }: { id: string }) {
   const role = useSession().data?.user.role;
   const [hideStock, setHideStock] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
       setHideStock(Boolean(d?.hideStockDuringStocktake));
       setHideAmounts(Boolean(d?.hideAmountsDuringStocktake));
     }).catch(() => {});
+    fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? [])).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -59,6 +63,21 @@ export function StocktakeDetail({ id }: { id: string }) {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: p.id }),
       });
       if (!r.ok) { toast.error((await r.json()).error ?? "Не удалось добавить"); return; }
+      load();
+    } finally { setBusy(false); }
+  }
+
+  async function addCategory(categoryId: string) {
+    setBusy(true);
+    setCategoryMenuOpen(false);
+    try {
+      const r = await fetch(`/api/inventory/stocktakes/${id}/items/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось добавить"); return; }
+      if (d.added === 0) toast.info("В этой категории нет новых товаров для добавления");
+      else toast.success(`Добавлено товаров: ${d.added}`);
       load();
     } finally { setBusy(false); }
   }
@@ -132,6 +151,9 @@ export function StocktakeDetail({ id }: { id: string }) {
         <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{STATUS_LABEL[doc.status]}</span>
         <span className="text-xs text-muted-foreground">Создатель: {doc.userName}</span>
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => window.open(`/api/inventory/stocktakes/${id}/export`, "_blank")} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+            <Download className="h-4 w-4" /> Экспорт
+          </button>
           {editable && (
             <button onClick={deleteDoc} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-destructive/30 px-3 text-sm font-medium text-destructive hover:bg-destructive/10">
               <Trash2 className="h-4 w-4" /> Удалить
@@ -164,15 +186,82 @@ export function StocktakeDetail({ id }: { id: string }) {
         />
       )}
 
-      {editable && <ProductPicker onPick={addProduct} busy={busy} existingIds={doc.items.map((i) => i.productId)} />}
+      {editable && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div className="flex-1">
+            <ProductPicker onPick={addProduct} busy={busy} existingIds={doc.items.map((i) => i.productId)} />
+          </div>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setCategoryMenuOpen((v) => !v)}
+              disabled={busy}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            >
+              Добавить категорию целиком <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {categoryMenuOpen && (
+              <div className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border bg-popover p-1 shadow-lg">
+                {categories.length === 0 ? (
+                  <p className="px-2 py-3 text-center text-xs text-muted-foreground">Категорий нет</p>
+                ) : (
+                  categories.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => addCategory(c.id)}
+                      className="block w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+                    >
+                      {c.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {(() => {
-        const hideStockCols = editable && hideStock;
+        // Blind count: while counting, Ожидалось/Разница are always hidden — the
+        // business setting only controls their visibility once REVIEWING/POSTED.
+        const counting = doc.status === "DRAFT" || doc.status === "COUNTING";
+        const hideStockCols = counting ? true : hideStock;
         const hideAmountCols = editable && hideAmounts;
         // UMAG never shows Закупочная цена to Складской работник, regardless of the inventory-hide setting.
         const canSeeCost = role !== "WAREHOUSE";
         const colCount = 2 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
+
+        const reconciliation = !editable ? (() => {
+          const surplus = doc.items.filter((i) => (i.difference ?? 0) > 0);
+          const shortage = doc.items.filter((i) => (i.difference ?? 0) < 0);
+          const surplusValue = surplus.reduce((s, i) => s + (i.difference ?? 0) * i.price, 0);
+          const shortageValue = shortage.reduce((s, i) => s + Math.abs(i.difference ?? 0) * i.price, 0);
+          return { surplusCount: surplus.length, shortageCount: shortage.length, surplusValue, shortageValue };
+        })() : null;
+
         return (
+      <>
+        {reconciliation && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border bg-card p-3">
+              <p className="text-xs text-muted-foreground">Посчитано</p>
+              <p className="text-lg font-semibold">{doc.items.length}</p>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <p className="text-xs text-muted-foreground">Без расхождений</p>
+              <p className="text-lg font-semibold">{doc.items.length - reconciliation.surplusCount - reconciliation.shortageCount}</p>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <p className="text-xs text-muted-foreground">Излишек</p>
+              <p className="text-lg font-semibold text-emerald-600">{reconciliation.surplusCount} <span className="text-sm font-normal">/ {formatCurrency(reconciliation.surplusValue)}</span></p>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <p className="text-xs text-muted-foreground">Недостача</p>
+              <p className="text-lg font-semibold text-red-600">{reconciliation.shortageCount} <span className="text-sm font-normal">/ {formatCurrency(reconciliation.shortageValue)}</span></p>
+            </div>
+          </div>
+        )}
+
       <div className="rounded-lg border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -187,8 +276,10 @@ export function StocktakeDetail({ id }: { id: string }) {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {doc.items.map((item) => (
-              <tr key={item.id} className="hover:bg-muted/40">
+            {doc.items.map((item) => {
+              const uncounted = item.countedQty === null;
+              return (
+              <tr key={item.id} className={uncounted && editable ? "bg-amber-500/5 hover:bg-amber-500/10" : "hover:bg-muted/40"}>
                 <td className="px-3 py-2">
                   <p className="font-medium">{item.productName}</p>
                   <p className="text-xs text-muted-foreground tabular-nums">{item.barcode ?? "—"}</p>
@@ -197,15 +288,16 @@ export function StocktakeDetail({ id }: { id: string }) {
                 <td className="px-3 py-2 text-right">
                   {editable ? (
                     <input
-                      type="number" inputMode={isFractionalUnit(item.unit) ? "decimal" : "numeric"} min="0" step={isFractionalUnit(item.unit) ? "0.001" : "1"} defaultValue={item.countedQty}
+                      type="number" inputMode={isFractionalUnit(item.unit) ? "decimal" : "numeric"} min="0" step={isFractionalUnit(item.unit) ? "0.001" : "1"} defaultValue={item.countedQty ?? ""}
+                      placeholder="—"
                       onBlur={(e) => { const v = parseQuantityInput(e.target.value, item.unit, true); if (v !== null && v !== item.countedQty) updateCounted(item.id, v); }}
-                      className="h-8 w-24 rounded-md border bg-background px-2 text-right text-xs"
+                      className={`h-8 w-24 rounded-md border bg-background px-2 text-right text-xs ${uncounted ? "border-amber-500/50" : ""}`}
                     />
-                  ) : `${item.countedQty} ${item.unit}`}
+                  ) : `${item.countedQty ?? "—"} ${item.unit}`}
                 </td>
                 {!hideStockCols && (
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${item.difference > 0 ? "text-emerald-600" : item.difference < 0 ? "text-red-600" : "text-muted-foreground"}`}>
-                    {item.difference > 0 ? "+" : ""}{item.difference}
+                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${item.difference == null ? "text-muted-foreground" : item.difference > 0 ? "text-emerald-600" : item.difference < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                    {item.difference == null ? "—" : `${item.difference > 0 ? "+" : ""}${item.difference}`}
                   </td>
                 )}
                 {!hideAmountCols && canSeeCost && <td className="px-3 py-2 text-right tabular-nums">{item.cost != null ? formatCurrency(item.cost) : "—"}</td>}
@@ -218,13 +310,15 @@ export function StocktakeDetail({ id }: { id: string }) {
                   </td>
                 )}
               </tr>
-            ))}
+              );
+            })}
             {doc.items.length === 0 && (
               <tr><td colSpan={colCount} className="px-3 py-8 text-center text-muted-foreground">Товаров пока нет</td></tr>
             )}
           </tbody>
         </table>
       </div>
+      </>
         );
       })()}
     </div>
