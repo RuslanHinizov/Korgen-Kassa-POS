@@ -1,7 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+
+const STORAGE_KEY = "korgen.fullExportSections";
+
+function loadStoredSections(allKeys: string[]): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set(allKeys);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set(allKeys);
+    const valid = parsed.filter((k): k is string => typeof k === "string" && allKeys.includes(k));
+    return new Set(valid);
+  } catch {
+    return new Set(allKeys);
+  }
+}
 
 function monthRange() {
   const now = new Date();
@@ -46,7 +61,19 @@ const SECTIONS = [
 export function FullExportReport() {
   const [preset, setPreset] = useState<string | null>("month");
   const [{ from, to }, setRange] = useState(() => monthRange());
-  const [selected, setSelected] = useState<Set<string>>(new Set(SECTIONS.map((s) => s.key)));
+  const sectionKeys = SECTIONS.map((s) => s.key);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(sectionKeys));
+
+  // Load the viewer's last selection once the component mounts client-side
+  // (localStorage isn't available during SSR) — reduces re-ticking 10 boxes every visit.
+  useEffect(() => {
+    setSelected(loadStoredSections(sectionKeys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...selected])); } catch { /* private mode / blocked storage */ }
+  }, [selected]);
 
   function toggleSection(key: string) {
     setSelected((s) => { const next = new Set(s); if (next.has(key)) next.delete(key); else next.add(key); return next; });

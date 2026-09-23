@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const range = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 
   const sheets: { name: string; rows: (string | number | Date | null)[][] }[] = [];
-  const summary: [string, number][] = [];
+  const summary: [string, number, number | null][] = [];
 
   if (sections.has("sales")) {
     const sales = await prisma.sale.findMany({
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
           s.items.map((i) => `${i.quantity}x ${i.product?.name ?? i.name}`).join("; ")]),
       ],
     });
-    summary.push(["Продажи", sales.length]);
+    const revenue = sales.filter((s) => s.status === "COMPLETED").reduce((sum, s) => sum + Number(s.total), 0);
+    summary.push(["Продажи (выручка)", sales.length, revenue]);
   }
 
   if (sections.has("customerReturns")) {
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.documentNo, r.postedAt, r.customer?.name ?? "—", r.user.name, Number(r.totalAmount), r.comment ?? ""]),
       ],
     });
-    summary.push(["Возвраты покупателей", rows.length]);
+    summary.push(["Возвраты покупателей", rows.length, rows.reduce((s, r) => s + Number(r.totalAmount), 0)]);
   }
 
   if (sections.has("purchaseReceipts")) {
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.documentNo, r.postedAt, r.supplier?.name ?? "—", r.user.name, Number(r.totalAmount), r.comment ?? ""]),
       ],
     });
-    summary.push(["Приёмки", rows.length]);
+    summary.push(["Приёмки", rows.length, rows.reduce((s, r) => s + Number(r.totalAmount), 0)]);
   }
 
   if (sections.has("supplierReturns")) {
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.documentNo, r.postedAt, r.supplier?.name ?? "—", r.user.name, Number(r.totalAmount), r.comment ?? ""]),
       ],
     });
-    summary.push(["Возвраты поставщикам", rows.length]);
+    summary.push(["Возвраты поставщикам", rows.length, rows.reduce((s, r) => s + Number(r.totalAmount), 0)]);
   }
 
   if (sections.has("writeOffs")) {
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.documentNo, r.postedAt, r.user.name, Number(r.totalCost), r.items.length, r.note ?? ""]),
       ],
     });
-    summary.push(["Списания", rows.length]);
+    summary.push(["Списания", rows.length, rows.reduce((s, r) => s + Number(r.totalCost), 0)]);
   }
 
   if (sections.has("storeTransfers")) {
@@ -125,14 +126,15 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.documentNo, r.postedAt, r.toStore.name, r.user.name, Number(r.totalAmount), r.comment ?? ""]),
       ],
     });
-    summary.push(["Перемещения", rows.length]);
+    summary.push(["Перемещения", rows.length, rows.reduce((s, r) => s + Number(r.totalAmount), 0)]);
   }
 
   if (sections.has("stocktakes")) {
     const rows = await prisma.stocktake.findMany({
       where: { storeId, status: "POSTED", postedAt: range }, orderBy: { postedAt: "desc" },
-      include: { user: { select: { name: true } }, items: true },
+      include: { user: { select: { name: true } }, items: { include: { product: { select: { price: true } } } } },
     });
+    let stocktakeNetValue = 0;
     sheets.push({
       name: "Инвентаризации",
       rows: [
@@ -140,11 +142,12 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => {
           const surplus = r.items.filter((i) => Number(i.difference ?? 0) > 0).length;
           const shortage = r.items.filter((i) => Number(i.difference ?? 0) < 0).length;
+          stocktakeNetValue += r.items.reduce((s, i) => s + Number(i.difference ?? 0) * Number(i.product.price), 0);
           return [r.documentNo, r.postedAt, r.user.name, r.items.length, surplus, shortage, r.note ?? ""];
         }),
       ],
     });
-    summary.push(["Инвентаризации", rows.length]);
+    summary.push(["Инвентаризации (излишек/недостача, ₸)", rows.length, stocktakeNetValue]);
   }
 
   if (sections.has("cashMovements")) {
@@ -159,7 +162,8 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.createdAt, CASH_TYPE[r.type] ?? r.type, Number(r.amount), r.user.name, r.reason ?? ""]),
       ],
     });
-    summary.push(["Движение денег", rows.length]);
+    const netCash = rows.reduce((s, r) => s + (r.type === "IN" ? Number(r.amount) : -Number(r.amount)), 0);
+    summary.push(["Движение денег (нетто, ₸)", rows.length, netCash]);
   }
 
   if (sections.has("inventoryMovements")) {
@@ -174,7 +178,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.createdAt, r.product.name, r.product.barcode ?? "", r.type, Number(r.quantity), Number(r.stockAfter), r.user.name, r.documentNo ?? ""]),
       ],
     });
-    summary.push(["Товарные движения", rows.length]);
+    summary.push(["Товарные движения", rows.length, null]);
   }
 
   if (sections.has("products")) {
@@ -189,7 +193,10 @@ export async function GET(req: NextRequest) {
         ...rows.map((p) => [p.name, p.barcode ?? "", p.categoryRef?.name ?? "", p.supplier?.name ?? "", Number(p.stock), p.unit, Number(p.cost ?? 0), Number(p.price)]),
       ],
     });
-    summary.push(["Остатки товаров (позиций)", rows.length]);
+    const stockCostValue = rows.reduce((s, p) => s + Number(p.stock) * Number(p.cost ?? 0), 0);
+    const stockSaleValue = rows.reduce((s, p) => s + Number(p.stock) * Number(p.price), 0);
+    summary.push(["Остатки товаров (по закупочной, ₸)", rows.length, stockCostValue]);
+    summary.push(["Остатки товаров (по продажной, ₸)", rows.length, stockSaleValue]);
   }
 
   sheets.unshift({
@@ -198,7 +205,7 @@ export async function GET(req: NextRequest) {
       ["Полный отчёт по магазину"],
       ["Период", from ? from.toLocaleDateString("ru-RU") : "—", "по", to ? to.toLocaleDateString("ru-RU") : "—"],
       [],
-      ["Раздел", "Кол-во записей"],
+      ["Раздел", "Кол-во записей", "Сумма, ₸"],
       ...summary,
     ],
   });
