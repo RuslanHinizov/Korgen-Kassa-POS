@@ -188,9 +188,19 @@ export default function ShiftsPage() {
                     </td>
                     {showProfit && <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(s.profit)}</td>}
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => setViewId(s.id)} className="text-xs text-primary hover:underline">
-                        {t(s.status === "OPEN" ? "x_report" : "z_report")}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => setViewId(s.id)} className="text-xs text-primary hover:underline">
+                          {t(s.status === "OPEN" ? "x_report" : "z_report")}
+                        </button>
+                        <button
+                          onClick={() => window.open(`/api/reports/full-export?shiftId=${s.id}&sections=sales,cashMovements`, "_blank")}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          aria-label="Скачать отчёт по смене"
+                          title="Скачать отчёт по смене"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

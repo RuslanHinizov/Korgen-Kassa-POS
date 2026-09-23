@@ -24,13 +24,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const sp = req.nextUrl.searchParams;
-  const from = sp.get("from") ? new Date(sp.get("from")!) : null;
-  const to = sp.get("to") ? new Date(sp.get("to")!) : null;
   const sectionsParam = sp.get("sections");
   const sections = new Set<Section>(
     sectionsParam ? (sectionsParam.split(",").filter((s): s is Section => (SECTIONS as readonly string[]).includes(s))) : SECTIONS
   );
   const storeId = await getStoreId();
+
+  // A shiftId scopes Продажи/Движение денег to exactly that shift (not just its
+  // time window, which could otherwise leak another cashier's parallel sales in) —
+  // the "download this shift's report" button on Смены passes this instead of from/to.
+  const shiftId = sp.get("shiftId");
+  const shift = shiftId ? await prisma.shift.findFirst({ where: { id: shiftId, storeId }, select: { openedAt: true, closedAt: true } }) : null;
+  if (shiftId && !shift) return NextResponse.json({ error: "Смена не найдена" }, { status: 404 });
+
+  const from = shift ? shift.openedAt : sp.get("from") ? new Date(sp.get("from")!) : null;
+  const to = shift ? (shift.closedAt ?? new Date()) : sp.get("to") ? new Date(sp.get("to")!) : null;
   const range = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 
   const sheets: { name: string; rows: (string | number | Date | null)[][] }[] = [];
@@ -38,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   if (sections.has("sales")) {
     const sales = await prisma.sale.findMany({
-      where: { storeId, createdAt: range }, orderBy: { createdAt: "desc" },
+      where: shiftId ? { storeId, shiftId } : { storeId, createdAt: range }, orderBy: { createdAt: "desc" },
       include: { items: { include: { product: { select: { name: true } } } } },
     });
     sheets.push({
@@ -152,7 +160,7 @@ export async function GET(req: NextRequest) {
 
   if (sections.has("cashMovements")) {
     const rows = await prisma.cashMovement.findMany({
-      where: { shift: { storeId }, createdAt: range }, orderBy: { createdAt: "desc" },
+      where: shiftId ? { shiftId } : { shift: { storeId }, createdAt: range }, orderBy: { createdAt: "desc" },
       include: { user: { select: { name: true } } },
     });
     sheets.push({
@@ -202,13 +210,14 @@ export async function GET(req: NextRequest) {
   sheets.unshift({
     name: "Сводка",
     rows: [
-      ["Полный отчёт по магазину"],
-      ["Период", from ? from.toLocaleDateString("ru-RU") : "—", "по", to ? to.toLocaleDateString("ru-RU") : "—"],
+      [shift ? "Отчёт по смене" : "Полный отчёт по магазину"],
+      ["Период", from ? from.toLocaleString("ru-RU") : "—", "по", to ? to.toLocaleString("ru-RU") : "—"],
       [],
       ["Раздел", "Кол-во записей", "Сумма, ₸"],
       ...summary,
     ],
   });
 
-  return xlsxMultiSheetResponse({ filename: `polnyy-otchet-${new Date().toISOString().slice(0, 10)}`, sheets });
+  const filename = shift ? `smena-otchet-${shift.openedAt.toISOString().slice(0, 10)}` : `polnyy-otchet-${new Date().toISOString().slice(0, 10)}`;
+  return xlsxMultiSheetResponse({ filename, sheets });
 }
