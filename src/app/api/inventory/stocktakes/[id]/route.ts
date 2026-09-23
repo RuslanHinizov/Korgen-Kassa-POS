@@ -32,6 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         expectedQty: Number(i.expectedQty),
         countedQty: i.countedQty != null ? Number(i.countedQty) : null,
         difference: i.difference != null ? Number(i.difference) : null,
+        scannedAt: i.scannedAt ? i.scannedAt.toISOString() : null,
       })),
     },
   });

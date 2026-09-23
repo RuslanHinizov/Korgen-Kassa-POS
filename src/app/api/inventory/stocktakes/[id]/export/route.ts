@@ -23,12 +23,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
   if (!stocktake) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
 
-  const header = ["Товар", "Штрихкод", "Ожидалось", "Факт", "Разница", ...(canSeeCost ? ["Закуп. цена"] : []), "Прод. цена"];
+  const header = ["Товар", "Штрихкод", "Время сканирования", "Сканировано", "Остаток на время сканирования", "Разница", ...(canSeeCost ? ["Закуп. цена"] : []), "Прод. цена"];
   const rows = stocktake.items.map((i) => {
-    const counted = i.countedQty != null ? Number(i.countedQty) : null;
-    const diff = i.difference != null ? Number(i.difference) : null;
+    const counted = i.countedQty != null ? Number(i.countedQty) : 0;
+    const diff = i.difference != null ? Number(i.difference) : -Number(i.expectedQty);
     return [
-      i.product.name, i.product.barcode ?? "", Number(i.expectedQty), counted ?? "—", diff ?? "—",
+      i.product.name, i.product.barcode ?? "", i.scannedAt ?? "", counted, Number(i.expectedQty), diff,
       ...(canSeeCost ? [i.product.cost != null ? Number(i.product.cost) : ""] : []),
       Number(i.product.price),
     ];

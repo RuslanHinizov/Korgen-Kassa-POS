@@ -34,7 +34,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const item = await prisma.stocktakeItem.update({
     where: { id: itemId },
-    data: { countedQty: parsed.data.countedQty, difference: parsed.data.countedQty - Number(existingItem.expectedQty) },
+    // Matches real UMAG: entering a count (manually or via a scan) stamps the
+    // moment it happened — "Время сканирования" — and clears the unscanned warning.
+    data: { countedQty: parsed.data.countedQty, difference: parsed.data.countedQty - Number(existingItem.expectedQty), scannedAt: new Date() },
   });
   return NextResponse.json({ item });
 }

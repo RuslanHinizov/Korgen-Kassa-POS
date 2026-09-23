@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const markupSign = sp.get("markupSign") === "positive" ? "positive" : sp.get("markupSign") === "negative" ? "negative" : null;
   const markupFrom = sp.get("markupFrom"); const markupTo = sp.get("markupTo");
   const ntinFilter = sp.get("ntin");
+  const stockFilter = sp.get("stock"); // nonzero|zero — Остаток filter in the stocktake product picker
 
   const typeWhere: Prisma.ProductWhereInput =
     type === "factory" ? { productType: "REGULAR", barcode: { not: null }, NOT: { barcode: { startsWith: "290" } } }
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
     ...(ntinFilter === "set" ? { ntin: { not: null } } : ntinFilter === "unset" ? { ntin: null } : {}),
     ...(priceField && (priceFrom || priceTo) ? { [priceField]: { ...(priceFrom ? { gte: Number(priceFrom) } : {}), ...(priceTo ? { lte: Number(priceTo) } : {}) } } : {}),
     ...(markupIds ? { id: { in: markupIds } } : {}),
+    ...(stockFilter === "nonzero" ? { stock: { gt: 0 } } : stockFilter === "zero" ? { stock: { lte: 0 } } : {}),
   };
 
   const [total, products] = await Promise.all([
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest) {
       orderBy: sortBy ? { [sortBy]: sortOrder } : { updatedAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { supplier: { select: { name: true } } },
+      include: { supplier: { select: { name: true } }, categoryRef: { select: { name: true } } },
     }),
   ]);
 
@@ -92,7 +94,8 @@ export async function GET(req: NextRequest) {
         additionalCode: p.additionalCode, cost: canSeeCost ? cost : 0, price, unit: p.unit, scalePlu: p.scalePlu, productType: p.productType,
         markup: !canSeeCost ? 0 : cost > 0 ? Math.round(((price - cost) / cost) * 1000) / 10 : 0,
         margin: !canSeeCost ? 0 : price > 0 ? Math.round(((price - cost) / price) * 1000) / 10 : 0,
-        updatedAt: p.updatedAt, supplierName: p.supplier?.name ?? null, active: p.active,
+        updatedAt: p.updatedAt, supplierName: p.supplier?.name ?? null, categoryName: p.categoryRef?.name ?? null,
+        stock: Number(p.stock), active: p.active,
       };
     }),
     total,

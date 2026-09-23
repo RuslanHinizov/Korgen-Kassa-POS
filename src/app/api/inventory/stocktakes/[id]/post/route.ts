@@ -6,8 +6,11 @@ import { getStoreId } from "@/lib/store-context";
 import { applyInventoryMovement } from "@/lib/inventory-ledger";
 import { logAudit } from "@/lib/audit";
 
-// POST /api/inventory/stocktakes/:id/post — Провести: Проведение → Проведен.
-// Applies each line's difference to stock and writes an inventory ledger row, then locks the document.
+// POST /api/inventory/stocktakes/:id/post — Провести: Черновик/Подсчёт → Проведён.
+// Matches real UMAG: no separate review stage — Провести works directly, even if
+// some lines were never actually scanned (still 0/flagged) — the human is trusted
+// to have seen the warning. Applies each line's difference to stock, writes an
+// inventory ledger row, then locks the document.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
@@ -18,7 +21,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const stocktake = await prisma.stocktake.findFirst({ where: { id, storeId }, include: { items: true } });
   if (!stocktake) return NextResponse.json({ error: "Документ не найден" }, { status: 404 });
-  if (stocktake.status !== "REVIEWING") return NextResponse.json({ error: "Сначала завершите подсчёт и проверку" }, { status: 409 });
+  if (stocktake.status !== "DRAFT" && stocktake.status !== "COUNTING") {
+    return NextResponse.json({ error: "Документ уже проведён или отменён" }, { status: 409 });
+  }
+  if (stocktake.items.length === 0) return NextResponse.json({ error: "Добавьте хотя бы один товар" }, { status: 400 });
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

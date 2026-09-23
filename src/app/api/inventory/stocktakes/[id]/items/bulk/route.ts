@@ -5,11 +5,14 @@ import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
 
-const schema = z.object({ categoryId: z.string().min(1) });
+const schema = z.union([
+  z.object({ productIds: z.array(z.string().min(1)).min(1) }),
+  z.object({ categoryId: z.string().min(1) }),
+]);
 
-// POST /api/inventory/stocktakes/:id/items/bulk — add every active product in a
-// category (and its subcategories) to the count at once, the "zone" equivalent
-// of a physical inventory count. Skips products already in the document.
+// POST /api/inventory/stocktakes/:id/items/bulk — add several products at once,
+// either explicit ids (the "Добавление товаров" filter+checkbox picker) or every
+// product in a category and its subcategories. Skips products already added.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
@@ -26,23 +29,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "На этом этапе нельзя добавлять товары" }, { status: 409 });
   }
 
-  const rootCategory = await prisma.category.findFirst({ where: { id: parsed.data.categoryId, storeId }, select: { id: true } });
-  if (!rootCategory) return NextResponse.json({ error: "Категория не найдена" }, { status: 404 });
-
-  // Walk the category tree to include subcategories.
-  const categoryIds = [rootCategory.id];
-  let frontier = [rootCategory.id];
-  while (frontier.length > 0) {
-    const children = await prisma.category.findMany({ where: { storeId, parentId: { in: frontier } }, select: { id: true } });
-    frontier = children.map((c) => c.id);
-    categoryIds.push(...frontier);
-  }
-
   const existingIds = new Set(
     (await prisma.stocktakeItem.findMany({ where: { stocktakeId }, select: { productId: true } })).map((i) => i.productId)
   );
+
+  let productIdsToAdd: string[];
+  if ("productIds" in parsed.data) {
+    productIdsToAdd = parsed.data.productIds;
+  } else {
+    const rootCategory = await prisma.category.findFirst({ where: { id: parsed.data.categoryId, storeId }, select: { id: true } });
+    if (!rootCategory) return NextResponse.json({ error: "Категория не найдена" }, { status: 404 });
+
+    // Walk the category tree to include subcategories.
+    const categoryIds = [rootCategory.id];
+    let frontier = [rootCategory.id];
+    while (frontier.length > 0) {
+      const children = await prisma.category.findMany({ where: { storeId, parentId: { in: frontier } }, select: { id: true } });
+      frontier = children.map((c) => c.id);
+      categoryIds.push(...frontier);
+    }
+
+    const inCategory = await prisma.product.findMany({ where: { storeId, deletedAt: null, categoryId: { in: categoryIds } }, select: { id: true } });
+    productIdsToAdd = inCategory.map((p) => p.id);
+  }
+
   const products = await prisma.product.findMany({
-    where: { storeId, deletedAt: null, categoryId: { in: categoryIds }, id: { notIn: [...existingIds] } },
+    where: { storeId, deletedAt: null, id: { in: productIdsToAdd, notIn: [...existingIds] } },
     select: { id: true, stock: true },
   });
 
@@ -50,9 +62,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await prisma.$transaction([
     prisma.stocktakeItem.createMany({
-      data: products.map((p) => ({
-        stocktakeId, productId: p.id, expectedQty: p.stock, countedQty: null, difference: null,
-      })),
+      data: products.map((p) => {
+        const expectedQty = p.stock;
+        return {
+          stocktakeId, productId: p.id, expectedQty,
+          // Matches real UMAG: starts counted at 0, openly shown, flagged until scanned.
+          countedQty: 0, difference: -Number(expectedQty), scannedAt: null,
+        };
+      }),
     }),
     ...(stocktake.status === "DRAFT" ? [prisma.stocktake.update({ where: { id: stocktakeId }, data: { status: "COUNTING" as const } })] : []),
   ]);

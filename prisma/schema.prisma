@@ -1314,9 +1314,12 @@ model StocktakeItem {
   stocktakeId String
   productId   String
   expectedQty Decimal  @db.Decimal(10, 3)
-  // null = not yet counted (blind count — never pre-filled from expectedQty).
+  // Matches real UMAG: a newly added line starts counted at 0 (not hidden/blind —
+  // shown openly with a warning until actually scanned). scannedAt is what tracks
+  // "has anyone actually counted this" — null means still just the 0 default.
   countedQty  Decimal? @db.Decimal(10, 3)
   difference  Decimal? @db.Decimal(10, 3)
+  scannedAt   DateTime?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)

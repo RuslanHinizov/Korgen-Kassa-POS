@@ -5,20 +5,22 @@ import { StoreLink as Link } from "@/components/store/store-link";
 import { useStoreRouter as useRouter } from "@/components/store/use-store-router";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-import { ArrowLeft, Check, ChevronDown, ChevronLeft, Download, Loader2, Search, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, Download, Loader2, Search, Trash2 } from "lucide-react";
 import { isFractionalUnit, parseQuantityInput } from "@/lib/units";
 import { useSession } from "@/lib/auth-client";
+import { AddProductsModal } from "./add-products-modal";
 
 type Status = "DRAFT" | "COUNTING" | "REVIEWING" | "POSTED" | "CANCELLED";
 const STATUS_LABEL: Record<Status, string> = {
   DRAFT: "Черновик", COUNTING: "Подсчёт", REVIEWING: "Проведение", POSTED: "Проведён", CANCELLED: "Отменён",
 };
+const dateTimeFmt = (iso: string) => new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 interface Item {
   id: string; productId: string; productName: string; barcode: string | null; unit: string;
   currentStock: number; cost: number | null; price: number; expectedQty: number; countedQty: number | null; difference: number | null;
+  scannedAt: string | null;
 }
-interface CategoryOption { id: string; name: string }
 interface Doc {
   id: string; documentNo: number; status: Status; note: string | null;
   countedAt: string; postedAt: string | null; userName: string; items: Item[];
@@ -33,15 +35,13 @@ export function StocktakeDetail({ id }: { id: string }) {
   const role = useSession().data?.user.role;
   const [hideStock, setHideStock] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
-  const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
       setHideStock(Boolean(d?.hideStockDuringStocktake));
       setHideAmounts(Boolean(d?.hideAmountsDuringStocktake));
     }).catch(() => {});
-    fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? [])).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -53,8 +53,9 @@ export function StocktakeDetail({ id }: { id: string }) {
   }, [id, router]);
   useEffect(() => { load(); }, [load]);
 
+  // Matches real UMAG: no separate review stage — Провести is available directly
+  // from Черновик/Подсчёт, the document just isn't editable once Проведён.
   const editable = doc?.status === "DRAFT" || doc?.status === "COUNTING";
-  const reviewing = doc?.status === "REVIEWING";
 
   async function addProduct(p: PickProduct) {
     setBusy(true);
@@ -63,21 +64,6 @@ export function StocktakeDetail({ id }: { id: string }) {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: p.id }),
       });
       if (!r.ok) { toast.error((await r.json()).error ?? "Не удалось добавить"); return; }
-      load();
-    } finally { setBusy(false); }
-  }
-
-  async function addCategory(categoryId: string) {
-    setBusy(true);
-    setCategoryMenuOpen(false);
-    try {
-      const r = await fetch(`/api/inventory/stocktakes/${id}/items/bulk`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) { toast.error(d.error ?? "Не удалось добавить"); return; }
-      if (d.added === 0) toast.info("В этой категории нет новых товаров для добавления");
-      else toast.success(`Добавлено товаров: ${d.added}`);
       load();
     } finally { setBusy(false); }
   }
@@ -96,24 +82,6 @@ export function StocktakeDetail({ id }: { id: string }) {
     try {
       const r = await fetch(`/api/inventory/stocktakes/${id}/items/${itemId}`, { method: "DELETE" });
       if (!r.ok) { toast.error("Не удалось удалить"); return; }
-      load();
-    } finally { setBusy(false); }
-  }
-
-  async function finishCounting() {
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/inventory/stocktakes/${id}/review`, { method: "POST" });
-      if (!r.ok) { toast.error((await r.json()).error ?? "Не удалось завершить подсчёт"); return; }
-      load();
-    } finally { setBusy(false); }
-  }
-
-  async function backToCounting() {
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/inventory/stocktakes/${id}/reopen`, { method: "POST" });
-      if (!r.ok) { toast.error("Не удалось вернуться к подсчёту"); return; }
       load();
     } finally { setBusy(false); }
   }
@@ -151,6 +119,11 @@ export function StocktakeDetail({ id }: { id: string }) {
         <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{STATUS_LABEL[doc.status]}</span>
         <span className="text-xs text-muted-foreground">Создатель: {doc.userName}</span>
         <div className="ml-auto flex items-center gap-2">
+          {editable && doc.items.length > 0 && (
+            <button onClick={postDoc} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Провести
+            </button>
+          )}
           <button onClick={() => window.open(`/api/inventory/stocktakes/${id}/export`, "_blank")} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
             <Download className="h-4 w-4" /> Экспорт
           </button>
@@ -158,21 +131,6 @@ export function StocktakeDetail({ id }: { id: string }) {
             <button onClick={deleteDoc} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-destructive/30 px-3 text-sm font-medium text-destructive hover:bg-destructive/10">
               <Trash2 className="h-4 w-4" /> Удалить
             </button>
-          )}
-          {doc.status === "COUNTING" && doc.items.length > 0 && (
-            <button onClick={finishCounting} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Завершить подсчёт
-            </button>
-          )}
-          {reviewing && (
-            <>
-              <button onClick={backToCounting} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent">
-                <ChevronLeft className="h-4 w-4" /> Назад к подсчёту
-              </button>
-              <button onClick={postDoc} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Провести
-              </button>
-            </>
           )}
         </div>
       </div>
@@ -191,45 +149,35 @@ export function StocktakeDetail({ id }: { id: string }) {
           <div className="flex-1">
             <ProductPicker onPick={addProduct} busy={busy} existingIds={doc.items.map((i) => i.productId)} />
           </div>
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setCategoryMenuOpen((v) => !v)}
-              disabled={busy}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-50"
-            >
-              Добавить категорию целиком <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {categoryMenuOpen && (
-              <div className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border bg-popover p-1 shadow-lg">
-                {categories.length === 0 ? (
-                  <p className="px-2 py-3 text-center text-xs text-muted-foreground">Категорий нет</p>
-                ) : (
-                  categories.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => addCategory(c.id)}
-                      className="block w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
-                    >
-                      {c.name}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setAddModalOpen(true)}
+            disabled={busy}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent disabled:opacity-50"
+          >
+            Добавить из номенклатуры
+          </button>
         </div>
       )}
 
+      {addModalOpen && (
+        <AddProductsModal
+          stocktakeId={id}
+          existingIds={doc.items.map((i) => i.productId)}
+          onClose={() => setAddModalOpen(false)}
+          onAdded={load}
+        />
+      )}
+
       {(() => {
-        // Blind count: while counting, Ожидалось/Разница are always hidden — the
-        // business setting only controls their visibility once REVIEWING/POSTED.
-        const counting = doc.status === "DRAFT" || doc.status === "COUNTING";
-        const hideStockCols = counting ? true : hideStock;
+        // Matches real UMAG: Ожидалось (system stock) is shown openly at every
+        // stage — the business setting is the only thing that hides it, same as
+        // it always was for Прод./Закуп. цена. No phase-based blind-count hiding.
+        const hideStockCols = hideStock;
         const hideAmountCols = editable && hideAmounts;
         // UMAG never shows Закупочная цена to Складской работник, regardless of the inventory-hide setting.
         const canSeeCost = role !== "WAREHOUSE";
-        const colCount = 2 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
+        const colCount = 3 + (hideStockCols ? 0 : 2) + (hideAmountCols ? 0 : 2) + (editable ? 1 : 0);
 
         const reconciliation = !editable ? (() => {
           const surplus = doc.items.filter((i) => (i.difference ?? 0) > 0);
@@ -267,41 +215,65 @@ export function StocktakeDetail({ id }: { id: string }) {
           <thead>
             <tr className="border-b bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <th className="px-3 py-2 text-left">Товар</th>
-              {!hideStockCols && <th className="px-3 py-2 text-right">Ожидалось</th>}
-              <th className="px-3 py-2 text-right">Факт</th>
+              <th className="px-3 py-2 text-left">Время сканирования</th>
+              <th className="px-3 py-2 text-right">Сканировано</th>
+              {!hideStockCols && <th className="px-3 py-2 text-right">Остаток на время сканирования</th>}
               {!hideStockCols && <th className="px-3 py-2 text-right">Разница</th>}
-              {!hideAmountCols && canSeeCost && <th className="px-3 py-2 text-right">Закуп. цена</th>}
-              {!hideAmountCols && <th className="px-3 py-2 text-right">Прод. цена</th>}
+              {!hideAmountCols && canSeeCost && <th className="px-3 py-2 text-right">Сумма закуп. цены и за ед</th>}
+              {!hideAmountCols && <th className="px-3 py-2 text-right">Сумма прод. цены и за ед</th>}
               {editable && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y">
             {doc.items.map((item) => {
-              const uncounted = item.countedQty === null;
+              // Matches real UMAG: a line not yet actually scanned shows a warning
+              // once its (0-default) count leaves a nonzero difference — not "hidden",
+              // just openly flagged so it isn't mistaken for a confirmed count.
+              const unscanned = item.scannedAt === null;
+              const diff = item.difference ?? 0;
               return (
-              <tr key={item.id} className={uncounted && editable ? "bg-amber-500/5 hover:bg-amber-500/10" : "hover:bg-muted/40"}>
+              <tr key={item.id} className="hover:bg-muted/40">
                 <td className="px-3 py-2">
                   <p className="font-medium">{item.productName}</p>
                   <p className="text-xs text-muted-foreground tabular-nums">{item.barcode ?? "—"}</p>
                 </td>
-                {!hideStockCols && <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.expectedQty} {item.unit}</td>}
+                <td className="px-3 py-2 text-muted-foreground tabular-nums">
+                  {item.scannedAt ? dateTimeFmt(item.scannedAt) : "—"}
+                </td>
                 <td className="px-3 py-2 text-right">
                   {editable ? (
                     <input
-                      type="number" inputMode={isFractionalUnit(item.unit) ? "decimal" : "numeric"} min="0" step={isFractionalUnit(item.unit) ? "0.001" : "1"} defaultValue={item.countedQty ?? ""}
-                      placeholder="—"
+                      type="number" inputMode={isFractionalUnit(item.unit) ? "decimal" : "numeric"} min="0" step={isFractionalUnit(item.unit) ? "0.001" : "1"} defaultValue={item.countedQty ?? 0}
                       onBlur={(e) => { const v = parseQuantityInput(e.target.value, item.unit, true); if (v !== null && v !== item.countedQty) updateCounted(item.id, v); }}
-                      className={`h-8 w-24 rounded-md border bg-background px-2 text-right text-xs ${uncounted ? "border-amber-500/50" : ""}`}
+                      className="h-8 w-24 rounded-md border bg-background px-2 text-right text-xs"
                     />
-                  ) : `${item.countedQty ?? "—"} ${item.unit}`}
+                  ) : `${item.countedQty ?? 0} ${item.unit}`}
                 </td>
+                {!hideStockCols && <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{item.expectedQty} {item.unit}</td>}
                 {!hideStockCols && (
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${item.difference == null ? "text-muted-foreground" : item.difference > 0 ? "text-emerald-600" : item.difference < 0 ? "text-red-600" : "text-muted-foreground"}`}>
-                    {item.difference == null ? "—" : `${item.difference > 0 ? "+" : ""}${item.difference}`}
+                  <td className="px-3 py-2 text-right">
+                    <span className={`inline-flex items-center gap-1 font-medium tabular-nums ${diff > 0 ? "text-emerald-600" : diff < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                      {unscanned && diff !== 0 && <AlertCircle className="h-3.5 w-3.5" />}
+                      {diff > 0 ? "+" : ""}{diff}
+                    </span>
                   </td>
                 )}
-                {!hideAmountCols && canSeeCost && <td className="px-3 py-2 text-right tabular-nums">{item.cost != null ? formatCurrency(item.cost) : "—"}</td>}
-                {!hideAmountCols && <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(item.price)}</td>}
+                {!hideAmountCols && canSeeCost && (
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {item.cost != null ? (
+                      <>
+                        <span className="block">{formatCurrency(diff * item.cost)}</span>
+                        <span className="block text-xs text-muted-foreground">за ед {formatCurrency(item.cost)}</span>
+                      </>
+                    ) : "—"}
+                  </td>
+                )}
+                {!hideAmountCols && (
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    <span className="block">{formatCurrency(diff * item.price)}</span>
+                    <span className="block text-xs text-muted-foreground">за ед {formatCurrency(item.price)}</span>
+                  </td>
+                )}
                 {editable && (
                   <td className="px-3 py-2 text-right">
                     <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="Удалить">

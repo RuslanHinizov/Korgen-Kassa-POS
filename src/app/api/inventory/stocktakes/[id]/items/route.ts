@@ -34,9 +34,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const expectedQty = Number(product.stock);
   const [item] = await prisma.$transaction([
     prisma.stocktakeItem.create({
-      // Blind count: countedQty/difference start null (not counted yet), never
-      // pre-filled with the system's own expected quantity.
-      data: { stocktakeId, productId: parsed.data.productId, expectedQty, countedQty: null, difference: null },
+      // Matches real UMAG: a newly added line starts counted at 0 (openly shown,
+      // not hidden) with the resulting negative difference flagged in the UI
+      // until it's actually scanned (scannedAt stays null until then).
+      data: { stocktakeId, productId: parsed.data.productId, expectedQty, countedQty: 0, difference: -expectedQty, scannedAt: null },
     }),
     ...(stocktake.status === "DRAFT" ? [prisma.stocktake.update({ where: { id: stocktakeId }, data: { status: "COUNTING" } })] : []),
   ]);
