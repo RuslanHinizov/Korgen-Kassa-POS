@@ -6,42 +6,70 @@ import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { xlsxResponse } from "@/lib/xlsx-response";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 
 const STATUSES = ["DRAFT", "COUNTING", "REVIEWING", "POSTED", "CANCELLED"] as const;
+const LABEL: Record<string, string> = { DRAFT: "Черновик", COUNTING: "Подсчёт", REVIEWING: "Проведение", POSTED: "Проведён", CANCELLED: "Отменён" };
 
-// GET /api/inventory/stocktakes?status=DRAFT,COUNTING — list, newest first
+// GET /api/inventory/stocktakes — Инвентаризация list, matching real UMAG's filter set
+// (date range, статус, пользователь, комментарий, товар) + pagination.
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const statusParam = req.nextUrl.searchParams.get("status");
+  const sp = req.nextUrl.searchParams;
+  const statusParam = sp.get("status");
   const statuses = statusParam ? statusParam.split(",").filter((s): s is (typeof STATUSES)[number] => (STATUSES as readonly string[]).includes(s)) : undefined;
+  const from = sp.get("from");
+  const to = sp.get("to");
+  const userId = sp.get("userId");
+  const comment = sp.get("comment");
+  const q = sp.get("q");
   const storeId = await getStoreId();
 
-  const stocktakes = await prisma.stocktake.findMany({
-    where: { storeId, ...(statuses && statuses.length > 0 ? { status: { in: statuses } } : {}) },
-    include: { user: { select: { name: true } }, _count: { select: { items: true } } },
-    orderBy: { countedAt: "desc" },
-    ...(req.nextUrl.searchParams.get("export") === "xlsx" ? {} : { take: 200 }),
-  });
+  const where: Prisma.StocktakeWhereInput = {
+    storeId,
+    ...(statuses && statuses.length > 0 ? { status: { in: statuses } } : {}),
+    ...(from || to ? { countedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
+    ...(userId ? { userId } : {}),
+    ...(comment ? { note: { contains: comment, mode: "insensitive" } } : {}),
+    ...(q ? { items: { some: { product: { OR: [{ name: { contains: q, mode: "insensitive" } }, { barcode: { contains: q, mode: "insensitive" } }] } } } } : {}),
+  };
 
-  if (req.nextUrl.searchParams.get("export") === "xlsx") {
-    const label: Record<string, string> = { DRAFT: "Черновик", COUNTING: "Подсчёт", REVIEWING: "Проведение", POSTED: "Проведён", CANCELLED: "Отменён" };
+  if (sp.get("export") === "xlsx") {
+    const all = await prisma.stocktake.findMany({ where, include: { user: { select: { name: true } }, _count: { select: { items: true } } }, orderBy: { countedAt: "desc" } });
     return xlsxResponse({
       filename: "inventarizaciya",
       sheetName: "Инвентаризация",
       rows: [
         ["Номер", "Дата подсчёта", "Проведена", "Статус", "Пользователь", "Позиций", "Комментарий"],
-        ...stocktakes.map((s) => [s.documentNo, s.countedAt, s.postedAt ?? "", label[s.status] ?? s.status, s.user.name, s._count.items, s.note ?? ""]),
+        ...all.map((s) => [s.documentNo, s.countedAt, s.postedAt ?? "", LABEL[s.status] ?? s.status, s.user.name, s._count.items, s.note ?? ""]),
       ],
     });
   }
+
+  const page = Math.max(1, Number(sp.get("page")) || 1);
+  const pageSize = Math.min(500, Math.max(1, Number(sp.get("pageSize")) || 50));
+
+  const [stocktakes, total, users] = await Promise.all([
+    prisma.stocktake.findMany({
+      where,
+      include: { user: { select: { name: true } }, _count: { select: { items: true } } },
+      orderBy: { countedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.stocktake.count({ where }),
+    prisma.stocktake.findMany({ where: { storeId }, distinct: ["userId"], select: { userId: true, user: { select: { name: true } } } }),
+  ]);
 
   return NextResponse.json({
     stocktakes: stocktakes.map((s) => ({
       id: s.id, documentNo: s.documentNo, status: s.status, note: s.note, countedAt: s.countedAt, postedAt: s.postedAt,
       userName: s.user.name, itemCount: s._count.items,
     })),
+    total,
+    users: users.map((u) => ({ id: u.userId, name: u.user.name })),
   });
 }
 
