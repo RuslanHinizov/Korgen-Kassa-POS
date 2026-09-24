@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { getSession } from "@/lib/auth-client";
 import { Eye, EyeOff } from "lucide-react";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export default function LoginPage() {
   const t = useTranslations("auth");
@@ -73,17 +74,7 @@ export default function LoginPage() {
               <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Номер телефона
               </label>
-              <input
-                id="phone"
-                type="tel"
-                required
-                autoComplete="tel"
-                inputMode="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className={inputClass}
-                placeholder="+7 775 000 00 00"
-              />
+              <PhoneInput id="phone" required value={phone} onChange={setPhone} className={inputClass} />
             </div>
 
             <div className="space-y-1.5">

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatPhone } from "@/lib/phone";
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, SlidersHorizontal } from "lucide-react";
 import { StoreLink as Link } from "@/components/store/store-link";
@@ -154,7 +155,7 @@ export function EmployeesList({ tab }: { tab: EmployeeTab }) {
                     <td className="text-muted-foreground px-4 py-2.5">{i + 1}</td>
                     <td className="px-4 py-2.5">{[u.name, u.lastName].filter(Boolean).join(" ")}</td>
                     <td className="px-4 py-2.5">{ROLE_LABEL[u.role] ?? u.role}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{u.phone ?? ""}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{formatPhone(u.phone)}</td>
                     <td className="px-4 py-2.5">{u.email.endsWith("@phone.korgen") ? "" : u.email}</td>
                     <td className="px-4 py-2.5">{u.stores.map((s) => <div key={s.id}>{s.name}</div>)}</td>
                     <td className="px-4 py-2.5">

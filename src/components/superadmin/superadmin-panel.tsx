@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, RefreshCw, X } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { formatPhone } from "@/lib/phone";
 
 interface StoreRow {
   id: string; name: string; address: string | null; createdAt: string;
@@ -151,7 +153,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                   </td>
                   <td className="px-4 py-3">
                     {s.admins.length === 0 ? <span className="text-muted-foreground">—</span> : s.admins.map((a) => (
-                      <p key={a.phone ?? a.name}>{a.name} <span className="text-xs text-muted-foreground">{a.phone}</span></p>
+                      <p key={a.phone ?? a.name}>{a.name} <span className="text-xs text-muted-foreground">{formatPhone(a.phone)}</span></p>
                     ))}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{s.users}</td>
@@ -193,7 +195,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                 <input className={input} placeholder="Адрес (необязательно)" value={address} onChange={(e) => setAddress(e.target.value)} />
                 <p className="pt-1 text-xs font-medium text-muted-foreground">Администратор магазина (владелец)</p>
                 <input className={input} placeholder="Имя владельца" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
-                <input className={input} type="tel" placeholder="Номер телефона владельца (логин), +7 775 000 00 00" value={adminPhone} onChange={(e) => setAdminPhone(e.target.value)} />
+                <PhoneInput className={input} value={adminPhone} onChange={setAdminPhone} />
                 <div className="flex gap-2">
                   <input className={input} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
                   <button onClick={() => setAdminPassword(randomPassword())} className="h-9 shrink-0 rounded-md border px-3 text-sm hover:bg-accent">Новый</button>

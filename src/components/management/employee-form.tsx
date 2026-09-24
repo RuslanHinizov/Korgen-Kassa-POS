@@ -1,5 +1,7 @@
 "use client";
 
+import { PhoneInput } from "@/components/ui/phone-input";
+import { formatPhone } from "@/lib/phone";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import JsBarcode from "jsbarcode";
@@ -50,7 +52,7 @@ export function EmployeeForm({ id }: { id?: string }) {
         if (!d?.employee) { toast.error("Пользователь не найден"); return; }
         const e: Detail = d.employee;
         setDetail(e);
-        setForm({ name: e.name, lastName: e.lastName ?? "", phone: e.phone ?? "", email: e.email.endsWith("@phone.korgen") ? "" : e.email, role: e.role, storeIds: e.storeIds, allowCashierLogin: e.allowCashierLogin, pin: "", password: "" });
+        setForm({ name: e.name, lastName: e.lastName ?? "", phone: formatPhone(e.phone), email: e.email.endsWith("@phone.korgen") ? "" : e.email, role: e.role, storeIds: e.storeIds, allowCashierLogin: e.allowCashierLogin, pin: "", password: "" });
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -132,7 +134,7 @@ export function EmployeeForm({ id }: { id?: string }) {
         <div className="bg-card w-full max-w-md space-y-3 rounded-lg border p-5">
           <Field label="Имя" required><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Введите имя пользователя" className={input} /></Field>
           <Field label="Фамилия"><input value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="Введите фамилию пользователя" className={input} /></Field>
-          <Field label="Телефон" required><input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+7 (___) ___-__-__" className={input} /></Field>
+          <Field label="Телефон" required><PhoneInput value={form.phone} onChange={(v) => set("phone", v)} className={input} /></Field>
           <Field label="Почта (необязательно)"><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={input} /></Field>
           <Field label={id ? "Новый пароль" : "Пароль"} required={!id}>
             <input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={id ? "Оставьте пустым, чтобы не менять" : "Не короче 6 символов"} autoComplete="new-password" className={input} />
