@@ -25,6 +25,7 @@ import { HeldOrdersModal } from "./held-orders-modal";
 import { VoidItemModal } from "./void-item-modal";
 import { CustomItemModal } from "./custom-item-modal";
 import { CreateProductModal } from "./create-product-modal";
+import { LabelPickerModal, ProductLabelModal, type LabelProduct } from "./product-label";
 import { EditItemModal } from "./edit-item-modal";
 import { PriceCheckModal } from "./price-check-modal";
 import { GlobalSearchModal } from "./global-search-modal";
@@ -287,6 +288,8 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
 
   const [customOpen, setCustomOpen] = useState(false);
   const [createProduct, setCreateProduct] = useState<{ barcode: string } | null>(null);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [newLabel, setNewLabel] = useState<LabelProduct | null>(null);
 
   // The search bar offers "Создать товар" when a scanned barcode is unknown.
   useEffect(() => {
@@ -802,6 +805,7 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
           {permissions.posCreateProduct && (
             <div className="flex flex-col gap-1 border-t pt-2">
               <button onClick={() => { extra.close(); setCreateProduct({ barcode: "" }); }} className="rounded-md px-2 py-2 text-left text-sm font-medium hover:bg-muted">+ Создать новый товар</button>
+              <button onClick={() => { extra.close(); setLabelPickerOpen(true); }} className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted">Печать этикетки товара</button>
             </div>
           )}
           {(permissions.posPriceCheck || permissions.posGlobalSearch || permissions.posCollapseWindow) && (
@@ -856,10 +860,18 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
       {createProduct && (
         <CreateProductModal
           initialBarcode={createProduct.barcode}
-          onCreated={(product) => { setCreateProduct(null); addProductToCart(product); }}
+          onCreated={(product) => {
+            setCreateProduct(null);
+            addProductToCart(product);
+            // The new item's label is shown right away so it can be printed and stuck on the goods.
+            if (product.barcode) setNewLabel({ name: product.name, price: Number(product.price), unit: product.unit ?? "pcs", barcode: product.barcode });
+          }}
           onClose={() => setCreateProduct(null)}
         />
       )}
+
+      {labelPickerOpen && <LabelPickerModal onClose={() => setLabelPickerOpen(false)} />}
+      {newLabel && <ProductLabelModal product={newLabel} onClose={() => setNewLabel(null)} />}
 
       {customOpen && (
         <CustomItemModal
