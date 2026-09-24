@@ -37,6 +37,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/create-superadmin.mjs ./scripts/create-superadmin.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Persistent home of locally stored uploads (mounted as a volume by docker-compose).

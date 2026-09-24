@@ -104,6 +104,7 @@ model Store {
   updatedAt DateTime @updatedAt
 
   financeAccounts  FinanceAccount[]
+  productCharacteristics ProductCharacteristic[]
   cashboxes        Cashbox[]
   expenseTypes     ExpenseType[]
   payments         Payment[]
@@ -1385,11 +1386,17 @@ model ProductArticle {
 // so the create-article autocomplete can offer previously typed names.
 model ProductCharacteristic {
   id        String   @id @default(cuid())
-  name      String   @unique
+  storeId   String
+  name      String
   createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   values       ProductCharacteristicValue[]
   articleLinks ProductArticleCharacteristic[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
 }
 
 model ProductCharacteristicValue {

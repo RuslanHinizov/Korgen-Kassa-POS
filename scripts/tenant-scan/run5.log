@@ -1,0 +1,61 @@
+victim store_main: 5005 ids, 471 strings, 51302 barcodes
+100 GET api routes, 93 pages
+ADMIN/own-cookie: 2041 requests
+ADMIN/spoofed-store-cookie: 2041 requests
+MANAGER/own-cookie: 2041 requests
+MANAGER/spoofed-store-cookie: 2041 requests
+CASHIER/own-cookie: 2041 requests
+CASHIER/spoofed-store-cookie: 2041 requests
+WAREHOUSE/own-cookie: 2041 requests
+WAREHOUSE/spoofed-store-cookie: 2041 requests
+ANON/own-cookie: 2041 requests
+total requests 18369
+status histogram: {"ADMIN/own-cookie":{"200":489,"307":9,"400":3,"401":142,"403":1,"404":1397},"ADMIN/spoofed-store-cookie":{"200":72,"307":443,"400":3,"401":142,"403":1,"404":1380},"MANAGER/own-cookie":{"200":465,"307":31,"400":3,"401":212,"403":2,"404":1328},"MANAGER/spoofed-store-cookie":{"200":70,"307":443,"400":3,"401":212,"403":2,"404":1311},"CASHIER/own-cookie":{"200":43,"307":442,"400":3,"401":446,"403":3,"404":1104},"CASHIER/spoofed-store-cookie":{"200":43,"307":442,"400":3,"401":446,"403":3,"404":1104},"WAREHOUSE/own-cookie":{"200":359,"307":129,"400":3,"401":374,"403":3,"404":1173},"WAREHOUSE/spoofed-store-cookie":{"200":46,"307":442,"400":3,"401":374,"403":3,"404":1173},"ANON/own-cookie":{"200":3,"307":2038}}
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/customers/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmu6lwj8i000201o05whjxvch | cmu6lwj8i000201o05whjxvch
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/customers/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+32x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/accounts/:id  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+2x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/accounts/store_main  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. id:store_main
+32x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/payments/:id  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+2x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/payments/store_main  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. id:store_main
+32x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/transfers/:id  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+2x PAGE-FOREIGN-ID-200 /store/zz_scan_b/finance/transfers/store_main  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. id:store_main
+16x PAGE-FOREIGN-ID-200 /store/zz_scan_b/management/employees/:id/edit  [ADMIN/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+1x PAGE-FOREIGN-ID-200 /store/zz_scan_b/management/employees/store_main/edit  [ADMIN/own-cookie]  e.g. id:store_main
+32x PAGE-FOREIGN-ID-200 /store/zz_scan_b/management/reference/:id  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+2x PAGE-FOREIGN-ID-200 /store/zz_scan_b/management/reference/store_main  [ADMIN/own-cookie, MANAGER/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/bundle/:id/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-LEAK /store/zz_scan_b/products/categories  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. text:Разное
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/bundle/store_main/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/service/:id/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu707630zqb4895mrkzeqdt | cmtu707630zqb4895mrkzeqdt
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/service/store_main/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/sku/:id/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu707630zqb4895mrkzeqdt | cmtu707630zqb4895mrkzeqdt
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/sku/store_main/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/stock-in/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/stocktake/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu707630zqb4895mrkzeqdt | cmtu707630zqb4895mrkzeqdt
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/stock-in/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/stocktake/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/transfer/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu707630zqb4895mrkzeqdt | cmtu707630zqb4895mrkzeqdt
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/transfer/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/transfer/:id/print  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu707630zqb4895mrkzeqdt | cmtu707630zqb4895mrkzeqdt
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/transfer/store_main/print  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/write-off/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/:id/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/write-off/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/store_main/edit  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/products/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+3x PAGE-LEAK /store/zz_scan_b/purchases/quick  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. text:Сейф - 1
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/returns/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/returns/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/:id/print  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu706pw0ywo4895auzkzm9k | cmtu706pw0ywo4895auzkzm9k
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/store_main/print  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/:id/scan  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/purchases/store_main/scan  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+48x PAGE-FOREIGN-ID-200 /store/zz_scan_b/sales/returns/:id  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. cmtu7004a0h3148950jo8svrr | cmtu7004a0h3148950jo8svrr
+3x PAGE-FOREIGN-ID-200 /store/zz_scan_b/sales/returns/store_main  [ADMIN/own-cookie, MANAGER/own-cookie, WAREHOUSE/own-cookie]  e.g. id:store_main
+4x PAGE-FOREIGN-ID-200 /store/store_main/profile  [ADMIN/spoofed-store-cookie, MANAGER/spoofed-store-cookie, CASHIER/spoofed-store-cookie, WAREHOUSE/spoofed-store-cookie]  e.g. id:store_main
+2x PAGE-FOREIGN-ID-200 /store/store_main/pos  [CASHIER/spoofed-store-cookie, WAREHOUSE/spoofed-store-cookie]  e.g. id:store_main
+
+46 distinct findings (details: scripts/tenant-scan/last-report.json)

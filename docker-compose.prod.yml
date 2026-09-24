@@ -1,0 +1,101 @@
+# Production stack: HTTPS (Caddy) → app → PostgreSQL, plus automatic daily backups.
+#
+#   node scripts/gen-secrets.mjs pos.example.kz        # writes .env.production with fresh random secrets
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#
+# Differences from docker-compose.yml (which is for a single trusted machine):
+#   - the database is NOT published on any port and has its own random password
+#   - only Caddy listens on the network (80/443); it gets the TLS certificate and redirects http → https
+#   - migrations run once before the app starts
+#   - a backup container dumps the database every night (see deploy/backup.sh)
+name: korgen
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Run node scripts/gen-secrets.mjs first}"
+      POSTGRES_DB: olgax_pos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d olgax_pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: korgen-web
+    restart: "no"
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/olgax_pos?schema=public"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: korgen-web
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/olgax_pos?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?Run node scripts/gen-secrets.mjs first}"
+      BETTER_AUTH_URL: "https://${DOMAIN:?Set DOMAIN in .env.production}"
+      NEXT_PUBLIC_APP_URL: "https://${DOMAIN}"
+      BETTER_AUTH_TRUSTED_ORIGINS: "https://${DOMAIN}"
+      NODE_ENV: production
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      PGDATABASE: olgax_pos
+      BACKUP_HOUR: "${BACKUP_HOUR:-03}"
+      BACKUP_KEEP_DAILY: "${BACKUP_KEEP_DAILY:-14}"
+      BACKUP_KEEP_WEEKLY: "${BACKUP_KEEP_WEEKLY:-8}"
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+  backups:

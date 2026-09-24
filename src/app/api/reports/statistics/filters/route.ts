@@ -19,7 +19,7 @@ export async function GET() {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.supplier.findMany({ where: { storeId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { storeAssignments: { some: { storeId } } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   return NextResponse.json({ categories, suppliers, users });

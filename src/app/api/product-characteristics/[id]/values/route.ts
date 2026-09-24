@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
 
 const createSchema = z.object({ value: z.string().trim().min(1).max(60) });
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Некорректное значение" }, { status: 400 });
 
-  const characteristic = await prisma.productCharacteristic.findUnique({ where: { id } });
+  const characteristic = await prisma.productCharacteristic.findFirst({ where: { id, storeId: await getStoreId() } });
   if (!characteristic) return NextResponse.json({ error: "Характеристика не найдена" }, { status: 404 });
 
   const existing = await prisma.productCharacteristicValue.findUnique({

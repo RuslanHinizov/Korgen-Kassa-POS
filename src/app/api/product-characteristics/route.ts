@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
 
 // GET /api/product-characteristics — reusable characteristic names + their known values,
@@ -11,6 +12,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const characteristics = await prisma.productCharacteristic.findMany({
+    where: { storeId: await getStoreId() },
     orderBy: { name: "asc" },
     include: { values: { orderBy: { value: "asc" } } },
   });
@@ -34,9 +36,10 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Некорректное название" }, { status: 400 });
 
-  const existing = await prisma.productCharacteristic.findUnique({ where: { name: parsed.data.name } });
+  const storeId = await getStoreId();
+  const existing = await prisma.productCharacteristic.findUnique({ where: { storeId_name: { storeId, name: parsed.data.name } } });
   if (existing) return NextResponse.json({ characteristic: { id: existing.id, name: existing.name, values: [] } });
 
-  const created = await prisma.productCharacteristic.create({ data: { name: parsed.data.name } });
+  const created = await prisma.productCharacteristic.create({ data: { storeId, name: parsed.data.name } });
   return NextResponse.json({ characteristic: { id: created.id, name: created.name, values: [] } }, { status: 201 });
 }

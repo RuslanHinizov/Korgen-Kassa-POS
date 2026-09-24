@@ -39,9 +39,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!article) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
 
   const allValueIds = [...new Set(data.variants.flatMap((v) => v.valueIds))];
-  const values = await prisma.productCharacteristicValue.findMany({ where: { id: { in: allValueIds } } });
+  const values = await prisma.productCharacteristicValue.findMany({ where: { id: { in: allValueIds }, characteristic: { storeId } } });
   const valueById = new Map(values.map((v) => [v.id, v]));
   if (values.length !== allValueIds.length) return NextResponse.json({ error: "Значение характеристики не найдено" }, { status: 400 });
+
+  const ownCharacteristics = await prisma.productCharacteristic.count({ where: { id: { in: data.characteristicIds }, storeId } });
+  if (ownCharacteristics !== new Set(data.characteristicIds).size) return NextResponse.json({ error: "Характеристика не найдена" }, { status: 400 });
 
   const existingCombos = new Set(
     article.products.map((p) => p.variantValues.map((vv) => vv.valueId).sort().join(","))

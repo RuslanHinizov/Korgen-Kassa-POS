@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { verifyPin } from "@/lib/pin";
 import { issueActingCashierToken, verifyActingCashierToken, ACTING_CASHIER_COOKIE } from "@/lib/acting-cashier";
 import { hasKioskAccess } from "@/lib/kiosk-device";
+import { getStoreId } from "@/lib/store-context";
 
 // GET /api/pos/acting-cashier — resolve the current "who's working" tag, if any.
 export async function GET() {
@@ -13,7 +14,7 @@ export async function GET() {
   const userId = verifyActingCashierToken(jar.get(ACTING_CASHIER_COOKIE)?.value);
   if (!userId) return NextResponse.json({ cashier: null });
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true } });
+  const user = await prisma.user.findFirst({ where: { id: userId, storeAssignments: { some: { storeId: await getStoreId() } } }, select: { id: true, name: true, role: true } });
   return NextResponse.json({ cashier: user ?? null });
 }
 
@@ -28,9 +29,11 @@ export async function POST(req: NextRequest) {
   if (!code && (!userId || !pin)) return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
 
   // A scanned «Идентификационный признак кассира» barcode identifies the cashier without a PIN.
+  // Only people who work in this market can be picked — never another market's cashier.
+  const inStore = { storeAssignments: { some: { storeId: await getStoreId() } } };
   const user = code
-    ? await prisma.user.findFirst({ where: { cashierCode: code, firedAt: null, allowCashierLogin: true }, select: { id: true, name: true, role: true, pin: true } })
-    : await prisma.user.findFirst({ where: { id: userId, firedAt: null }, select: { id: true, name: true, role: true, pin: true } });
+    ? await prisma.user.findFirst({ where: { cashierCode: code, firedAt: null, allowCashierLogin: true, ...inStore }, select: { id: true, name: true, role: true, pin: true } })
+    : await prisma.user.findFirst({ where: { id: userId, firedAt: null, ...inStore }, select: { id: true, name: true, role: true, pin: true } });
   if (!user || (!code && !verifyPin(pin, user.pin))) {
     return NextResponse.json({ error: code ? "Кассир с таким кодом не найден" : "Неверный PIN" }, { status: 401 });
   }

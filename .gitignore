@@ -62,3 +62,8 @@ next-env.d.ts
 /backups/
 /.claude/
 /public/*_export_*.xlsx
+
+# production secrets
+/.env.production
+scripts/tenant-scan/last-report.json
+scripts/tenant-scan/last-run.log

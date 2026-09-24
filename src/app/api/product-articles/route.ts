@@ -72,12 +72,12 @@ export async function POST(req: NextRequest) {
   const codeTaken = await prisma.productArticle.findFirst({ where: { code: data.code, storeId } });
   if (codeTaken) return NextResponse.json({ error: "Артикул с таким кодом уже существует" }, { status: 409 });
 
-  const characteristics = await prisma.productCharacteristic.findMany({ where: { id: { in: data.characteristicIds } } });
+  const characteristics = await prisma.productCharacteristic.findMany({ where: { id: { in: data.characteristicIds }, storeId } });
   if (characteristics.length !== data.characteristicIds.length) {
     return NextResponse.json({ error: "Характеристика не найдена" }, { status: 400 });
   }
   const allValueIds = [...new Set(data.variants.flatMap((v) => v.valueIds))];
-  const values = await prisma.productCharacteristicValue.findMany({ where: { id: { in: allValueIds } } });
+  const values = await prisma.productCharacteristicValue.findMany({ where: { id: { in: allValueIds }, characteristic: { storeId } } });
   const valueById = new Map(values.map((v) => [v.id, v]));
   if (values.length !== allValueIds.length) return NextResponse.json({ error: "Значение характеристики не найдено" }, { status: 400 });
 

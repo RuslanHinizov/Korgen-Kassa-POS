@@ -3,6 +3,17 @@ import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./db";
 
+// A guessable signing secret lets anyone forge a session cookie, so a production server refuses to start
+// with a short or placeholder one (not enforced during `next build`, when runtime env is not present).
+const authSecret = process.env.BETTER_AUTH_SECRET ?? "";
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PHASE !== "phase-production-build" &&
+  (authSecret.length < 32 || /change_?me|placeholder|example/i.test(authSecret))
+) {
+  throw new Error("BETTER_AUTH_SECRET is missing, shorter than 32 characters, or still a placeholder. Run: node scripts/gen-secrets.mjs <domain>");
+}
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",

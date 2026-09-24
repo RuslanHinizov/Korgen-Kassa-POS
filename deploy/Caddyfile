@@ -1,0 +1,18 @@
+# Caddy obtains and renews the TLS certificate by itself (Let's Encrypt) for {$DOMAIN}
+# and redirects plain http to https. The DNS A record of the domain must point at this server.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Caddy replaces X-Forwarded-For with the real client address, so the app's
+	# login history and rate limit see the visitor, not the proxy.
+	reverse_proxy web:3000
+}
