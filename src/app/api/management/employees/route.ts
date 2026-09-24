@@ -3,11 +3,13 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hashPin } from "@/lib/pin";
-import { ROLES, newCashierCode, requireAdmin } from "@/lib/employees";
+import { ROLES, adminStoreIds, newCashierCode, requireAdmin } from "@/lib/employees";
 
 // GET /api/management/employees?status=working|dismissed&q=&role=&storeId=
 export async function GET(req: NextRequest) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const myStores = await adminStoreIds(admin.user.id);
   const sp = req.nextUrl.searchParams;
   const dismissed = sp.get("status") === "dismissed";
   const q = sp.get("q")?.trim();
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
     where: {
       firedAt: dismissed ? { not: null } : null,
       ...(role && (ROLES as readonly string[]).includes(role) ? { role: role as (typeof ROLES)[number] } : {}),
-      ...(storeId ? { storeAssignments: { some: { storeId } } } : {}),
+      storeAssignments: { some: { storeId: storeId && myStores.includes(storeId) ? storeId : { in: myStores } } },
       ...(q
         ? {
             OR: [
@@ -60,7 +62,8 @@ const createSchema = z.object({
 
 // POST /api/management/employees — «+ Пользователь»
 export async function POST(req: NextRequest) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Проверьте обязательные поля (пароль — от 6 символов, пароль кассы — 4 цифры)" }, { status: 400 });
@@ -70,8 +73,8 @@ export async function POST(req: NextRequest) {
   if (await prisma.user.findUnique({ where: { email: d.email } })) {
     return NextResponse.json({ error: "Пользователь с такой почтой уже существует" }, { status: 409 });
   }
-  const stores = await prisma.store.count({ where: { id: { in: d.storeIds } } });
-  if (stores !== new Set(d.storeIds).size) return NextResponse.json({ error: "Торговая точка не найдена" }, { status: 400 });
+  const myStores = await adminStoreIds(admin.user.id);
+  if (!d.storeIds.every((id) => myStores.includes(id))) return NextResponse.json({ error: "Торговая точка не найдена" }, { status: 400 });
 
   await auth.api.signUpEmail({ body: { name: d.name, email: d.email, password: d.password } });
   const user = await prisma.user.update({

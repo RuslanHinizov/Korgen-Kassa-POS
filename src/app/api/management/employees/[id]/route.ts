@@ -3,12 +3,14 @@ import { z } from "zod";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/db";
 import { hashPin } from "@/lib/pin";
-import { ROLES, newCashierCode, requireAdmin } from "@/lib/employees";
+import { ROLES, adminStoreIds, newCashierCode, requireAdmin, sharesStore } from "@/lib/employees";
 
 // GET /api/management/employees/:id
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+  if (!(await sharesStore(admin.user.id, id))) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   const u = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -44,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+  if (!(await sharesStore(session.user.id, id))) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Проверьте обязательные поля (пароль — от 6 символов, пароль кассы — 4 цифры)" }, { status: 400 });
@@ -58,8 +61,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (await prisma.user.findFirst({ where: { email: d.email, NOT: { id } } })) {
     return NextResponse.json({ error: "Эта почта уже используется" }, { status: 409 });
   }
-  const stores = await prisma.store.count({ where: { id: { in: d.storeIds } } });
-  if (stores !== new Set(d.storeIds).size) return NextResponse.json({ error: "Торговая точка не найдена" }, { status: 400 });
+  const myStores = await adminStoreIds(session.user.id);
+  if (!d.storeIds.every((sid) => myStores.includes(sid))) return NextResponse.json({ error: "Торговая точка не найдена" }, { status: 400 });
 
   const cashierCode = existing.cashierCode ? undefined : await newCashierCode();
   const passwordHash = d.password ? await hashPassword(d.password) : null;

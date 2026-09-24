@@ -9,7 +9,11 @@ export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const stores = await prisma.store.findMany({ orderBy: { createdAt: "asc" } });
+  // Only markets the account works in (SUPERADMIN sees all) — never another market's name.
+  const stores = await prisma.store.findMany({
+    where: session.user.role === "SUPERADMIN" ? {} : { userAssignments: { some: { userId: session.user.id } } },
+    orderBy: { createdAt: "asc" },
+  });
   return NextResponse.json({ stores });
 }
 
@@ -29,7 +33,8 @@ const DEFAULT_EXPENSE_TYPES = [
 // Финансы pages work immediately, the same way real UMAG's do per-store.
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) {
+  // Markets are created by the platform owner (Super Admin panel), not by market admins.
+  if (!session || session.user.role !== "SUPERADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const parsed = createSchema.safeParse(await req.json());

@@ -86,6 +86,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // The platform owner's panel lives outside any market (no /store/:id prefix). The page
+  // itself verifies the SUPERADMIN role server-side.
+  if (pathname === "/superadmin" || pathname.startsWith("/superadmin/")) {
+    return NextResponse.next();
+  }
+
   // API routes are called directly (fetch("/api/...")), never through the
   // /store/:id prefix — they read the store id from the cookie via
   // getStoreId(), already set below whenever the user is on a /store/:id page.

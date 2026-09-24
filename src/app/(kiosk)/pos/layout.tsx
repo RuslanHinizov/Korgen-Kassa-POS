@@ -3,7 +3,8 @@ import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/db";
 import { setCurrencyConfig } from "@/lib/utils";
 import { StoreProvider } from "@/components/store/store-provider";
-import { getStoreId } from "@/lib/store-context";
+import { resolveStoreAccess } from "@/lib/store-context";
+import { StoreBlocked } from "@/components/store/store-blocked";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 
@@ -19,7 +20,12 @@ export default async function KioskLayout({ children }: { children: React.ReactN
   // Складской работник can also be issued a kassa PIN (see hasKioskAccess) — same screen.
   if (!["CASHIER", "WAREHOUSE"].includes(session.user.role)) redirect("/");
 
-  const storeId = await getStoreId();
+  const access = await resolveStoreAccess();
+  if (access.noAccess) return <StoreBlocked title="Нет доступа" message="Ваш аккаунт не привязан ни к одному магазину. Обратитесь к администратору." />;
+  if (access.suspended) {
+    return <StoreBlocked title="Доступ к магазину приостановлен" message={access.suspended.message || "Работа этого магазина временно приостановлена. Свяжитесь с поддержкой Korgen Kassa."} />;
+  }
+  const storeId = access.storeId;
   const assigned = await prisma.userStoreAssignment.findUnique({ where: { userId_storeId: { userId: session.user.id, storeId } } });
   if (!assigned) redirect("/profile");
   const settings = await prisma.businessSettings.findUnique({ where: { storeId } }).catch(() => null);

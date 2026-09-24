@@ -15,6 +15,7 @@ datasource db {
 // ============================================================
 
 enum Role {
+  SUPERADMIN
   ADMIN
   MANAGER
   CASHIER
@@ -96,6 +97,9 @@ model Store {
   id        String   @id @default(cuid())
   name      String
   address   String?
+  /// Set by the platform SUPERADMIN: the market's users see suspendedMessage instead of the app.
+  suspendedAt      DateTime?
+  suspendedMessage String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

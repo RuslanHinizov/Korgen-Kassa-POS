@@ -18,6 +18,18 @@ export async function requireAdmin() {
   return session;
 }
 
+/** The markets this administrator works in — an admin never sees or edits another market's people. */
+export async function adminStoreIds(userId: string): Promise<string[]> {
+  const rows = await prisma.userStoreAssignment.findMany({ where: { userId }, select: { storeId: true } });
+  return rows.map((r) => r.storeId);
+}
+
+/** True when the target employee works in at least one of the caller's markets. */
+export async function sharesStore(callerId: string, targetId: string): Promise<boolean> {
+  const mine = await adminStoreIds(callerId);
+  return (await prisma.userStoreAssignment.count({ where: { userId: targetId, storeId: { in: mine } } })) > 0;
+}
+
 /** Unique 10-digit number for the printable cashier barcode. */
 export async function newCashierCode(): Promise<string> {
   for (let i = 0; i < 20; i++) {

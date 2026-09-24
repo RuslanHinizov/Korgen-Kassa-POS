@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const myStores = (await prisma.userStoreAssignment.findMany({ where: { userId: session.user.id }, select: { storeId: true } })).map((a) => a.storeId);
     const users = await prisma.user.findMany({
+      where: { storeAssignments: { some: { storeId: { in: myStores } } } },
       select: {
         id: true,
         email: true,

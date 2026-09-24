@@ -61,7 +61,7 @@ async function checkAdminAuth() {
  * Creates a new user (Admin only)
  */
 export async function createUserAction(data: z.infer<typeof createUserSchema>) {
-  await checkAdminAuth();
+  const admin = await checkAdminAuth();
 
   const parsed = createUserSchema.safeParse(data);
   if (!parsed.success) {
@@ -78,7 +78,8 @@ export async function createUserAction(data: z.infer<typeof createUserSchema>) {
     }
     const uniqueStoreIds = [...new Set(storeIds)];
     if (uniqueStoreIds.length) {
-      const count = await prisma.store.count({ where: { id: { in: uniqueStoreIds } } });
+      // An admin can only place people in markets they themselves work in.
+      const count = await prisma.userStoreAssignment.count({ where: { userId: admin.user.id, storeId: { in: uniqueStoreIds } } });
       if (count !== uniqueStoreIds.length) return { error: "One or more stores do not exist" };
     }
 
@@ -150,7 +151,7 @@ export async function updateUserAction(id: string, data: z.infer<typeof updateUs
     const pinPatch = updates.pin === "__CLEAR__" ? { pin: null } : updates.pin && updates.pin.trim().length >= 4 ? { pin: hashPin(updates.pin.trim()) } : {};
     const uniqueStoreIds = updates.storeIds ? [...new Set(updates.storeIds)] : undefined;
     if (uniqueStoreIds) {
-      const count = await prisma.store.count({ where: { id: { in: uniqueStoreIds } } });
+      const count = await prisma.userStoreAssignment.count({ where: { userId: session.user.id, storeId: { in: uniqueStoreIds } } });
       if (count !== uniqueStoreIds.length) return { error: "One or more stores do not exist" };
     }
 

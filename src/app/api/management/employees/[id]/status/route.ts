@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/employees";
+import { requireAdmin, sharesStore } from "@/lib/employees";
 
 // POST /api/management/employees/:id/status { fired: boolean } — «Уволить» / restore
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+  if (!(await sharesStore(session.user.id, id))) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   const body = await req.json().catch(() => null);
   const fired = body?.fired === true;
 

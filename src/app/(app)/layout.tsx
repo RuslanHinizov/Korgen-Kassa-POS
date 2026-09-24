@@ -6,7 +6,8 @@ import { prisma } from "@/lib/db";
 import { setCurrencyConfig } from "@/lib/utils";
 import { AppShell } from "@/components/layout/app-shell";
 import { StoreProvider } from "@/components/store/store-provider";
-import { getStoreId } from "@/lib/store-context";
+import { resolveStoreAccess } from "@/lib/store-context";
+import { StoreBlocked } from "@/components/store/store-blocked";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +22,24 @@ export default async function AppLayout({
   if (!session) {
     redirect("/login");
   }
+  // The platform owner has no market of their own — their home is the SUPERADMIN panel.
+  if (session.user.role === "SUPERADMIN") {
+    redirect("/superadmin");
+  }
   // Cashiers have a separate account page and cash-register login. Warehouse
   // workers use the same responsive shell, but only see the receipt module.
   if (!['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(session.user.role ?? '')) {
     redirect('/profile');
   }
 
-  const storeId = await getStoreId();
+  const access = await resolveStoreAccess();
+  if (access.noAccess) return <StoreBlocked title="Нет доступа" message="Ваш аккаунт не привязан ни к одному магазину. Обратитесь к администратору." />;
+  if (access.suspended) {
+    return <StoreBlocked title="Доступ к магазину приостановлен" message={access.suspended.message || "Работа этого магазина временно приостановлена. Свяжитесь с поддержкой Korgen Kassa."} />;
+  }
+  // The URL named a market this user doesn't belong to — send them to their own.
+  if (access.mismatch) redirect(`/store/${access.storeId}`);
+  const storeId = access.storeId;
 
   const settings = await prisma.businessSettings
     .findUnique({ where: { storeId } })
