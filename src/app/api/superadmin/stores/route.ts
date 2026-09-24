@@ -18,27 +18,43 @@ const DEFAULT_EXPENSE_TYPES = [
 // GET /api/superadmin/stores — every market with a live snapshot of how it is doing
 export async function GET() {
   if (!(await requireSuperAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  // "Today" is the market's local day (Kazakhstan, UTC+5), the same as on the detail page.
+  const local = new Date(Date.now() + 5 * 3600_000);
+  local.setUTCHours(0, 0, 0, 0);
+  const startOfDay = new Date(local.getTime() - 5 * 3600_000);
 
   const stores = await prisma.store.findMany({ orderBy: { createdAt: "asc" } });
   const rows = await Promise.all(stores.map(async (s) => {
-    const [users, products, salesAgg, lastSale, openShifts, admins] = await Promise.all([
+    const weekStart = new Date(startOfDay.getTime() - 6 * 86400_000);
+    const [users, products, salesAgg, lastSale, openShifts, admins, weekAgg, onlineNow] = await Promise.all([
       prisma.userStoreAssignment.count({ where: { storeId: s.id, user: { firedAt: null } } }),
       prisma.product.count({ where: { storeId: s.id, deletedAt: null } }),
       prisma.sale.aggregate({ where: { storeId: s.id, status: "COMPLETED", createdAt: { gte: startOfDay } }, _sum: { total: true }, _count: true }),
       prisma.sale.findFirst({ where: { storeId: s.id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
       prisma.shift.count({ where: { storeId: s.id, status: "OPEN" } }),
       prisma.user.findMany({ where: { role: "ADMIN", firedAt: null, storeAssignments: { some: { storeId: s.id } } }, select: { name: true, phone: true } }),
+      prisma.sale.aggregate({ where: { storeId: s.id, status: "COMPLETED", createdAt: { gte: weekStart } }, _sum: { total: true } }),
+      prisma.user.count({ where: { storeAssignments: { some: { storeId: s.id } }, sessions: { some: { expiresAt: { gt: new Date() }, updatedAt: { gt: new Date(Date.now() - 15 * 60_000) } } } } }),
     ]);
     return {
       id: s.id, name: s.name, address: s.address, createdAt: s.createdAt,
       suspendedAt: s.suspendedAt, suspendedMessage: s.suspendedMessage,
-      users, products, openShifts, admins,
+      users, products, openShifts, admins, onlineNow, weekRevenue: Number(weekAgg._sum.total ?? 0),
       todaySales: salesAgg._count, todayRevenue: Number(salesAgg._sum.total ?? 0), lastSaleAt: lastSale?.createdAt ?? null,
     };
   }));
-  return NextResponse.json({ stores: rows });
+  const totals = {
+    stores: rows.length,
+    suspended: rows.filter((r) => r.suspendedAt).length,
+    todayRevenue: rows.reduce((a, r) => a + r.todayRevenue, 0),
+    todaySales: rows.reduce((a, r) => a + r.todaySales, 0),
+    weekRevenue: rows.reduce((a, r) => a + r.weekRevenue, 0),
+    openShifts: rows.reduce((a, r) => a + r.openShifts, 0),
+    users: rows.reduce((a, r) => a + r.users, 0),
+    onlineNow: rows.reduce((a, r) => a + r.onlineNow, 0),
+    noSalesToday: rows.filter((r) => !r.suspendedAt && r.todaySales === 0).length,
+  };
+  return NextResponse.json({ stores: rows, totals });
 }
 
 const createSchema = z.object({

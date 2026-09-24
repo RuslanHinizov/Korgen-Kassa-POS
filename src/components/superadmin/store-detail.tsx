@@ -89,6 +89,11 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
   const [busy, setBusy] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [suspendMessage, setSuspendMessage] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetResult, setResetResult] = useState<{ password: string; name: string; phone: string | null } | null>(null);
 
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
@@ -155,6 +160,23 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
     } finally { setBusy(false); }
   }
 
+  async function saveEdit() {
+    await patch({ name: editName, address: editAddress || null }, "Сохранено");
+    setEditOpen(false);
+  }
+
+  async function resetPassword() {
+    if (!resetTarget) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/superadmin/stores/${storeId}/employees/${resetTarget.id}/reset-password`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось сбросить пароль"); return; }
+      setResetTarget(null); setResetResult(d);
+      loadFeed(false);
+    } finally { setBusy(false); }
+  }
+
   const header = (
     <header className="flex items-center gap-3 bg-[#15503A] px-6 py-3 text-white">
       <img src="/korgen-kassa-mark.png" alt="" className="h-8 w-8 rounded-lg bg-white object-contain p-0.5" />
@@ -195,6 +217,7 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" /></span>обновлено {time(d.generatedAt)}</span>
+            <button onClick={() => { setEditName(d.store.name); setEditAddress(d.store.address ?? ""); setEditOpen(true); }} className="inline-flex h-9 items-center rounded-md border bg-white px-3 text-sm hover:bg-accent">Изменить</button>
             <button onClick={() => { loadOverview(); loadFeed(false); }} className="inline-flex h-9 items-center gap-1.5 rounded-md border bg-white px-3 text-sm hover:bg-accent"><RefreshCw className="h-4 w-4" /> Обновить</button>
             {d.store.suspendedAt
               ? <button onClick={() => patch({ suspended: false }, "Магазин снова активен")} disabled={busy} className="h-9 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white">Возобновить</button>
@@ -294,7 +317,7 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
           <Card title={`Сотрудники (${d.employees.length})`}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-slate-500"><tr><th className="py-1.5 text-left">Имя</th><th className="py-1.5 text-left">Роль</th><th className="py-1.5 text-left">Телефон</th><th className="py-1.5 text-left">Активность</th></tr></thead>
+                <thead className="text-xs uppercase text-slate-500"><tr><th className="py-1.5 text-left">Имя</th><th className="py-1.5 text-left">Роль</th><th className="py-1.5 text-left">Телефон</th><th className="py-1.5 text-left">Активность</th><th /></tr></thead>
                 <tbody className="divide-y">
                   {d.employees.map((e) => (
                     <tr key={e.id} className={e.fired ? "text-slate-400" : ""}>
@@ -302,6 +325,7 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
                       <td className="py-1.5">{ROLE_LABEL[e.role] ?? e.role}</td>
                       <td className="whitespace-nowrap py-1.5">{formatPhone(e.phone)}</td>
                       <td className="py-1.5">{e.online ? <span className="text-emerald-600">● в сети</span> : <span className="text-slate-500">{ago(e.lastSeenAt, now)}</span>}</td>
+                      <td className="py-1.5 text-right">{!e.fired && <button onClick={() => setResetTarget({ id: e.id, name: e.name })} className="whitespace-nowrap text-xs text-amber-700 hover:underline">Сбросить пароль</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -407,6 +431,51 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
           )}
         </Card>
       </main>
+
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">Изменить магазин</h2>
+            <input className="h-9 w-full rounded-md border px-2 text-sm" placeholder="Название" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <input className="h-9 w-full rounded-md border px-2 text-sm" placeholder="Адрес" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditOpen(false)} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
+              <button onClick={saveEdit} disabled={busy || !editName.trim()} className="h-9 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white disabled:opacity-50">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">Сбросить пароль?</h2>
+            <p className="text-sm text-slate-500">Для «{resetTarget.name}» будет создан новый пароль, все его текущие входы завершатся. Действие попадёт в журнал магазина.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setResetTarget(null)} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
+              <button onClick={resetPassword} disabled={busy} className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50">Сбросить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">Новый пароль создан</h2>
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm">
+              <p>Сотрудник: <b>{resetResult.name}</b></p>
+              {resetResult.phone && <p>Телефон (логин): <b>{formatPhone(resetResult.phone)}</b></p>}
+              <p>Пароль: <b className="select-all font-mono text-base">{resetResult.password}</b></p>
+            </div>
+            <p className="text-xs text-slate-500">Пароль показывается один раз. Передайте его сотруднику — он сможет сменить его в профиле.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { navigator.clipboard?.writeText(resetResult.password); toast.success("Скопировано"); }} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Копировать</button>
+              <button onClick={() => setResetResult(null)} className="h-9 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white">Готово</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {suspendOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

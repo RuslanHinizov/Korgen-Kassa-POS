@@ -12,9 +12,9 @@ const AUDIT_LABEL: Record<string, string> = {
   STOCKTAKE_POST: "Проведена инвентаризация", CUSTOMER_RETURN_POST: "Проведён возврат покупателя", CUSTOMER_RETURN_PAYMENT: "Выплата по возврату покупателя",
   SUPPLIER_RETURN_POST: "Проведён возврат поставщику", SUPPLIER_RETURN_PAYMENT: "Оплата по возврату поставщику", STOCK_IN_POST: "Проведено оприходование",
   STOCK_ADJUST: "Корректировка остатка", STORE_TRANSFER_POST: "Проведено перемещение", KIOSK_DEVICE_PAIR: "Привязан кассовый терминал",
-  KIOSK_DEVICE_UNPAIR: "Отвязан кассовый терминал", WRITE_OFF_POST: "Проведено списание",
+  KIOSK_DEVICE_UNPAIR: "Отвязан кассовый терминал", SUPERADMIN_PASSWORD_RESET: "Владелец платформы сбросил пароль", WRITE_OFF_POST: "Проведено списание",
 };
-const categoryOfAudit = (a: string): Category => (a.startsWith("SETTINGS") ? "settings" : a.startsWith("KIOSK") ? "device" : "doc");
+const categoryOfAudit = (a: string): Category => (a.startsWith("SETTINGS") || a.startsWith("SUPERADMIN") ? "settings" : a.startsWith("KIOSK") ? "device" : "doc");
 
 export interface FeedEvent { id: string; t: string; category: Category; title: string; who: string; text: string; amount: number | null }
 

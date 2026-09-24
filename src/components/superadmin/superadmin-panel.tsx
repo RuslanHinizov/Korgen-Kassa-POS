@@ -12,13 +12,15 @@ interface StoreRow {
   id: string; name: string; address: string | null; createdAt: string;
   suspendedAt: string | null; suspendedMessage: string | null;
   users: number; products: number; openShifts: number; admins: { name: string; phone: string | null }[];
-  todaySales: number; todayRevenue: number; lastSaleAt: string | null;
+  todaySales: number; todayRevenue: number; lastSaleAt: string | null; weekRevenue: number; onlineNow: number;
 }
+interface Totals { stores: number; suspended: number; todayRevenue: number; todaySales: number; weekRevenue: number; openShifts: number; users: number; onlineNow: number; noSalesToday: number }
 
 type Dialog =
   | { kind: "create" }
   | { kind: "suspend"; store: StoreRow }
   | { kind: "delete"; store: StoreRow }
+  | { kind: "edit"; store: StoreRow }
   | null;
 
 function randomPassword() {
@@ -28,6 +30,8 @@ function randomPassword() {
 
 export function SuperAdminPanel({ userName }: { userName: string }) {
   const [stores, setStores] = useState<StoreRow[]>([]);
+  const [totals, setTotals] = useState<Totals | null>(null);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
@@ -45,11 +49,16 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
     setLoading(true);
     try {
       const r = await fetch("/api/superadmin/stores");
-      if (r.ok) setStores((await r.json()).stores);
+      if (r.ok) { const d = await r.json(); setStores(d.stores); setTotals(d.totals); }
       else toast.error("Не удалось загрузить магазины");
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  function openEdit(s: StoreRow) {
+    setName(s.name); setAddress(s.address ?? "");
+    setDialog({ kind: "edit", store: s });
+  }
 
   function openCreate() {
     setName(""); setAddress(""); setAdminName(""); setAdminPhone(""); setAdminPassword(randomPassword());
@@ -94,6 +103,12 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
     } finally { setBusy(false); }
   }
 
+  const q = search.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, "");
+  const visible = stores.filter((s) => !q
+    || s.name.toLowerCase().includes(q) || (s.address ?? "").toLowerCase().includes(q)
+    || s.admins.some((a) => a.name.toLowerCase().includes(q) || (qDigits.length >= 3 && (a.phone ?? "").replace(/\D/g, "").includes(qDigits))));
+
   const input = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 
   return (
@@ -105,13 +120,34 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
         <button onClick={() => signOut().then(() => { window.location.href = "/login"; })} className="rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">Выйти</button>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+      <main className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold">Магазины</h1>
           <span className="text-sm text-muted-foreground">{stores.length}</span>
           <button onClick={load} className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border bg-white px-3 text-sm hover:bg-accent"><RefreshCw className="h-4 w-4" /> Обновить</button>
           <button onClick={openCreate} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white hover:bg-[#15503A]/90"><Plus className="h-4 w-4" /> Новый магазин</button>
         </div>
+
+        {totals && (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: "Выручка сегодня (все)", value: `${Math.round(totals.todayRevenue).toLocaleString("ru-RU")} ₸`, sub: `${totals.todaySales} чеков` },
+              { label: "За 7 дней (все)", value: `${Math.round(totals.weekRevenue).toLocaleString("ru-RU")} ₸`, sub: "по всем магазинам" },
+              { label: "Магазины", value: String(totals.stores), sub: totals.suspended ? `приостановлено: ${totals.suspended}` : "все активны" },
+              { label: "Открытых смен", value: String(totals.openShifts), sub: "сейчас" },
+              { label: "Сейчас в сети", value: String(totals.onlineNow), sub: `из ${totals.users} сотрудников` },
+              { label: "Без продаж сегодня", value: String(totals.noSalesToday), sub: totals.noSalesToday ? "активные магазины" : "везде были продажи" },
+            ].map((k) => (
+              <div key={k.label} className="rounded-xl border bg-white p-4">
+                <p className="text-xs text-slate-500">{k.label}</p>
+                <p className="mt-1 text-xl font-bold tabular-nums">{k.value}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{k.sub}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию, адресу или телефону админа" className="h-9 w-full max-w-md rounded-md border bg-white px-3 text-sm" />
 
         {created && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
@@ -136,6 +172,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                 <th className="px-4 py-3 text-right">Сотрудники</th>
                 <th className="px-4 py-3 text-right">Товары</th>
                 <th className="px-4 py-3 text-right">Сегодня</th>
+                <th className="px-4 py-3 text-right">7 дней</th>
                 <th className="px-4 py-3 text-left">Последняя продажа</th>
                 <th className="px-4 py-3 text-left">Статус</th>
                 <th className="px-4 py-3" />
@@ -143,18 +180,20 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
             </thead>
             <tbody className="divide-y">
               {loading ? (
-                <tr><td colSpan={8} className="px-4 py-10 text-center"><Loader2 className="inline h-5 w-5 animate-spin" /></td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center"><Loader2 className="inline h-5 w-5 animate-spin" /></td></tr>
               ) : stores.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Магазинов пока нет</td></tr>
-              ) : stores.map((s) => (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Магазинов пока нет</td></tr>
+              ) : visible.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Ничего не найдено</td></tr>
+              ) : visible.map((s) => (
                 <tr key={s.id} className={s.suspendedAt ? "bg-amber-50/50" : ""}>
-                  <td className="px-4 py-3">
+                  <td className="min-w-[10rem] px-4 py-3">
                     <Link href={`/superadmin/stores/${s.id}`} className="font-medium text-[#15503A] hover:underline">{s.name}</Link>
                     {s.address && <p className="text-xs text-muted-foreground">{s.address}</p>}
                   </td>
                   <td className="px-4 py-3">
                     {s.admins.length === 0 ? <span className="text-muted-foreground">—</span> : s.admins.map((a) => (
-                      <p key={a.phone ?? a.name}>{a.name} <span className="text-xs text-muted-foreground">{formatPhone(a.phone)}</span></p>
+                      <p key={a.phone ?? a.name} className="whitespace-nowrap">{a.name} <span className="block text-xs text-muted-foreground">{formatPhone(a.phone)}</span></p>
                     ))}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{s.users}</td>
@@ -163,6 +202,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                     {Math.round(s.todayRevenue).toLocaleString("ru-RU")} ₸
                     <p className="text-xs text-muted-foreground">{s.todaySales} чеков{s.openShifts > 0 ? ` · смена открыта (${s.openShifts})` : ""}</p>
                   </td>
+                  <td className="px-4 py-3 text-right tabular-nums">{Math.round(s.weekRevenue).toLocaleString("ru-RU")} ₸</td>
                   <td className="px-4 py-3 text-muted-foreground">{s.lastSaleAt ? new Date(s.lastSaleAt).toLocaleString("ru-RU") : "нет продаж"}</td>
                   <td className="px-4 py-3">
                     {s.suspendedAt
@@ -171,6 +211,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Link href={`/superadmin/stores/${s.id}`} className="mr-3 text-xs text-[#15503A] hover:underline">Открыть</Link>
+                    <button onClick={() => openEdit(s)} className="mr-3 text-xs text-slate-600 hover:underline">Изменить</button>
                     {s.suspendedAt ? (
                       <>
                         <button onClick={() => patchStore(s.id, { suspended: false }, "Магазин снова активен")} className="mr-3 text-xs text-primary hover:underline">Возобновить</button>
@@ -207,6 +248,17 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                   <button onClick={createStore} disabled={busy || !name.trim() || !adminName.trim() || adminPhone.replace(/\D/g, "").length < 10 || adminPassword.length < 6} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white disabled:opacity-50">
                     {busy && <Loader2 className="h-4 w-4 animate-spin" />} Создать
                   </button>
+                </div>
+              </>
+            )}
+            {dialog.kind === "edit" && (
+              <>
+                <h2 className="text-lg font-semibold">Изменить магазин</h2>
+                <input className={input} placeholder="Название магазина" value={name} onChange={(e) => setName(e.target.value)} />
+                <input className={input} placeholder="Адрес" value={address} onChange={(e) => setAddress(e.target.value)} />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setDialog(null)} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
+                  <button onClick={() => patchStore(dialog.store.id, { name, address: address || null }, "Сохранено")} disabled={busy || !name.trim()} className="h-9 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white disabled:opacity-50">Сохранить</button>
                 </div>
               </>
             )}
