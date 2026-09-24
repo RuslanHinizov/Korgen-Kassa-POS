@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/superadmin";
 import { newCashierCode } from "@/lib/employees";
+import { normalizePhone, syntheticEmail } from "@/lib/phone";
 
 const DEFAULT_EXPENSE_TYPES = [
   { name: "Дивиденды", active: true, manageable: false, sortOrder: 0 },
@@ -28,7 +29,7 @@ export async function GET() {
       prisma.sale.aggregate({ where: { storeId: s.id, status: "COMPLETED", createdAt: { gte: startOfDay } }, _sum: { total: true }, _count: true }),
       prisma.sale.findFirst({ where: { storeId: s.id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
       prisma.shift.count({ where: { storeId: s.id, status: "OPEN" } }),
-      prisma.user.findMany({ where: { role: "ADMIN", firedAt: null, storeAssignments: { some: { storeId: s.id } } }, select: { name: true, email: true } }),
+      prisma.user.findMany({ where: { role: "ADMIN", firedAt: null, storeAssignments: { some: { storeId: s.id } } }, select: { name: true, phone: true } }),
     ]);
     return {
       id: s.id, name: s.name, address: s.address, createdAt: s.createdAt,
@@ -44,7 +45,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   address: z.string().trim().max(200).optional(),
   adminName: z.string().trim().min(1).max(120),
-  adminEmail: z.string().trim().email(),
+  adminPhone: z.string().trim().min(5).max(30),
   adminPassword: z.string().min(6).max(100),
 });
 
@@ -52,11 +53,14 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   if (!(await requireSuperAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Проверьте поля (пароль — от 6 символов, почта — корректная)" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Проверьте поля (номер телефона, пароль — от 6 символов)" }, { status: 400 });
   const d = parsed.data;
-  if (await prisma.user.findUnique({ where: { email: d.adminEmail } })) {
-    return NextResponse.json({ error: "Пользователь с такой почтой уже существует" }, { status: 409 });
+  const phone = normalizePhone(d.adminPhone);
+  if (!phone) return NextResponse.json({ error: "Введите корректный номер телефона" }, { status: 400 });
+  if (await prisma.user.findUnique({ where: { phone } })) {
+    return NextResponse.json({ error: "Пользователь с таким номером телефона уже существует" }, { status: 409 });
   }
+  const email = syntheticEmail(phone);
 
   const store = await prisma.$transaction(async (tx) => {
     const created = await tx.store.create({ data: { name: d.name, address: d.address || null } });
@@ -67,10 +71,10 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    await auth.api.signUpEmail({ body: { name: d.adminName, email: d.adminEmail, password: d.adminPassword } });
+    await auth.api.signUpEmail({ body: { name: d.adminName, email, password: d.adminPassword } });
     await prisma.user.update({
-      where: { email: d.adminEmail },
-      data: { role: "ADMIN", cashierCode: await newCashierCode(), storeAssignments: { create: [{ storeId: store.id }] } },
+      where: { email },
+      data: { role: "ADMIN", phone, cashierCode: await newCashierCode(), storeAssignments: { create: [{ storeId: store.id }] } },
     });
   } catch (e) {
     // Never leave a market that nobody can sign in to.

@@ -151,7 +151,8 @@ model User {
   /// tag only, does not change the authenticated session — see src/lib/pin.ts).
   pin           String?
   lastName      String?
-  phone         String?
+  /// Login identity, canonical +7XXXXXXXXXX (see src/lib/phone.ts). Unique.
+  phone         String?   @unique
   /// Set when the employee is dismissed (Бывшие пользователи); sign-in is blocked.
   firedAt       DateTime?
   /// «Разрешить вход на кассу».

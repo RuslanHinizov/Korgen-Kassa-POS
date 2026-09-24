@@ -3,6 +3,7 @@ import { z } from "zod";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/db";
 import { hashPin } from "@/lib/pin";
+import { normalizePhone, syntheticEmail } from "@/lib/phone";
 import { ROLES, adminStoreIds, newCashierCode, requireAdmin, sharesStore } from "@/lib/employees";
 
 // GET /api/management/employees/:id
@@ -32,7 +33,7 @@ const patchSchema = z.object({
   name: z.string().trim().min(1),
   lastName: z.string().trim().optional().nullable(),
   phone: z.string().trim().min(5),
-  email: z.string().trim().email(),
+  email: z.string().trim().email().optional().or(z.literal("")),
   role: z.enum(ROLES),
   storeIds: z.array(z.string()).min(1),
   allowCashierLogin: z.boolean(),
@@ -53,12 +54,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const d = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, cashierCode: true } });
+  const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, cashierCode: true, email: true } });
   if (!existing) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+  const existingEmail = existing.email;
+  const isSynthetic = existingEmail.endsWith("@phone.korgen");
   if (id === session.user.id && d.role !== "ADMIN") {
     return NextResponse.json({ error: "Нельзя снять с себя роль администратора" }, { status: 400 });
   }
-  if (await prisma.user.findFirst({ where: { email: d.email, NOT: { id } } })) {
+  const phone = normalizePhone(d.phone);
+  if (!phone) return NextResponse.json({ error: "Введите корректный номер телефона" }, { status: 400 });
+  if (await prisma.user.findFirst({ where: { phone, NOT: { id } } })) {
+    return NextResponse.json({ error: "Этот номер телефона уже используется" }, { status: 409 });
+  }
+  const email = d.email || (isSynthetic ? syntheticEmail(phone) : existingEmail);
+  if (await prisma.user.findFirst({ where: { email, NOT: { id } } })) {
     return NextResponse.json({ error: "Эта почта уже используется" }, { status: 409 });
   }
   const myStores = await adminStoreIds(session.user.id);
@@ -70,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await tx.user.update({
       where: { id },
       data: {
-        name: d.name, lastName: d.lastName || null, phone: d.phone, email: d.email, role: d.role,
+        name: d.name, lastName: d.lastName || null, phone, email, role: d.role,
         allowCashierLogin: d.allowCashierLogin,
         ...(cashierCode ? { cashierCode } : {}),
         ...(d.pin === null ? { pin: null } : d.pin ? { pin: hashPin(d.pin) } : {}),

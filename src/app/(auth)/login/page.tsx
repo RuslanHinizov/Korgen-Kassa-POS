@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { getSession, signIn } from "@/lib/auth-client";
+import { getSession } from "@/lib/auth-client";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const t = useTranslations("auth");
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,12 +18,13 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const result = await signIn.email({ email: email.trim(), password: password.trim() });
-
-    if (result.error) {
-      console.error("[login error]", result.error);
-      const msg = result.error.message ?? result.error.code ?? t("sign_in_failed");
-      setError(`${msg} (status: ${result.error.status ?? "?"})`);
+    const res = await fetch("/api/login/phone", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone.trim(), password: password.trim() }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? t("sign_in_failed"));
       setLoading(false);
       return;
     }
@@ -69,18 +70,19 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                {t("email")}
+              <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Номер телефона
               </label>
               <input
-                id="email"
-                type="email"
+                id="phone"
+                type="tel"
                 required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
                 className={inputClass}
-                placeholder="admin@example.com"
+                placeholder="+7 775 000 00 00"
               />
             </div>
 

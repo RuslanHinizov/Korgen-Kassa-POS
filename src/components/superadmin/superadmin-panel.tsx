@@ -8,7 +8,7 @@ import { signOut } from "@/lib/auth-client";
 interface StoreRow {
   id: string; name: string; address: string | null; createdAt: string;
   suspendedAt: string | null; suspendedMessage: string | null;
-  users: number; products: number; openShifts: number; admins: { name: string; email: string }[];
+  users: number; products: number; openShifts: number; admins: { name: string; phone: string | null }[];
   todaySales: number; todayRevenue: number; lastSaleAt: string | null;
 }
 
@@ -32,11 +32,11 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [adminName, setAdminName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [message, setMessage] = useState("");
   const [confirmName, setConfirmName] = useState("");
-  const [created, setCreated] = useState<{ storeName: string; email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ storeName: string; phone: string; password: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,7 +49,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
   useEffect(() => { load(); }, [load]);
 
   function openCreate() {
-    setName(""); setAddress(""); setAdminName(""); setAdminEmail(""); setAdminPassword(randomPassword());
+    setName(""); setAddress(""); setAdminName(""); setAdminPhone(""); setAdminPassword(randomPassword());
     setDialog({ kind: "create" });
   }
 
@@ -58,11 +58,11 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
     try {
       const r = await fetch("/api/superadmin/stores", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, address: address || undefined, adminName, adminEmail, adminPassword }),
+        body: JSON.stringify({ name, address: address || undefined, adminName, adminPhone, adminPassword }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { toast.error(d.error ?? "Не удалось создать магазин"); return; }
-      setCreated({ storeName: name, email: adminEmail, password: adminPassword });
+      setCreated({ storeName: name, phone: adminPhone, password: adminPassword });
       setDialog(null);
       load();
     } finally { setBusy(false); }
@@ -115,7 +115,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-emerald-900">Магазин «{created.storeName}» создан. Передайте владельцу данные для входа:</p>
-                <p className="mt-2">Почта: <b className="select-all">{created.email}</b></p>
+                <p className="mt-2">Номер телефона (логин): <b className="select-all">{created.phone}</b></p>
                 <p>Пароль: <b className="select-all">{created.password}</b></p>
                 <p className="mt-2 text-xs text-emerald-800">Пароль показывается один раз — сохраните его сейчас. Владелец сможет сменить его в профиле.</p>
               </div>
@@ -151,7 +151,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                   </td>
                   <td className="px-4 py-3">
                     {s.admins.length === 0 ? <span className="text-muted-foreground">—</span> : s.admins.map((a) => (
-                      <p key={a.email}>{a.name} <span className="text-xs text-muted-foreground">{a.email}</span></p>
+                      <p key={a.phone ?? a.name}>{a.name} <span className="text-xs text-muted-foreground">{a.phone}</span></p>
                     ))}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{s.users}</td>
@@ -193,14 +193,14 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                 <input className={input} placeholder="Адрес (необязательно)" value={address} onChange={(e) => setAddress(e.target.value)} />
                 <p className="pt-1 text-xs font-medium text-muted-foreground">Администратор магазина (владелец)</p>
                 <input className={input} placeholder="Имя владельца" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
-                <input className={input} type="email" placeholder="Почта для входа" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
+                <input className={input} type="tel" placeholder="Номер телефона владельца (логин), +7 775 000 00 00" value={adminPhone} onChange={(e) => setAdminPhone(e.target.value)} />
                 <div className="flex gap-2">
                   <input className={input} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
                   <button onClick={() => setAdminPassword(randomPassword())} className="h-9 shrink-0 rounded-md border px-3 text-sm hover:bg-accent">Новый</button>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
                   <button onClick={() => setDialog(null)} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
-                  <button onClick={createStore} disabled={busy || !name.trim() || !adminName.trim() || !adminEmail.trim() || adminPassword.length < 6} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white disabled:opacity-50">
+                  <button onClick={createStore} disabled={busy || !name.trim() || !adminName.trim() || adminPhone.replace(/\D/g, "").length < 10 || adminPassword.length < 6} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#15503A] px-4 text-sm font-medium text-white disabled:opacity-50">
                     {busy && <Loader2 className="h-4 w-4 animate-spin" />} Создать
                   </button>
                 </div>

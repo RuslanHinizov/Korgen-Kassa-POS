@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hashPin } from "@/lib/pin";
+import { normalizePhone, syntheticEmail } from "@/lib/phone";
 import { ROLES, adminStoreIds, newCashierCode, requireAdmin } from "@/lib/employees";
 
 // GET /api/management/employees?status=working|dismissed&q=&role=&storeId=
@@ -52,7 +53,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1),
   lastName: z.string().trim().optional(),
   phone: z.string().trim().min(5),
-  email: z.string().trim().email(),
+  email: z.string().trim().email().optional().or(z.literal("")),
   password: z.string().min(6),
   role: z.enum(ROLES),
   storeIds: z.array(z.string()).min(1),
@@ -70,19 +71,25 @@ export async function POST(req: NextRequest) {
   }
   const d = parsed.data;
 
-  if (await prisma.user.findUnique({ where: { email: d.email } })) {
+  const phone = normalizePhone(d.phone);
+  if (!phone) return NextResponse.json({ error: "Введите корректный номер телефона" }, { status: 400 });
+  const email = d.email || syntheticEmail(phone);
+  if (await prisma.user.findUnique({ where: { phone } })) {
+    return NextResponse.json({ error: "Пользователь с таким номером телефона уже существует" }, { status: 409 });
+  }
+  if (await prisma.user.findUnique({ where: { email } })) {
     return NextResponse.json({ error: "Пользователь с такой почтой уже существует" }, { status: 409 });
   }
   const myStores = await adminStoreIds(admin.user.id);
   if (!d.storeIds.every((id) => myStores.includes(id))) return NextResponse.json({ error: "Торговая точка не найдена" }, { status: 400 });
 
-  await auth.api.signUpEmail({ body: { name: d.name, email: d.email, password: d.password } });
+  await auth.api.signUpEmail({ body: { name: d.name, email, password: d.password } });
   const user = await prisma.user.update({
-    where: { email: d.email },
+    where: { email },
     data: {
       role: d.role,
       lastName: d.lastName || null,
-      phone: d.phone,
+      phone,
       allowCashierLogin: d.allowCashierLogin,
       cashierCode: await newCashierCode(),
       ...(d.pin ? { pin: hashPin(d.pin) } : {}),

@@ -5,7 +5,7 @@ import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
 // Middleware runs in Edge runtime.
 // Auth cookie presence is checked; full session validation happen in Server Components.
 
-const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/setup", "/api/setup", "/api/ping"];
+const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping"];
 
 // Matches "/store/<id>" or "/store/<id>/rest/of/path".
 const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
