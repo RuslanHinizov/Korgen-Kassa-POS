@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2, Plus, RefreshCw, X } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -148,7 +149,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
               ) : stores.map((s) => (
                 <tr key={s.id} className={s.suspendedAt ? "bg-amber-50/50" : ""}>
                   <td className="px-4 py-3">
-                    <p className="font-medium">{s.name}</p>
+                    <Link href={`/superadmin/stores/${s.id}`} className="font-medium text-[#15503A] hover:underline">{s.name}</Link>
                     {s.address && <p className="text-xs text-muted-foreground">{s.address}</p>}
                   </td>
                   <td className="px-4 py-3">
@@ -169,6 +170,7 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
                       : <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Активен</span>}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <Link href={`/superadmin/stores/${s.id}`} className="mr-3 text-xs text-[#15503A] hover:underline">Открыть</Link>
                     {s.suspendedAt ? (
                       <>
                         <button onClick={() => patchStore(s.id, { suspended: false }, "Магазин снова активен")} className="mr-3 text-xs text-primary hover:underline">Возобновить</button>
