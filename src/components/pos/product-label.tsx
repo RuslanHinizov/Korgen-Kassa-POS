@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import { Loader2, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
@@ -19,28 +20,34 @@ export function ProductLabelModal({ product, onClose }: { product: LabelProduct;
       JsBarcode(svgRef.current, product.barcode, {
         format: /^\d{13}$/.test(product.barcode) ? "EAN13" : "CODE128", displayValue: true, margin: 0, height: 46, width: 1.45, fontSize: 12,
       });
+      // Let the bars scale to the label width (58 mm roll) instead of a fixed pixel size.
+      const svg = svgRef.current;
+      svg.setAttribute("viewBox", `0 0 ${svg.getAttribute("width")} ${svg.getAttribute("height")}`);
+      svg.removeAttribute("width"); svg.removeAttribute("height");
     }
   }, [product.barcode]);
 
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div id="pos-label-overlay" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <style>{`@media print { body > *:not(#pos-label-overlay){display:none!important} #pos-label-overlay{position:static!important;display:block!important;background:white!important} #pos-label-overlay .no-print{display:none!important} #pos-label-overlay .label-card{box-shadow:none!important;border:none!important;margin:0!important} }`}</style>
+      <style>{`@media print { @page{size:58mm auto;margin:0} html,body{width:58mm!important} body > *:not(#pos-label-overlay){display:none!important} #pos-label-overlay{position:static!important;display:block!important;background:white!important;padding:0!important} #pos-label-overlay .no-print{display:none!important} #pos-label-overlay .label-card{box-shadow:none!important;border:none!important;margin:0!important;padding:0!important;max-width:none!important;width:58mm!important;background:white!important} #pos-label-overlay .label-body{border:none!important;border-radius:0!important;padding:2mm 3mm!important;width:58mm!important;box-sizing:border-box} #pos-label-overlay .label-body svg{width:100%!important;height:auto!important} #pos-label-overlay .label-body p{margin:0 0 1mm} }`}</style>
       <div className="label-card w-full max-w-sm rounded-xl border bg-background p-5 shadow-2xl">
         <div className="no-print mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Этикетка товара</h2>
           <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Закрыть"><X className="h-5 w-5" /></button>
         </div>
-        <div className="rounded-lg border bg-white p-5 text-center text-black">
+        <div className="label-body rounded-lg border bg-white p-5 text-center text-black">
           <p className="text-lg font-bold">{product.name}</p>
           <p className="mt-1 text-2xl font-bold">{formatCurrency(product.price)}{isFractionalUnit(product.unit) ? ` / ${unitLabel(product.unit, true)}` : ""}</p>
-          <svg ref={svgRef} className="mx-auto mt-3" />
+          <svg ref={svgRef} className="mx-auto mt-3 w-full max-w-[240px]" />
           <p className="mt-1 text-xs">Отсканируйте для добавления в кассу</p>
         </div>
         <button onClick={() => window.print()} className="no-print mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary font-medium text-primary-foreground hover:bg-primary/90">
           <Printer className="h-4 w-4" /> Печать
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
