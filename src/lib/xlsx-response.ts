@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 type ExcelValue = string | number | boolean | Date | null | undefined;
 
 function buildSheet(rows: ExcelValue[][]) {
-  const worksheet = XLSX.utils.aoa_to_sheet(rows, { cellDates: true, dateNF: "dd\\.mm\\.yyyy\\ hh:mm" });
+  const worksheet = XLSX.utils.aoa_to_sheet(rows, { cellDates: true, dateNF: "dd\\.mm\\.yyyy\\ hh:mm:ss" });
   const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
   worksheet["!cols"] = Array.from({ length: columnCount }, (_, column) => {
     const width = Math.min(

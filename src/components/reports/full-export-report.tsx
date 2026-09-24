@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 
-const STORAGE_KEY = "korgen.fullExportSections";
+const STORAGE_KEY = "korgen.fullExportSections.v2";
 
 function loadStoredSections(allKeys: string[]): Set<string> {
   try {
@@ -56,6 +56,13 @@ const SECTIONS = [
   { key: "cashMovements", label: "Движение денег (касса)" },
   { key: "inventoryMovements", label: "Товарные движения (полная история склада)" },
   { key: "products", label: "Остатки товаров (текущий снимок)" },
+  { key: "shifts", label: "Смены (кто открыл/закрыл, когда, касса, расхождение)" },
+  { key: "saleLines", label: "Позиции чеков (каждый товар каждого чека, кассир, время)" },
+  { key: "cancelledItems", label: "Отменённые товары (кто удалил из чека)" },
+  { key: "refunds", label: "Возвраты по чекам" },
+  { key: "auditLog", label: "Журнал действий (кто что делал)" },
+  { key: "logins", label: "Входы в систему (кто и когда заходил)" },
+  { key: "timeline", label: "Хронология — всё по секундам в одном списке" },
 ] as const;
 
 export function FullExportReport() {

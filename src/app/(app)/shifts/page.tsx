@@ -193,7 +193,7 @@ export default function ShiftsPage() {
                           {t(s.status === "OPEN" ? "x_report" : "z_report")}
                         </button>
                         <button
-                          onClick={() => window.open(`/api/reports/full-export?shiftId=${s.id}&sections=sales,cashMovements`, "_blank")}
+                          onClick={() => window.open(`/api/reports/full-export?shiftId=${s.id}&sections=shifts,sales,saleLines,cashMovements,cancelledItems,refunds,auditLog,timeline`, "_blank")}
                           className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                           aria-label="Скачать отчёт по смене"
                           title="Скачать отчёт по смене"
