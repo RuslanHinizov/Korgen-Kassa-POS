@@ -67,3 +67,5 @@ next-env.d.ts
 /.env.production
 scripts/tenant-scan/last-report.json
 scripts/tenant-scan/last-run.log
+
+/dist-plesk/

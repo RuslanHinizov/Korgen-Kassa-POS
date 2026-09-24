@@ -6,3 +6,6 @@ out
 *.local
 pnpm-debug.log
 .env
+dist-plesk
+scratchpad
+backups
