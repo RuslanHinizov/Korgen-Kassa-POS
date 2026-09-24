@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const FIELDS = [
   "posCollapseWindow", "posInstantSync", "posShowSalesHistory", "posNewReceiptFormat", "posGlobalSearch",
-  "posUniversalProduct", "posEditProductAtPos", "posHoldOrder", "posDiscount", "posCreditSale", "posCashInOut",
+  "posUniversalProduct", "posCreateProduct", "posEditProductAtPos", "posHoldOrder", "posDiscount", "posCreditSale", "posCashInOut",
   "posSplitCounterparty", "posWholesaleAtPos",
   "posPriceCheck", "posBanPriceDecrease", "posChangePriceAtPos", "posCardPayment", "posSalesOverMillion",
   "posAccessReturn", "posAccessReturnNoReceipt", "posAccessDeleteItem", "posAccessDecreaseQty",
@@ -36,6 +36,7 @@ const patchSchema = z.object({
   posNewReceiptFormat: z.boolean().optional(),
   posGlobalSearch: z.boolean().optional(),
   posUniversalProduct: z.boolean().optional(),
+  posCreateProduct: z.boolean().optional(),
   posEditProductAtPos: z.boolean().optional(),
   posHoldOrder: z.boolean().optional(),
   posDiscount: z.boolean().optional(),

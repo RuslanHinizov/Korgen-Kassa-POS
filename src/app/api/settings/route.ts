@@ -22,6 +22,7 @@ export async function GET() {
     posCreditSale: s.posCreditSale,
     posShowSalesHistory: s.posShowSalesHistory,
     posUniversalProduct: s.posUniversalProduct,
+    posCreateProduct: s.posCreateProduct,
     posEditProductAtPos: s.posEditProductAtPos,
     posHoldOrder: s.posHoldOrder,
     posDiscount: s.posDiscount,

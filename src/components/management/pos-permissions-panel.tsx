@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 
 interface Permissions {
   posCollapseWindow: boolean; posInstantSync: boolean; posShowSalesHistory: boolean; posNewReceiptFormat: boolean; posGlobalSearch: boolean;
-  posUniversalProduct: boolean; posEditProductAtPos: boolean; posHoldOrder: boolean; posDiscount: boolean; posCreditSale: boolean; posCashInOut: boolean;
+  posUniversalProduct: boolean; posCreateProduct: boolean; posEditProductAtPos: boolean; posHoldOrder: boolean; posDiscount: boolean; posCreditSale: boolean; posCashInOut: boolean;
   posSplitCounterparty: boolean; posWholesaleAtPos: boolean;
   posPriceCheck: boolean; posBanPriceDecrease: boolean; posChangePriceAtPos: boolean; posCardPayment: boolean; posSalesOverMillion: boolean;
   posAccessReturn: string; posAccessReturnNoReceipt: string; posAccessDeleteItem: string; posAccessDecreaseQty: string;
@@ -43,6 +43,7 @@ const BASIC = [
 
 const EXTRA = [
   { key: "posUniversalProduct", label: "Продажа универсального продукта" },
+  { key: "posCreateProduct", label: "Создание нового товара на кассе (название, цена, штрихкод)" },
   { key: "posEditProductAtPos", label: "Изменение товара на кассе" },
   { key: "posHoldOrder", label: "Отложка" },
   { key: "posDiscount", label: "Скидка" },

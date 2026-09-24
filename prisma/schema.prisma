@@ -1618,6 +1618,8 @@ model BusinessSettings {
   posNewReceiptFormat     Boolean @default(true)
   posGlobalSearch         Boolean @default(false)
   posUniversalProduct     Boolean @default(true)
+  /// Korgen addition: a cashier may create a missing product (name, price, barcode) at the kassa.
+  posCreateProduct        Boolean @default(true)
   posEditProductAtPos     Boolean @default(true)
   posHoldOrder            Boolean @default(true)
   posDiscount             Boolean @default(true)

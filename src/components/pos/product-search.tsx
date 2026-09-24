@@ -351,7 +351,11 @@ export function KioskSearchBar() {
         priorEmptyQuery.current !== code
       ) {
         priorEmptyQuery.current = code;
-        toast.error(t("product_not_found_named", { query: code }), { id: "barcode-not-found" });
+        toast.error(t("product_not_found_named", { query: code }), {
+          id: "barcode-not-found",
+          duration: 8000,
+          action: { label: "Создать товар", onClick: () => window.dispatchEvent(new CustomEvent("pos-create-product", { detail: { barcode: code } })) },
+        });
         if (getDeviceSettings().scannerBeepEnabled) playErrorBeep();
       }
       return found;
