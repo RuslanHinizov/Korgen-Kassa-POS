@@ -23,7 +23,7 @@ Without it errors and chat messages are still stored — you just have to open t
 5. Restart the app so it picks them up: `cd /opt/korgen && docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
 6. Test: `sh deploy/watchdog.sh --test` (message arrives) and, in `/superadmin/errors`, press **Ошибка сервера** (an alert arrives).
 
-What arrives: 🔴 new error / error came back / same error 10-100-1000 times, 💬 new support message (max one per conversation per 2 min), 🔴/🟢 watchdog problems and recoveries. At most 20 app alerts per hour and one watchdog alert per problem per hour.
+What arrives (deliberately short, no content — details are in the panel): "🔴 Найдена ошибка" (a NEW error, or one you marked fixed that came back) and "💬 Новое сообщение в поддержке" (max one per conversation per 2 min), each with a link; plus the server watchdog's 🔴 problem / 🟢 recovered notes (one per problem per hour).
 
 ## 2. Server watchdog (on the VPS, once)
 ```

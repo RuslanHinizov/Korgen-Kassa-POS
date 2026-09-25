@@ -58,16 +58,12 @@ export async function POST(req: NextRequest) {
   });
   // a new message from the employee re-opens a closed conversation and counts as read on their side
   await prisma.supportThread.update({ where: { id: thread.id }, data: { lastMessageAt: message.createdAt, status: "OPEN", userLastReadAt: message.createdAt } });
-  // phone alert for the owner (at most one per conversation every 2 minutes)
+  // phone alert for the owner: only THAT a message arrived, no content
+  // (at most one per conversation every 2 minutes)
   const lastAlert = alertedAt.get(thread.id) ?? 0;
   if (Date.now() - lastAlert > 120_000) {
     alertedAt.set(thread.id, Date.now());
-    const who = await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }).catch(() => null);
-    const store = await prisma.store.findUnique({ where: { id: actor.storeId }, select: { name: true } }).catch(() => null);
-    void sendAlert(`💬 Новое сообщение в поддержку
-${store?.name ?? ""} · ${who?.name.trim() ?? ""}
-${body.slice(0, 300)}
-${appLink("/superadmin/support")}`);
+    void sendAlert(`💬 Новое сообщение в поддержке\n${appLink("/superadmin/support")}`);
   }
   return NextResponse.json({ message }, { status: 201 });
 }

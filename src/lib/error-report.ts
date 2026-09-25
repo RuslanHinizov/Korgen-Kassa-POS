@@ -96,15 +96,11 @@ export async function recordError(input: ErrorInput): Promise<void> {
       data: { count: { increment: 1 }, lastSeenAt: now, status: "OPEN", storeIds, ...last },
     });
     if (existing.status === "RESOLVED") alertReason = "Ошибка вернулась";
-    else if ([10, 100, 1000].includes(existing.count + 1)) alertReason = `Ошибка повторилась ${existing.count + 1} раз`;
   }
 
   if (alertReason) {
-    const where = [storeName, userName ? `${userName}${input.actor?.role ? ` (${input.actor.role})` : ""}` : null].filter(Boolean).join(" · ");
-    // in the background: a slow Telegram must never slow down the request
-    void sendAlert(
-      `🔴 ${alertReason} [${input.source}]\n${message.slice(0, 300)}\n` +
-      `${input.path ? `Страница: ${normalizePath(input.path)}\n` : ""}${where ? `Кто: ${where}\n` : ""}${appLink("/superadmin/errors")}`,
-    );
+    // deliberately short: the details are in the panel, the phone only says THAT an error was found.
+    // In the background: a slow Telegram must never slow down the request.
+    void sendAlert(`🔴 Найдена ошибка\n${appLink("/superadmin/errors")}`);
   }
 }
