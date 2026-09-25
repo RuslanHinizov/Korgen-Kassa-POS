@@ -35,6 +35,13 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
+  const [supportUnread, setSupportUnread] = useState(0);
+  useEffect(() => {
+    const tick = () => fetch("/api/superadmin/support", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setSupportUnread(d.totalUnread); }).catch(() => {});
+    tick();
+    const id = setInterval(tick, 20_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -116,7 +123,11 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
       <header className="flex items-center gap-3 bg-[#15503A] px-6 py-3 text-white">
         <img src="/korgen-kassa-mark.png" alt="" className="h-8 w-8 rounded-lg bg-white object-contain p-0.5" />
         <span className="font-semibold">Korgen Kassa · Super Admin</span>
-        <span className="ml-auto text-sm text-white/80">{userName}</span>
+        <Link href="/superadmin/support" className="ml-auto flex items-center gap-2 rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">
+          Поддержка
+          {supportUnread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold">{supportUnread}</span>}
+        </Link>
+        <span className="text-sm text-white/80">{userName}</span>
         <button onClick={() => signOut().then(() => { window.location.href = "/login"; })} className="rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">Выйти</button>
       </header>
 

@@ -104,6 +104,7 @@ model Store {
   updatedAt DateTime @updatedAt
 
   financeAccounts  FinanceAccount[]
+  supportThreads   SupportThread[]
   productCharacteristics ProductCharacteristic[]
   cashboxes        Cashbox[]
   expenseTypes     ExpenseType[]
@@ -163,6 +164,7 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  supportThreads    SupportThread[]
   sales             Sale[]
   sessions          Session[]
   accounts          Account[]
@@ -1546,6 +1548,51 @@ model CashMovement {
 // ============================================================
 // Audit log (voids, discount / price overrides, refunds, manager actions)
 // ============================================================
+
+/// In-app support chat: one conversation per (market, employee) with the platform owner.
+model SupportThread {
+  id              String        @id @default(cuid())
+  storeId         String
+  userId          String
+  status          SupportStatus @default(OPEN)
+  lastMessageAt   DateTime      @default(now())
+  /// null = the employee has never opened the chat / the owner has never read the thread
+  userLastReadAt  DateTime?
+  adminLastReadAt DateTime?
+  createdAt       DateTime      @default(now())
+
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@unique([storeId, userId])
+  @@index([lastMessageAt])
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  threadId  String
+  sender    SupportSender
+  body      String
+  /// where in the app the employee was when writing (path only), and their browser
+  pageUrl   String?
+  userAgent String?
+  createdAt DateTime      @default(now())
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+}
+
+enum SupportStatus {
+  OPEN
+  CLOSED
+}
+
+enum SupportSender {
+  USER
+  ADMIN
+}
 
 model AuditLog {
   id         String   @id @default(cuid())

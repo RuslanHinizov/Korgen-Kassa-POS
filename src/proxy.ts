@@ -26,6 +26,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Health check for deploy scripts / uptime monitors — no cookie, no redirects.
+  if (pathname === "/api/ping") return NextResponse.next();
+
   // Check setup completion via cookie (set by /api/setup/complete)
   const setupDone = request.cookies.get("olgax-setup-complete")?.value === "1";
   const hasDbUrl = !!process.env.DATABASE_URL;

@@ -8,6 +8,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { StoreProvider } from "@/components/store/store-provider";
 import { resolveStoreAccess } from "@/lib/store-context";
 import { StoreBlocked } from "@/components/store/store-blocked";
+import { SupportChat } from "@/components/support/support-chat";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,7 @@ export default async function AppLayout({
         <AppShell user={session.user} businessName={settings?.name ?? "Korgen Kassa"} cssVars={cssVars}>
           {children}
         </AppShell>
+        <SupportChat />
       </StoreProvider>
     </>
   );
