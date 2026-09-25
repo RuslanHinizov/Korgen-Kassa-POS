@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
 import { Camera, CameraOff, CheckCircle2, Loader2, Minus, Plus, ScanLine, Trash2, X, XCircle } from "lucide-react";
 import { CameraScanner } from "@/components/scan/camera-scanner";
+import { CreateProductModal } from "@/components/pos/create-product-modal";
+import type { ProductResult } from "@/components/pos/product-search";
 import { toast } from "sonner";
 
 interface Item {
@@ -16,7 +18,8 @@ interface Item {
 interface Doc {
   id: string; documentNo: number; status: "DRAFT" | "POSTED"; supplier: { id: string; name: string } | null; items: Item[];
 }
-type Feedback = { kind: "ok" | "missing"; text: string } | null;
+/** `code` = a barcode that matched nothing: the worker may create the product right here */
+type Feedback = { kind: "ok" | "missing"; text: string; code?: string } | null;
 
 /** A short synth beep — no audio asset needed, works offline. */
 function beep(freq: number, ms: number) {
@@ -79,6 +82,7 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Phone / tablet: scan with the camera instead of a hardware scanner. Remembered per device.
+  const [newProductCode, setNewProductCode] = useState<string | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   useEffect(() => { try { if (localStorage.getItem("receipt-scan-camera") === "1") setCameraOn(true); } catch { /* private mode */ } }, []);
   function toggleCamera() {
@@ -104,6 +108,7 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   function flash(next: Feedback) {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     setFeedback(next);
+    if (next?.kind === "missing" && next.code) return; // stays until the worker acts on it or scans something else
     feedbackTimer.current = setTimeout(() => setFeedback(null), 2200);
   }
 
@@ -118,7 +123,7 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
       const match = results.find((p) => p.barcode === raw) ?? results[0];
       if (!match) {
         beep(220, 220);
-        flash({ kind: "missing", text: `Товар не найден: ${raw}` });
+        flash({ kind: "missing", text: `Товар не найден: ${raw}`, code: raw });
         return;
       }
       const quantity = match.scanQuantity ?? 1;
@@ -138,6 +143,20 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
       setBusy(false);
       focusInput();
     }
+  }
+
+  /** A product the worker just created on the spot: put it on the document (quantity 1, then type the real one). */
+  async function addCreated(product: ProductResult) {
+    setNewProductCode(null);
+    const ar = await fetch(`/api/purchase-receipts/${id}/items`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId: product.id, quantity: 1 }),
+    });
+    if (!ar.ok) { beep(220, 220); flash({ kind: "missing", text: "Товар создан, но не добавился в приёмку — отсканируйте его ещё раз" }); return; }
+    beep(880, 120);
+    flash({ kind: "ok", text: `Новый товар: ${product.name} × 1 ${unitLabel(product.unit ?? "pcs", true)}` });
+    await load();
+    focusInput();
   }
 
   async function changeQty(itemId: string, delta: number) {
@@ -209,7 +228,13 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
           {feedback && (
             <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${feedback.kind === "ok" ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
               {feedback.kind === "ok" ? <CheckCircle2 className="h-5 w-5 shrink-0" /> : <XCircle className="h-5 w-5 shrink-0" />}
-              {feedback.text}
+              <span className="min-w-0 flex-1 break-words">{feedback.text}</span>
+              {feedback.code && (
+                <>
+                  <button onClick={() => setNewProductCode(feedback.code ?? "")} className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Создать товар</button>
+                  <button onClick={() => setFeedback(null)} className="shrink-0 rounded p-1 hover:bg-black/10" aria-label="Закрыть"><X className="h-4 w-4" /></button>
+                </>
+              )}
             </div>
           )}
 
@@ -242,6 +267,17 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
           </div>
         </div>
       </div>
+      {newProductCode !== null && (
+        <CreateProductModal
+          initialBarcode={newProductCode}
+          withCost
+          hideStock
+          submitLabel="Создать и добавить в приёмку"
+          overlayClass="z-[110]"
+          onClose={() => setNewProductCode(null)}
+          onCreated={(p) => void addCreated(p)}
+        />
+      )}
     </div>
   );
 }
