@@ -42,4 +42,12 @@ until docker exec korgen-web-1 node -e "fetch('http://localhost:3000/api/ping').
   sleep 2
 done
 echo "OK - the new version is running. Backup: /opt/korgen-backups/pre-update-$STAMP.dump"
+
+# Every build leaves ~1 GB of old layers behind; the disk is small, so clear what nothing uses any more.
+# (Only unused images and old build cache - never volumes, so the database and uploads are safe.
+#  The image tagged korgen-web:previous is kept for rollback.)
+echo "== cleanup"
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --filter "until=6h" >/dev/null 2>&1 || true
+echo "disk: $(df -h / | awk 'NR==2 {print $5 " used, " $4 " free"}')"
 $COMPOSE ps
