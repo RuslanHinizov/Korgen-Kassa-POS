@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useStorePath } from "@/components/store/store-provider";
 import { formatCurrency } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
-import { CheckCircle2, Loader2, Minus, Plus, ScanLine, Trash2, X, XCircle } from "lucide-react";
+import { Camera, CameraOff, CheckCircle2, Loader2, Minus, Plus, ScanLine, Trash2, X, XCircle } from "lucide-react";
+import { CameraScanner } from "@/components/scan/camera-scanner";
 import { toast } from "sonner";
 
 interface Item {
@@ -36,6 +37,31 @@ function beep(freq: number, ms: number) {
   }
 }
 
+/** Quantity you can type: scan a product once, then tap the number and enter how many really arrived. */
+function QtyInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (!editing) setText(String(value)); }, [value, editing]);
+  function commit() {
+    setEditing(false);
+    const n = Number(text.replace(",", ".").trim());
+    if (!Number.isFinite(n) || n < 0) { setText(String(value)); return; }
+    if (n !== value) onCommit(n);
+  }
+  return (
+    <input
+      inputMode="decimal"
+      value={text}
+      onFocus={(e) => { setEditing(true); e.currentTarget.select(); }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      aria-label="Количество"
+      className="h-10 w-20 rounded-md border bg-background px-1 text-center text-base font-semibold tabular-nums focus:border-primary focus:outline-none"
+    />
+  );
+}
+
 /**
  * Приёмка → Сканирование: a dedicated, distraction-free full-screen scan mode for
  * "mal kabul" at the loading dock — a warehouse worker scans a whole batch of goods
@@ -52,6 +78,14 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   const [code, setCode] = useState("");
   const [feedback, setFeedback] = useState<Feedback>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Phone / tablet: scan with the camera instead of a hardware scanner. Remembered per device.
+  const [cameraOn, setCameraOn] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem("receipt-scan-camera") === "1") setCameraOn(true); } catch { /* private mode */ } }, []);
+  function toggleCamera() {
+    const next = !cameraOn;
+    setCameraOn(next);
+    try { localStorage.setItem("receipt-scan-camera", next ? "1" : "0"); } catch { /* ignore */ }
+  }
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -63,7 +97,8 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   }, [id, router, storePath]);
   useEffect(() => { load(); }, [load]);
 
-  const focusInput = useCallback(() => { inputRef.current?.focus(); }, []);
+  // with the camera on, do not grab focus: it would pop up the phone keyboard over the camera
+  const focusInput = useCallback(() => { if (!cameraOn) inputRef.current?.focus(); }, [cameraOn]);
   useEffect(() => { focusInput(); }, [focusInput]);
 
   function flash(next: Feedback) {
@@ -72,10 +107,10 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
     feedbackTimer.current = setTimeout(() => setFeedback(null), 2200);
   }
 
-  async function submitScan() {
-    const raw = code.trim();
+  async function submitScan(fromCamera?: string) {
+    const raw = (fromCamera ?? code).trim();
     if (!raw || busy) return;
-    setCode("");
+    if (fromCamera === undefined) setCode("");
     setBusy(true);
     try {
       const r = await fetch(`/api/products/search?q=${encodeURIComponent(raw)}`);
@@ -115,6 +150,14 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
     focusInput();
   }
 
+  async function setQty(itemId: string, next: number) {
+    if (next === 0) { await removeItem(itemId); return; }
+    const r = await fetch(`/api/purchase-receipts/${id}/items/${itemId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity: next }) });
+    if (!r.ok) toast.error("Не удалось изменить количество");
+    await load();
+    focusInput();
+  }
+
   async function removeItem(itemId: string) {
     await fetch(`/api/purchase-receipts/${id}/items/${itemId}`, { method: "DELETE" });
     load();
@@ -141,6 +184,14 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
 
       <div className="flex flex-1 flex-col items-center overflow-y-auto p-4 sm:p-8">
         <div className="w-full max-w-xl space-y-3">
+          <button
+            onClick={toggleCamera}
+            className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 text-base font-medium ${cameraOn ? "border-primary/40 bg-primary/10 text-primary" : "hover:bg-accent"}`}
+          >
+            {cameraOn ? <><CameraOff className="h-5 w-5" /> Выключить камеру</> : <><Camera className="h-5 w-5" /> Сканировать камерой телефона</>}
+          </button>
+          {cameraOn && <CameraScanner onScan={(c) => void submitScan(c)} />}
+
           <div className="relative">
             <ScanLine className="text-muted-foreground absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2" />
             <input
@@ -148,9 +199,9 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitScan(); }}
-              onBlur={focusInput}
-              autoFocus
-              placeholder="Отсканируйте штрихкод…"
+              onBlur={(e) => { if (e.relatedTarget instanceof HTMLInputElement) return; focusInput(); }}
+              autoFocus={!cameraOn}
+              placeholder={cameraOn ? "Или введите штрихкод вручную…" : "Отсканируйте штрихкод…"}
               className="h-16 w-full rounded-xl border-2 bg-background pl-12 pr-4 text-xl font-medium focus:border-primary focus:outline-none"
             />
           </div>
@@ -172,18 +223,19 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
               <p className="text-muted-foreground p-6 text-center text-sm">Пока ничего не отсканировано</p>
             ) : (
               [...doc.items].reverse().map((item) => (
-                <div key={item.id} className="flex items-center gap-3 p-3">
-                  <div className="min-w-0 flex-1">
+                <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+                  <div className="min-w-0 flex-1 basis-[calc(100%-3rem)] sm:basis-0">
                     <p className="truncate text-sm font-medium">{item.name}</p>
                     <p className="text-muted-foreground text-xs">{item.barcode ?? "без штрихкода"}</p>
                   </div>
+                  <button onClick={() => removeItem(item.id)} className="hover:bg-destructive/10 hover:text-destructive text-muted-foreground shrink-0 self-start rounded-md p-2 sm:order-last sm:self-center" aria-label="Удалить"><Trash2 className="h-4 w-4" /></button>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <button onClick={() => changeQty(item.id, -1)} className="hover:bg-accent flex h-8 w-8 items-center justify-center rounded-md border" aria-label="Уменьшить"><Minus className="h-3.5 w-3.5" /></button>
-                    <span className="w-14 text-center text-sm tabular-nums">{item.quantity} {unitLabel(item.unit, true)}</span>
-                    <button onClick={() => changeQty(item.id, 1)} className="hover:bg-accent flex h-8 w-8 items-center justify-center rounded-md border" aria-label="Увеличить"><Plus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => changeQty(item.id, -1)} className="hover:bg-accent flex h-10 w-10 items-center justify-center rounded-md border" aria-label="Уменьшить"><Minus className="h-3.5 w-3.5" /></button>
+                    <QtyInput value={item.quantity} onCommit={(n) => void setQty(item.id, n)} />
+                    <span className="text-muted-foreground w-8 text-xs">{unitLabel(item.unit, true)}</span>
+                    <button onClick={() => changeQty(item.id, 1)} className="hover:bg-accent flex h-10 w-10 items-center justify-center rounded-md border" aria-label="Увеличить"><Plus className="h-3.5 w-3.5" /></button>
                   </div>
-                  <span className="text-muted-foreground w-24 shrink-0 text-right text-sm tabular-nums">{formatCurrency(item.salePrice * item.quantity)}</span>
-                  <button onClick={() => removeItem(item.id)} className="hover:bg-destructive/10 hover:text-destructive text-muted-foreground shrink-0 rounded-md p-1.5" aria-label="Удалить"><Trash2 className="h-4 w-4" /></button>
+                  <span className="text-muted-foreground ml-auto shrink-0 text-right text-sm tabular-nums sm:w-24">{formatCurrency(item.salePrice * item.quantity)}</span>
                 </div>
               ))
             )}
