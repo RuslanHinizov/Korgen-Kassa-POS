@@ -16,6 +16,9 @@ export interface ErrorInput {
 
 /** Connectivity noise (a till that is offline) and browser-extension errors are not bugs of ours. */
 const IGNORE = [
+  // Next.js control-flow signals (redirect() / notFound() after a successful save) are not errors
+  /^NEXT_(REDIRECT|NOT_FOUND)/,
+  /NEXT_HTTP_ERROR_FALLBACK/,
   /ResizeObserver loop/i,
   /^Script error\.?$/i,
   /Non-Error promise rejection/i,

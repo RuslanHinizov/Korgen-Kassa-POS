@@ -13,6 +13,7 @@ export function reportClientError(error: unknown, extra?: { kind?: string; metho
     if (typeof window === "undefined" || budget <= 0) return;
     const err = error as { message?: string; stack?: string } | string | undefined;
     const message = (typeof err === "string" ? err : err?.message) || "Unknown error";
+    if (/^NEXT_(REDIRECT|NOT_FOUND)|NEXT_HTTP_ERROR_FALLBACK/.test(message)) return; // Next.js navigation signals
     const stack = typeof err === "string" ? undefined : err?.stack;
     const key = `${extra?.kind ?? ""}|${message}|${(stack ?? "").split("\n")[1] ?? ""}`;
     if (sent.has(key)) return;
