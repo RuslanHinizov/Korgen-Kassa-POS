@@ -46,6 +46,12 @@ export function proxy(request: NextRequest) {
   // No, strict barrier: if setup incomplete, force setup.
   // Exception: /api/setup/* is needed. 
   if ((!setupDone || !hasDbUrl || !hasAuthSecret) && !isSetupPath) {
+    // A device that has never visited (no cookie) but belongs to an already-installed system is sent
+    // through /api/setup/resume, which sets the cookie and returns to the page — no wizard flash.
+    if (hasDbUrl && hasAuthSecret) {
+      const back = encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search);
+      return NextResponse.redirect(new URL(`/api/setup/resume?next=${back}`, request.url));
+    }
     return NextResponse.redirect(new URL("/setup", request.url));
   }
 
