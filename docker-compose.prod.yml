@@ -52,6 +52,9 @@ services:
       BETTER_AUTH_TRUSTED_ORIGINS: "https://${DOMAIN}"
       NODE_ENV: production
       UPLOAD_DIR: /app/uploads
+      # optional phone alerts (Telegram): new errors, support messages. Leave empty to disable.
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:

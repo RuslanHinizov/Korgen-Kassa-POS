@@ -217,7 +217,7 @@ async function run() {
         if (all.length && !hits.length) { if (ok2xx) record(t.page ? "PAGE-FOREIGN-ID-200" : "API-FOREIGN-ID-200", a.name, v.label, t.url, res, all); }
         else if (hits.length) record(t.page ? "PAGE-LEAK" : "API-LEAK", a.name, v.label, t.url, res, hits);
         else if (t.foreign && ok2xx && !t.page && res.body.length > 20 && a.name !== "ANON") record("API-200-FOR-FOREIGN-ID?", a.name, v.label, t.url, res, []);
-        if (a.name === "ANON" && ok2xx && !t.page && !/^\/api\/(ping|auth|login|setup)/.test(t.url)) record("ANON-API-200", a.name, v.label, t.url, res, []);
+        if (a.name === "ANON" && ok2xx && !t.page && !/^\/api\/(ping|health|auth|login|setup|errors)/.test(t.url)) record("ANON-API-200", a.name, v.label, t.url, res, []);
       }
     }));
     console.log(`${a.name}/${v.label}: ${tasks.length} requests`);

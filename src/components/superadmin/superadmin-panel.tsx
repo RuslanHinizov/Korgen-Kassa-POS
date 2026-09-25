@@ -36,10 +36,12 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
+  const [openErrors, setOpenErrors] = useState(0);
   useEffect(() => {
     const tick = () => fetch("/api/superadmin/support", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setSupportUnread(d.totalUnread); }).catch(() => {});
-    tick();
-    const id = setInterval(tick, 20_000);
+    const tickErrors = () => fetch("/api/superadmin/errors?summary=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setOpenErrors(d.open); }).catch(() => {});
+    tick(); tickErrors();
+    const id = setInterval(() => { tick(); tickErrors(); }, 20_000);
     return () => clearInterval(id);
   }, []);
 
@@ -123,7 +125,11 @@ export function SuperAdminPanel({ userName }: { userName: string }) {
       <header className="flex items-center gap-3 bg-[#15503A] px-6 py-3 text-white">
         <img src="/korgen-kassa-mark.png" alt="" className="h-8 w-8 rounded-lg bg-white object-contain p-0.5" />
         <span className="font-semibold">Korgen Kassa · Super Admin</span>
-        <Link href="/superadmin/support" className="ml-auto flex items-center gap-2 rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">
+        <Link href="/superadmin/errors" className="ml-auto flex items-center gap-2 rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">
+          Ошибки
+          {openErrors > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold">{openErrors}</span>}
+        </Link>
+        <Link href="/superadmin/support" className="flex items-center gap-2 rounded-md border border-white/30 px-3 py-1 text-sm hover:bg-white/10">
           Поддержка
           {supportUnread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold">{supportUnread}</span>}
         </Link>

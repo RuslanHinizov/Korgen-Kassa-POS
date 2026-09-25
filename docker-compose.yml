@@ -31,6 +31,9 @@ services:
       BETTER_AUTH_TRUSTED_ORIGINS: "${BETTER_AUTH_TRUSTED_ORIGINS:-}"
       NODE_ENV: production
       UPLOAD_DIR: /app/uploads
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      TELEGRAM_API_BASE: "${TELEGRAM_API_BASE:-https://api.telegram.org}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:

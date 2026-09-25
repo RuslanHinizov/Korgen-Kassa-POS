@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Toaster } from "@/components/ui/sonner";
+import { ErrorReporter } from "@/components/support/error-reporter";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getLocale } from "next-intl/server";
 import "./globals.css";
@@ -53,6 +54,7 @@ export default async function RootLayout({
       >
         <NextIntlClientProvider messages={messages}>
           {children}
+          <ErrorReporter />
           <Toaster richColors toastOptions={{ className: "text-sm" }} />
         </NextIntlClientProvider>
         {/* Register service worker for PWA offline support */}

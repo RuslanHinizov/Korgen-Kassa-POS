@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
+import { reportClientError } from "@/components/support/error-reporter";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 interface PageErrorProps {
@@ -11,6 +13,7 @@ interface PageErrorProps {
 
 export function PageError({ error, reset, label }: PageErrorProps) {
   const t = useTranslations("errors");
+  useEffect(() => { reportClientError(error, { kind: "boundary", note: label }); }, [error, label]);
   return (
     <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-center p-8">
       <div className="rounded-full bg-destructive/10 p-4">

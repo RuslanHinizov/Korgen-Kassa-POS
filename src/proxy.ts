@@ -5,7 +5,7 @@ import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
 // Middleware runs in Edge runtime.
 // Auth cookie presence is checked; full session validation happen in Server Components.
 
-const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping"];
+const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping", "/api/errors"];
 
 // Matches "/store/<id>" or "/store/<id>/rest/of/path".
 const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
@@ -27,7 +27,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Health check for deploy scripts / uptime monitors — no cookie, no redirects.
-  if (pathname === "/api/ping") return NextResponse.next();
+  if (pathname === "/api/ping" || pathname === "/api/health") return NextResponse.next();
 
   // Check setup completion via cookie (set by /api/setup/complete)
   const setupDone = request.cookies.get("olgax-setup-complete")?.value === "1";

@@ -1594,6 +1594,43 @@ enum SupportSender {
   ADMIN
 }
 
+/// Errors seen by real users / the server, grouped by fingerprint (same error = one row + a counter).
+model ErrorReport {
+  id           String      @id @default(cuid())
+  fingerprint  String      @unique
+  source       ErrorSource
+  message      String
+  stack        String?
+  path         String?
+  method       String?
+  count        Int         @default(1)
+  status       ErrorStatus @default(OPEN)
+  firstSeenAt  DateTime    @default(now())
+  lastSeenAt   DateTime    @default(now())
+  /// who / where it happened most recently
+  lastStoreId  String?
+  lastStoreName String?
+  lastUserName String?
+  lastUserRole String?
+  lastUserPhone String?
+  lastUserAgent String?
+  /// number of distinct markets that hit it (capped list of store ids)
+  storeIds     String[]
+
+  @@index([status, lastSeenAt])
+}
+
+enum ErrorSource {
+  CLIENT
+  SERVER
+  API
+}
+
+enum ErrorStatus {
+  OPEN
+  RESOLVED
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   storeId    String
