@@ -8,6 +8,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { getDeviceSettings, playErrorBeep } from "@/hooks/use-device-settings";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
+import { searchLocal } from "@/lib/offline/catalog";
 
 export interface ProductResult {
   id: string;
@@ -340,8 +341,18 @@ export function KioskSearchBar() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
-      const found = res.ok ? await res.json() as ProductResult[] : [];
+      // Server first; with no connection (or a server that does not answer) the till searches its own copy.
+      let found: ProductResult[];
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        try {
+          const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
+          found = res.ok ? await res.json() as ProductResult[] : (await searchLocal(q)) as unknown as ProductResult[];
+        } catch {
+          found = (await searchLocal(q)) as unknown as ProductResult[];
+        }
+      } else {
+        found = (await searchLocal(q)) as unknown as ProductResult[];
+      }
       setResults(found);
       const code = q.trim();
       if (

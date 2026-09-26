@@ -559,6 +559,12 @@ model Sale {
   notes          String?
   /// [{ promotionId, name, amount }] applied automatically at checkout
   promoDetails   Json?
+  /// Offline kassa: id generated on the till, so a retried upload can never create a second sale.
+  clientSaleId   String?
+  /// Receipt number the till printed itself while offline (e.g. "A1F3-000123").
+  receiptNo      String?
+  /// True when the sale was rung up without a connection and uploaded later.
+  offline        Boolean       @default(false)
   createdAt      DateTime      @default(now())
 
   store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -571,6 +577,7 @@ model Sale {
   refunds    Refund[]
   loyaltyLogs LoyaltyLog[]
 
+  @@unique([storeId, clientSaleId])
   @@index([storeId])
 }
 
@@ -588,6 +595,9 @@ model SaleItem {
   discountAmount Decimal @default(0) @db.Decimal(10, 2)
   total     Decimal @db.Decimal(10, 2)
   notes     String?
+  /// Position of the line in the sale (0-based). An offline till refers to a not-yet-uploaded sale's lines by this
+  /// number (its own ids do not exist yet), see the refund route.
+  lineNo    Int     @default(0)
 
   sale    Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)

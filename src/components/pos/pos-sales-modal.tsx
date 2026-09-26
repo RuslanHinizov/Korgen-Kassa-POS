@@ -6,16 +6,49 @@ import { formatCurrency } from "@/lib/utils";
 import { ReceiptModal } from "@/components/receipt/receipt-modal";
 import { RefundReceiptModal } from "@/components/receipt/refund-receipt-modal";
 import { ReferenceBookFields, useReferenceBooks } from "./reference-book-fields";
+import { sendOrQueue } from "@/lib/offline/send";
+import { newId, nextReceiptNo } from "@/lib/offline/queue";
+import { searchLocal } from "@/lib/offline/catalog";
+import { getTillAuth } from "@/lib/offline/auth";
+import { applyQueuedRefunds, cachedSales, cacheSales, queuedSales } from "@/lib/offline/sales-cache";
 
 type SaleItem = { id: string; productId: string | null; name: string; quantity: number; returnableQuantity: number; price: number; total: number; unit: string };
 type Refund = { id: string; amount: number; reason: string | null; createdAt: string; items: { saleItemId?: string; name: string; quantity: number; price: number; unit?: string }[] };
-type Sale = { id: string; documentNo: number; createdAt: string; subtotal: number; taxAmount: number; total: number; discountAmount: number; paymentMethod: string; amountTendered?: number | null; changeDue?: number | null; status: "COMPLETED" | "VOIDED" | "REFUNDED"; user: { name: string }; referenceValues?: { bookName: string; entryName: string }[] | null; items: SaleItem[]; refunds?: Refund[] };
+type Sale = { id: string; documentNo?: number; receiptNo?: string; waiting?: boolean; createdAt: string; subtotal: number; taxAmount: number; total: number; discountAmount: number; paymentMethod: string; amountTendered?: number | null; changeDue?: number | null; status: "COMPLETED" | "VOIDED" | "REFUNDED"; user: { name: string }; referenceValues?: { bookName: string; entryName: string }[] | null; items: SaleItem[]; refunds?: Refund[] };
 type Product = { id: string; name: string; price: number; unit: string };
 
 const paymentLabel: Record<string, string> = { CASH: "Наличные", CARD: "Безналичный", OTHER: "Другое", CREDIT: "В долг" };
 const today = () => new Date().toISOString().slice(0, 10);
 const dateTime = (value: string) => new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-const receiptNumber = (sale: Sale) => String(sale.documentNo);
+const receiptNumber = (sale: Sale) => String(sale.documentNo ?? sale.receiptNo ?? "");
+
+/** Product search for the return screen: the server, or this till's own catalogue copy when there is no connection. */
+async function searchProducts(q: string): Promise<Product[]> {
+  if (typeof navigator === "undefined" || navigator.onLine) {
+    try {
+      const r = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
+      if (r.ok) return (await r.json()) as Product[];
+    } catch {
+      /* fall back to the local copy */
+    }
+  }
+  return (await searchLocal(q, 10)) as unknown as Product[];
+}
+
+/** Sales this till can still show without a connection: what it has waiting plus the last ones the server sent. */
+async function offlineSales(from: string, to: string, query: string): Promise<Sale[]> {
+  const all = (await applyQueuedRefunds([...(await queuedSales()), ...(await cachedSales())])) as unknown as Sale[];
+  const start = new Date(`${from}T00:00:00`).getTime();
+  const end = new Date(`${to}T23:59:59`).getTime();
+  const q = query.trim().toLowerCase();
+  return all
+    .filter((sale) => {
+      const t = new Date(sale.createdAt).getTime();
+      return t >= start && t <= end;
+    })
+    .filter((sale) => !q || String(sale.documentNo ?? "").includes(q) || (sale.receiptNo ?? "").toLowerCase().includes(q) || sale.id.toLowerCase().includes(q))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
 const receiptSettings = { name: "Korgen Kassa", logoUrl: null, currency: "₸", currencyDecimals: 2, taxName: "НДС", receiptFooter: "" };
 
 /** Register-only history and returns. It replaces only the content area below the
@@ -24,12 +57,13 @@ export function POSSalesPanel({ mode, canReturnWithReceipt, canReturnWithoutRece
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [offlineNotice, setOfflineNotice] = useState(false);
   const [query, setQuery] = useState("");
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [reprintSale, setReprintSale] = useState<Sale | null>(null);
-  const [reprintRefund, setReprintRefund] = useState<{ saleId: string; documentNo: number; refund: Refund } | null>(null);
+  const [reprintRefund, setReprintRefund] = useState<{ saleId: string; documentNo?: number; refund: Refund } | null>(null);
   const [returnMode, setReturnMode] = useState<"receipt" | "without">(canReturnWithReceipt ? "receipt" : "without");
   const printOriginalSale = (sale: Sale) => setReprintSale(sale);
   const printReturnReceipt = (sale: Sale) => {
@@ -45,22 +79,39 @@ export function POSSalesPanel({ mode, canReturnWithReceipt, canReturnWithoutRece
       const sp = new URLSearchParams({ pageSize: "50", from: `${from}T00:00:00`, to: `${to}T23:59:59` });
       const searched = (queryOverride ?? query).trim();
       if (searched) sp.set("q", searched);
-      const r = await fetch(`/api/pos/sales?${sp}`);
+      let r: Response | null = null;
+      try {
+        r = await fetch(`/api/pos/sales?${sp}`);
+      } catch {
+        r = null;
+      }
+      if (!r) {
+        // no connection: show what this till knows
+        setSales(await offlineSales(from, to, searched));
+        setOfflineNotice(true);
+        return;
+      }
+      setOfflineNotice(false);
       // A signed-out browser gets the login page (HTML) instead of JSON.
       if (r.status === 401 || r.redirected || !(r.headers.get("content-type") ?? "").includes("json")) {
         throw new Error("Сессия завершена. Войдите в кассу заново (страница «Вход для кассира»).");
       }
       if (!r.ok) throw new Error("Не удалось загрузить продажи");
       const data = await r.json();
-      setSales(data.sales ?? []);
+      const fromServer: Sale[] = data.sales ?? [];
+      void cacheSales(fromServer as never);
+      // sales made offline that have not reached the server yet belong at the top too
+      const waiting = (await queuedSales()) as unknown as Sale[];
+      setSales((await applyQueuedRefunds([...waiting, ...fromServer] as never)) as unknown as Sale[]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить продажи"); }
     finally { setLoading(false); }
   }, [from, query, to]);
 
   useEffect(() => { if (mode === "history" || returnMode === "receipt") load(); }, [load, mode, returnMode]);
   return <section className="min-h-0 flex-1 overflow-y-auto bg-[#f4f5f6] p-4 text-[#212529] sm:p-6">
+    {offlineNotice && <p data-testid="sales-offline-notice" className="mx-auto mb-3 max-w-5xl rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">Нет связи с сервером. Показаны чеки, сохранённые на этой кассе; возвраты отправятся при появлении интернета.</p>}
     {mode === "history" ? <SalesHistory sales={sales} loading={loading} error={error} query={query} setQuery={setQuery} from={from} setFrom={setFrom} to={to} setTo={setTo} onSearch={load} onReprint={printOriginalSale} /> : selectedSale ? <><button onClick={() => setSelectedSale(null)} className="mb-4 flex h-10 items-center gap-1 rounded-lg border bg-white px-4 text-sm font-bold hover:bg-slate-50"><ChevronLeft className="h-4 w-4" /> К списку чеков</button><ReceiptReturn sale={selectedSale} onDone={() => { setSelectedSale(null); load(); }} /></> : <ReturnHome returnMode={returnMode} setReturnMode={setReturnMode} canReceipt={canReturnWithReceipt} canWithout={canReturnWithoutReceipt} sales={sales} loading={loading} error={error} query={query} setQuery={setQuery} from={from} setFrom={setFrom} to={to} setTo={setTo} onSearch={load} onSelect={setSelectedSale} onReprint={printReturnReceipt} />}
-    {reprintSale && <ReceiptModal open onClose={() => setReprintSale(null)} settings={receiptSettings} data={{ saleId: reprintSale.id, documentNo: reprintSale.documentNo, items: reprintSale.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price, total: item.total, unit: item.unit })), subtotal: reprintSale.subtotal, discountAmount: reprintSale.discountAmount, taxAmount: reprintSale.taxAmount, total: reprintSale.total, paymentMethod: reprintSale.paymentMethod, amountTendered: reprintSale.amountTendered ?? undefined, changeDue: reprintSale.changeDue ?? undefined }} />}
+    {reprintSale && <ReceiptModal open onClose={() => setReprintSale(null)} settings={receiptSettings} data={{ saleId: reprintSale.id, documentNo: reprintSale.documentNo, receiptNo: reprintSale.receiptNo, items: reprintSale.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price, total: item.total, unit: item.unit })), subtotal: reprintSale.subtotal, discountAmount: reprintSale.discountAmount, taxAmount: reprintSale.taxAmount, total: reprintSale.total, paymentMethod: reprintSale.paymentMethod, amountTendered: reprintSale.amountTendered ?? undefined, changeDue: reprintSale.changeDue ?? undefined }} />}
     {reprintRefund && <RefundReceiptModal open onClose={() => setReprintRefund(null)} saleId={reprintRefund.saleId} documentNo={reprintRefund.documentNo} items={reprintRefund.refund.items.map((item) => { const quantity = Number(item.quantity); const price = Number(item.price); const source = sales.find((sale) => sale.id === reprintRefund.saleId)?.items.find((saleItem) => saleItem.id === item.saleItemId); return { name: item.name, quantity, price, total: price * quantity, unit: item.unit ?? source?.unit }; })} refundTotal={Number(reprintRefund.refund.amount)} reason={reprintRefund.refund.reason ?? undefined} />}
   </section>;
 }
@@ -175,17 +226,24 @@ function ReceiptReturn({ sale, onDone }: { sale: Sale; onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/sales/${sale.id}/refund`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const refundId = newId();
+      const who = await getTillAuth();
+      const sent = await sendOrQueue({
+        kind: "refund",
+        endpoint: `/api/sales/${sale.id}/refund`,
+        clientId: refundId,
+        fallbackError: "Не удалось провести возврат",
+        payload: {
+          id: refundId,
+          refundedAt: new Date().toISOString(),
+          ...(who ? { cashierUserId: who.userId } : {}),
           reason: reason || undefined,
           referenceValues: referenceBooks.payload(),
           restoreStock: true,
           items: available.filter((item) => selected.has(item.id)).map((item) => ({ saleItemId: item.id, quantity: quantities[item.id] ?? item.returnableQuantity })),
-        }),
+        },
       });
-      if (!response.ok) throw new Error((await response.json()).error ?? "Не удалось провести возврат");
+      if (!sent.ok) throw new Error(sent.error);
       setRefundReceipt({
         items: available.filter((item) => selected.has(item.id)).map((item) => {
           const quantity = quantities[item.id] ?? item.returnableQuantity;
@@ -232,15 +290,15 @@ function ReceiptReturn({ sale, onDone }: { sale: Sale; onDone: () => void }) {
       })}
       <div className="flex items-center justify-between rounded border bg-slate-50 px-4 py-3"><span className="font-bold">Сумма возврата</span><span className="text-lg font-bold">{formatCurrency(total)}</span></div>
     </div>
-    <ReferenceBookFields state={referenceBooks} className="mt-4 max-w-md" /><div className="mt-4 flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1 text-xs font-medium">Причина<input value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block h-10 w-full rounded border px-3 text-sm" placeholder="Необязательно" /></label><button disabled={busy || !selected.size} onClick={submit} className="flex h-10 items-center gap-2 rounded bg-[#26877c] px-5 text-sm font-bold text-white disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />}<Check className="h-4 w-4" /> Оформить возврат</button></div></section>{refundReceipt && <RefundReceiptModal open onClose={() => { setRefundReceipt(null); onDone(); }} saleId={sale.id} documentNo={sale.documentNo} items={refundReceipt.items} refundTotal={refundReceipt.total} reason={refundReceipt.reason} />}</>;
+    <ReferenceBookFields state={referenceBooks} className="mt-4 max-w-md" /><div className="mt-4 flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1 text-xs font-medium">Причина<input value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block h-10 w-full rounded border px-3 text-sm" placeholder="Необязательно" /></label><button disabled={busy || !selected.size} onClick={submit} className="flex h-10 items-center gap-2 rounded bg-[#26877c] px-5 text-sm font-bold text-white disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />}<Check className="h-4 w-4" /> Оформить возврат</button></div></section>{refundReceipt && <RefundReceiptModal open onClose={() => { setRefundReceipt(null); onDone(); }} saleId={sale.id} documentNo={sale.documentNo} referenceText={sale.documentNo == null ? `К чеку №${receiptNumber(sale)} (возврат сохранён на кассе)` : undefined} items={refundReceipt.items} refundTotal={refundReceipt.total} reason={refundReceipt.reason} />}</>;
 }
 
 function WithoutReceiptReturn() {
   const [query, setQuery] = useState(""); const [results, setResults] = useState<Product[]>([]); const [items, setItems] = useState<Product[]>([]); const [qty, setQty] = useState<Record<string, number>>({}); const [reason, setReason] = useState(""); const referenceBooks = useReferenceBooks("RETURN"); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [refundReceipt, setRefundReceipt] = useState<{ items: { name: string; quantity: number; price: number; total: number; unit?: string }[]; total: number; reason?: string; referenceText: string } | null>(null); const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function find(value: string) { setQuery(value); if (debounce.current) clearTimeout(debounce.current); debounce.current = setTimeout(() => { if (!value.trim()) { setResults([]); return; } fetch(`/api/products/search?q=${encodeURIComponent(value)}`).then((r) => r.ok ? r.json() : []).then((d) => setResults(d.slice(0, 10))).catch(() => setResults([])); }, 200); }
+  function find(value: string) { setQuery(value); if (debounce.current) clearTimeout(debounce.current); debounce.current = setTimeout(() => { if (!value.trim()) { setResults([]); return; } searchProducts(value).then((d) => setResults(d.slice(0, 10))).catch(() => setResults([])); }, 200); }
   function updateQuantity(item: Product, raw: number) { const step = item.unit === "pcs" ? 1 : 0.001; const rounded = item.unit === "pcs" ? Math.round(raw) : Math.round(raw * 1000) / 1000; return Math.max(step, Number.isFinite(rounded) ? rounded : step); }
   const total = items.reduce((sum, item) => sum + item.price * (qty[item.id] ?? 1), 0);
-  async function submit() { if (!items.length) return; const missingBook = referenceBooks.missing(); if (missingBook) { setMessage(`Выберите значение справочника «${missingBook}»`); return; } setBusy(true); setMessage(""); try { const r = await fetch("/api/pos/returns/without-receipt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: reason || undefined, referenceValues: referenceBooks.payload(), items: items.map((item) => ({ productId: item.id, quantity: qty[item.id] ?? 1 })) }) }); const data = await r.json(); if (!r.ok) throw new Error(data.error ?? "Не удалось провести возврат"); const receiptItems = items.map((item) => { const quantity = qty[item.id] ?? 1; return { name: item.name, quantity, price: item.price, total: item.price * quantity, unit: item.unit }; }); const documentNo = data.customerReturn?.documentNo ?? data.customerReturn?.id?.slice(-8).toUpperCase(); setRefundReceipt({ items: receiptItems, total, reason: reason || undefined, referenceText: documentNo ? `Возврат без чека №${documentNo}` : "Возврат без чека" }); setItems([]); setQty({}); setReason(""); referenceBooks.reset(); setMessage("Возврат проведён. Остатки увеличены."); } catch (e) { setMessage(e instanceof Error ? e.message : "Не удалось провести возврат"); } finally { setBusy(false); } }
+  async function submit() { if (!items.length) return; const missingBook = referenceBooks.missing(); if (missingBook) { setMessage(`Выберите значение справочника «${missingBook}»`); return; } setBusy(true); setMessage(""); try { const returnId = newId(); const who = await getTillAuth(); const sent = await sendOrQueue({ kind: "return", endpoint: "/api/pos/returns/without-receipt", clientId: returnId, fallbackError: "Не удалось провести возврат", payload: { id: returnId, returnedAt: new Date().toISOString(), ...(who ? { cashierUserId: who.userId } : {}), reason: reason || undefined, referenceValues: referenceBooks.payload(), items: items.map((item) => ({ productId: item.id, quantity: qty[item.id] ?? 1 })) }, decorateForQueue: async (p) => ({ ...p, receiptNo: await nextReceiptNo() }) }); if (!sent.ok) throw new Error(sent.error); const data = (sent.queued ? {} : sent.data) as { customerReturn?: { documentNo?: number; id?: string } }; const queuedNo = sent.queued ? String(sent.payload.receiptNo) : undefined; const receiptItems = items.map((item) => { const quantity = qty[item.id] ?? 1; return { name: item.name, quantity, price: item.price, total: item.price * quantity, unit: item.unit }; }); const documentNo = data.customerReturn?.documentNo ?? data.customerReturn?.id?.slice(-8).toUpperCase() ?? queuedNo; setRefundReceipt({ items: receiptItems, total, reason: reason || undefined, referenceText: documentNo ? `Возврат без чека №${documentNo}` : "Возврат без чека" }); setItems([]); setQty({}); setReason(""); referenceBooks.reset(); setMessage(sent.queued ? "Нет связи с сервером: возврат сохранён на кассе и будет отправлен при появлении интернета." : "Возврат проведён. Остатки увеличены."); } catch (e) { setMessage(e instanceof Error ? e.message : "Не удалось провести возврат"); } finally { setBusy(false); } }
   return <><div className="mx-auto max-w-3xl"><div className="relative mb-4 rounded border bg-white p-3"><label className="text-xs font-medium">Найти товар<input autoFocus value={query} onChange={(e) => find(e.target.value)} placeholder="Название или штрихкод" className="mt-1 block h-10 w-full rounded border px-3 text-sm" /></label>{results.length > 0 && <div className="absolute left-3 right-3 z-10 mt-1 overflow-hidden rounded border bg-white shadow-lg">{results.map((product) => <button key={product.id} onClick={() => { if (!items.some((i) => i.id === product.id)) { setItems((p) => [...p, product]); setQty((p) => ({ ...p, [product.id]: 1 })); } setQuery(""); setResults([]); }} className="flex w-full justify-between border-b px-3 py-2 text-left text-sm hover:bg-slate-50"><span>{product.name}</span><span>{formatCurrency(product.price)}</span></button>)}</div>}</div>{message && <p className="mb-3 rounded border bg-white p-3 text-sm">{message}</p>}
     {/* Desktop/tablet table */}
     <div className="hidden sm:block overflow-x-auto rounded border bg-white"><table className="w-full text-sm"><thead className="bg-[#e9ecef] text-left text-xs font-bold uppercase text-slate-600"><tr><th className="px-3 py-3">Товар</th><th className="px-3 py-3 text-right">Цена</th><th className="px-3 py-3 text-right">Количество</th><th className="px-3 py-3 text-right">Сумма</th><th></th></tr></thead><tbody>{items.length === 0 ? <EmptyRow cols={5} /> : items.map((item) => { const step = item.unit === "pcs" ? 1 : 0.001; return <tr key={item.id} className="border-t"><td className="px-3 py-2 font-medium">{item.name}</td><td className="px-3 py-2 text-right">{formatCurrency(item.price)}</td><td className="px-3 py-2 text-right"><input value={qty[item.id] ?? 1} type="number" min={step} step={step} onChange={(e) => setQty((p) => ({ ...p, [item.id]: updateQuantity(item, Number(e.target.value)) }))} className="h-8 w-20 rounded border px-2 text-right" /><span className="ml-1 text-xs text-muted-foreground">{item.unit === "pcs" ? "шт" : item.unit}</span></td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.price * (qty[item.id] ?? 1))}</td><td className="px-3 py-2"><button onClick={() => setItems((p) => p.filter((i) => i.id !== item.id))} className="text-red-600">Удалить</button></td></tr>; })}</tbody></table><div className="flex justify-between border-t bg-slate-50 px-4 py-3 font-bold"><span>Сумма возврата</span><span>{formatCurrency(total)}</span></div></div>

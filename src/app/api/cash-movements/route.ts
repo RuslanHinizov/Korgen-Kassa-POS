@@ -6,6 +6,7 @@ import { getOpenShift } from "@/lib/shift";
 import { getStoreId } from "@/lib/store-context";
 import { logAudit } from "@/lib/audit";
 import { resolvePosActor } from "@/lib/pos-actor";
+import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,11 @@ const createSchema = z.object({
   type: z.enum(["IN", "OUT", "PAYOUT", "DROP"]),
   amount: z.number().positive(),
   reason: z.string().max(200).optional(),
+  /** Offline till: id made on the till (becomes the row's id), the shift it belongs to, when, and who. */
+  id: z.string().regex(CLIENT_ID).optional(),
+  shiftId: z.string().optional(),
+  createdAt: z.string().datetime().optional(),
+  cashierUserId: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -47,21 +53,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Внос и вынос средств отключен в настройках кассы" }, { status: 403 });
   }
 
-  const shift = await getOpenShift(actor.userId, storeId);
+  // The same upload twice returns the movement it already created.
+  if (parsed.data.id) {
+    const already = await prisma.cashMovement.findFirst({ where: { id: parsed.data.id, shift: { storeId } } });
+    if (already) return NextResponse.json({ movement: serialize(already), duplicate: true }, { status: 200 });
+  }
+
+  const movementUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  // an offline till names the shift itself (the server may not have seen it open yet)
+  const shift =
+    (parsed.data.shiftId ? await prisma.shift.findFirst({ where: { id: parsed.data.shiftId, storeId } }) : null) ??
+    (await getOpenShift(movementUserId, storeId));
   if (!shift) return NextResponse.json({ error: "No open shift" }, { status: 409 });
 
   const movement = await prisma.cashMovement.create({
     data: {
+      ...(parsed.data.id ? { id: parsed.data.id } : {}),
       shiftId: shift.id,
-      userId: actor.userId,
+      userId: movementUserId,
       type: parsed.data.type,
       amount: parsed.data.amount,
       reason: parsed.data.reason,
+      createdAt: trustedTime(parsed.data.createdAt),
     },
   });
 
   await logAudit({
-    userId: actor.userId,
+    userId: movementUserId,
     action: parsed.data.type === "IN" ? "CASH_IN" : "CASH_OUT",
     entityType: "CashMovement",
     entityId: movement.id,

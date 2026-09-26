@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { resolvePosActor } from "@/lib/pos-actor";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { trustedTime } from "@/lib/offline-write";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,9 @@ const closeSchema = z.object({
   action: z.literal("close"),
   countedCash: z.number().min(0),
   notes: z.string().optional(),
+  /** Offline till: when it was closed. `offline: true` also makes a repeated upload of the same close a success. */
+  closedAt: z.string().datetime().optional(),
+  offline: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: Ctx) {
@@ -58,11 +62,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const shift = await prisma.shift.findFirst({ where: { id, storeId } });
   if (!shift) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (shift.status === "CLOSED") {
+    // an upload that is repeated (lost answer) must not look like a failure
+    if (parsed.data.offline) return NextResponse.json({ shift: serialize(shift), duplicate: true }, { status: 200 });
     return NextResponse.json({ error: "Shift already closed" }, { status: 409 });
   }
 
   const isPrivileged = ["ADMIN", "MANAGER"].includes(actor.role ?? "");
-  if (shift.userId !== actor.userId && !isPrivileged) {
+  if (shift.userId !== actor.userId && !isPrivileged && !parsed.data.offline) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -74,7 +80,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     where: { id },
     data: {
       status: "CLOSED",
-      closedAt: new Date(),
+      closedAt: trustedTime(parsed.data.closedAt) ?? new Date(),
       countedCash: parsed.data.countedCash,
       expectedCash: expected,
       difference,

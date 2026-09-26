@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { toast } from "sonner";
 import { lineGross, roundAmount } from "@/lib/rounding";
 import type { DiscountLine } from "@/lib/promotions";
-import { unitLabel } from "@/lib/units";
 
 export type PaymentMethod = "CASH" | "CARD" | "OTHER" | "CREDIT";
 
@@ -153,26 +151,18 @@ export const useCartStore = create<CartState>()(
           // intentionally not stock-limited, so restore their sentinel here.
           const availableStock = item.productId === null ? Infinity : finiteNumber(item.stock);
           const existing = item.productId != null ? state.items.find((i) => i.productId === item.productId) : undefined;
+          // Like UMAG's till, a sale is never limited by the stock balance (the balance may go negative and shows in the
+          // reports); an offline till cannot know the real balance anyway. The line only shows a "no stock" badge.
           if (existing) {
-            const capped = Math.min(existing.stock, existing.quantity + amount);
-            if (capped <= existing.quantity) {
-              toast.error(`Остаток: ${existing.stock} ${unitLabel(existing.unit, true)} — больше нельзя добавить`);
-              return {};
-            }
             return {
               items: state.items.map((i) =>
                 i.id === existing.id
-                  ? { ...i, quantity: capped, unit: item.unit ?? i.unit ?? "pcs" }
+                  ? { ...i, quantity: existing.quantity + amount, unit: item.unit ?? i.unit ?? "pcs" }
                   : i
               ),
             };
           }
-          const capped = Math.min(availableStock, amount);
-          if (capped <= 0) {
-            toast.error(`Остаток: ${availableStock} ${unitLabel(item.unit, true)} — нет в наличии`);
-            return {};
-          }
-          return { items: [...state.items, { ...item, stock: availableStock, id: lineId(), unit: item.unit ?? "pcs", quantity: capped, notes: item.notes ?? "", lineDiscount: item.lineDiscount ?? 0 }] };
+          return { items: [...state.items, { ...item, stock: availableStock, id: lineId(), unit: item.unit ?? "pcs", quantity: amount, notes: item.notes ?? "", lineDiscount: item.lineDiscount ?? 0 }] };
         }),
 
       addCustomItem: (item) =>
@@ -201,12 +191,7 @@ export const useCartStore = create<CartState>()(
             return { items: state.items.filter((i) => i.id !== id) };
           }
           return {
-            items: state.items.map((i) => {
-              if (i.id !== id) return i;
-              const capped = Math.min(i.stock, safeQuantity);
-              if (capped < safeQuantity) toast.error(`Остаток: ${i.stock} ${unitLabel(i.unit, true)} — больше нельзя добавить`);
-              return { ...i, quantity: capped };
-            }),
+            items: state.items.map((i) => (i.id === id ? { ...i, quantity: safeQuantity } : i)),
           };
         }),
 

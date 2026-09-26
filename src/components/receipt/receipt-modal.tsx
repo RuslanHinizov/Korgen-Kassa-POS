@@ -33,6 +33,7 @@ interface ReceiptModalProps {
   data: {
     saleId?: string;
     documentNo?: number;
+    receiptNo?: string;
     items: ReceiptItem[];
     subtotal: number;
     discountAmount: number;

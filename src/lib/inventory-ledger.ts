@@ -24,7 +24,9 @@ export async function applyInventoryMovement(
   const product = await tx.product.findUniqueOrThrow({ where: { id: input.productId }, select: { stock: true } });
   const stockBefore = Number(product.stock);
   const stockAfter = stockBefore + input.quantity;
-  if (stockAfter < 0) throw new Error("INSUFFICIENT_STOCK");
+  // A sale is never refused for lack of stock (UMAG behaves the same, and an offline till cannot know the
+  // real balance anyway) — the balance may go negative and shows up in the reports. Every other movement stays strict.
+  if (stockAfter < 0 && input.type !== "SALE") throw new Error("INSUFFICIENT_STOCK");
 
   await tx.product.update({ where: { id: input.productId }, data: { stock: stockAfter } });
   return tx.inventoryMovement.create({

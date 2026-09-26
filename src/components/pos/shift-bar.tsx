@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslations, useLocale } from "next-intl";
 import { Clock, Wallet, FileText, Lock, X, Printer } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { cashMovementOfflineAware, closeShiftOfflineAware, loadCurrentShift, openShiftOfflineAware } from "@/lib/offline/shift";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Shift = any;
@@ -25,9 +26,8 @@ export function ShiftBar({ onShiftChange, cashMovementEnabled = true }: ShiftBar
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/shifts?scope=current");
-      const data = await res.json();
-      setShift(data.shift ?? null);
+      const { shift: current } = await loadCurrentShift();
+      setShift(current);
     } finally {
       setLoading(false);
     }
@@ -120,15 +120,8 @@ function OpenShiftModal({ onClose, onDone }: { onClose: () => void; onDone: () =
     setBusy(true);
     setErr("");
     try {
-      const res = await fetch("/api/shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openingFloat: parseFloat(float) || 0 }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(typeof d.error === "string" ? d.error : t("err_open"));
-      }
+      const result = await openShiftOfflineAware(parseFloat(float) || 0, t("err_open"));
+      if (!result.ok) throw new Error(result.error);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("err_open"));
@@ -181,15 +174,8 @@ function CashMovementModal({ onClose, onDone }: { onClose: () => void; onDone: (
     setBusy(true);
     setErr("");
     try {
-      const res = await fetch("/api/cash-movements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, amount: amt, reason: reason || undefined }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(typeof d.error === "string" ? d.error : t("err_cash"));
-      }
+      const result = await cashMovementOfflineAware({ type, amount: amt, reason: reason || undefined }, t("err_cash"));
+      if (!result.ok) throw new Error(result.error);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("err_cash"));
@@ -258,17 +244,20 @@ function CloseShiftModal({ shiftId, onClose, onDone }: { shiftId: string; onClos
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState<Report | null>(null);
+  // no connection: the expected cash is worked out by the server after upload
+  const [reportUnavailable, setReportUnavailable] = useState(false);
+  const [closedOffline, setClosedOffline] = useState(false);
 
   useEffect(() => {
     fetch(`/api/shifts/${shiftId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((d) => {
         setReport(d.report);
         // When no cash is expected, the only correct counted amount is zero.
         // Prefill it so a cashier does not get a confusing validation error.
         if (Number(d.report?.expectedCash ?? 0) === 0) setCounted("0");
       })
-      .catch(() => {});
+      .catch(() => setReportUnavailable(true));
   }, [shiftId]);
 
   const expected = report?.expectedCash ?? 0;
@@ -279,14 +268,10 @@ function CloseShiftModal({ shiftId, onClose, onDone }: { shiftId: string; onClos
     setBusy(true);
     setErr("");
     try {
-      const res = await fetch(`/api/shifts/${shiftId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "close", countedCash: parseFloat(counted), notes: notes || undefined }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(typeof d.error === "string" ? d.error : t("err_close"));
-      setDone(d.report);
+      const result = await closeShiftOfflineAware(shiftId, parseFloat(counted), notes || undefined, t("err_close"));
+      if (!result.ok) throw new Error(result.error);
+      if (result.queued) setClosedOffline(true);
+      else setDone(result.report as Report);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("err_close"));
     } finally {
@@ -297,10 +282,24 @@ function CloseShiftModal({ shiftId, onClose, onDone }: { shiftId: string; onClos
   if (done) {
     return <ShiftReportModal report={done} kind="Z" onClose={() => { onDone(); }} />;
   }
+  if (closedOffline) {
+    return (
+      <ModalShell title={t("close_shift")} onClose={onDone}>
+        <div className="space-y-3 text-sm">
+          <p className="font-medium" data-testid="shift-closed-offline">Смена закрыта на кассе.</p>
+          <p className="text-muted-foreground">Нет связи с сервером. Закрытие и Z-отчёт будут отправлены автоматически, когда появится интернет.</p>
+          <button onClick={onDone} className="w-full rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground">OK</button>
+        </div>
+      </ModalShell>
+    );
+  }
 
   return (
     <ModalShell title={t("close_shift")} onClose={onClose}>
       <div className="space-y-3">
+        {reportUnavailable && !report ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">Нет связи с сервером: ожидаемая сумма будет рассчитана после отправки. Введите пересчитанную сумму в кассе.</p>
+        ) : (
         <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm space-y-1">
           <Row label={t("opening_float")} value={formatCurrency(report?.openingFloat ?? 0)} />
           <Row label={t("cash_sales")} value={formatCurrency(report?.cashSales ?? 0)} />
@@ -311,6 +310,7 @@ function CloseShiftModal({ shiftId, onClose, onDone }: { shiftId: string; onClos
             <Row label={t("expected_cash")} value={formatCurrency(expected)} />
           </div>
         </div>
+        )}
         <div className="space-y-1.5">
           <label className="text-sm font-medium">{t("counted_cash")}</label>
           <input
@@ -320,7 +320,7 @@ function CloseShiftModal({ shiftId, onClose, onDone }: { shiftId: string; onClos
             className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        {diff !== null && (
+        {diff !== null && !reportUnavailable && (
           <p className={`text-sm font-medium ${Math.abs(diff) < 0.005 ? "text-green-600" : "text-destructive"}`}>
             {t("difference")}: {diff >= 0 ? "+" : ""}{formatCurrency(diff)}
           </p>

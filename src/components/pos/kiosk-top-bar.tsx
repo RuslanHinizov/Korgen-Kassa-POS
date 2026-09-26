@@ -7,6 +7,7 @@ import { CashboxStatus } from "./cashbox-status";
 import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
 import { APP_VERSION } from "@/lib/app-version";
 import { signOut } from "@/lib/auth-client";
+import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 
 interface KioskTopBarProps {
   cashierName: string;
@@ -43,9 +44,7 @@ export function KioskTopBar({
   cashMovementEnabled = true,
 }: KioskTopBarProps) {
   const [now, setNow] = useState(() => new Date());
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine
-  );
+  const { online } = useOfflineStatus();
   const [printerReady, setPrinterReady] = useState(false);
   const [scannerSeen, setScannerSeen] = useState(false);
   const shift = useAnchoredPopover();
@@ -78,17 +77,6 @@ export function KioskTopBar({
     window.location.href = "/kasa-giris";
   }
 
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
-
   return (
     <div className="flex min-h-10 shrink-0 items-center gap-3 border-b border-emerald-700 bg-[#00bd61] px-3 text-sm font-semibold text-[#10281b]">
       <span className="hidden text-xs font-bold sm:inline">Учебный</span>
@@ -112,6 +100,12 @@ export function KioskTopBar({
         )}
       </span>
       <span className="hidden text-xs font-bold lg:inline">v {APP_VERSION}</span>
+      {/* UMAG shows the connection as a dot next to the version: green = connected, red = no connection. */}
+      <span
+        data-testid="connection-dot"
+        title={online ? "Есть связь с сервером" : "Нет связи с сервером — продажи сохраняются на кассе"}
+        className={`h-3.5 w-3.5 shrink-0 rounded-full border border-black/30 ${online ? "bg-[#82ec6f]" : "bg-red-600"}`}
+      />
 
       <div className="ml-auto flex items-center gap-1">
         <button type="button" onClick={onShowSales} className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "sales" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}>

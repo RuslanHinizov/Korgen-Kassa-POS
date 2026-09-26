@@ -14,6 +14,7 @@ import { resolveStockLines } from "@/lib/bundle";
 import { lineGross, roundAmount } from "@/lib/rounding";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { findBlockedCategory, type SaleRestrictionRule } from "@/lib/sale-restrictions";
+import { attributedUserId } from "@/lib/offline-write";
 
 const saleSchema = z.object({
   items: z
@@ -53,7 +54,23 @@ const saleSchema = z.object({
   /** Loyalty points to redeem as discount (0 = no redemption) */
   loyaltyPointsUsed: z.number().int().min(0).default(0),
   referenceValues: z.array(z.object({ bookId: z.string(), entryId: z.string() })).optional(),
+  /** Offline kassa: id made on the till. The same id sent twice yields the same sale, never a duplicate. */
+  clientSaleId: z.string().min(8).max(64).optional(),
+  /** Receipt number the till printed itself while offline. */
+  receiptNo: z.string().max(40).optional(),
+  /** When the till actually rang the sale up (ISO). Only trusted within a sane window, see below. */
+  soldAt: z.string().datetime().optional(),
+  /** The till was offline when it rang this sale. */
+  offline: z.boolean().optional(),
+  /** The shift the till says the sale belongs to (an offline till knows it before the server does). */
+  shiftId: z.string().optional(),
+  /** Who really rang the sale up, when another cashier's session uploads it. */
+  cashierUserId: z.string().optional(),
 });
+
+/** An offline till may upload a sale days later; accept its own timestamp only inside this window. */
+const MAX_OFFLINE_AGE_MS = 14 * 24 * 3600_000;
+const MAX_CLOCK_AHEAD_MS = 5 * 60_000;
 
 export async function POST(req: NextRequest) {
   const actor = await resolvePosActor();
@@ -82,6 +99,12 @@ export async function POST(req: NextRequest) {
     discountCardCode,
     loyaltyPointsUsed,
     referenceValues: referenceChoices,
+    clientSaleId,
+    receiptNo,
+    soldAt,
+    offline,
+    shiftId,
+    cashierUserId,
   } = parsed.data;
 
   // Derive primary paymentMethod from largest split-tender line (if split mode).
@@ -102,6 +125,26 @@ export async function POST(req: NextRequest) {
   }
 
   const storeId = await getStoreId();
+
+  // A retried upload (lost response, flaky connection) must return the sale it already created —
+  // checked first, before any rule that could reject a replay.
+  if (clientSaleId) {
+    const already = await prisma.sale.findUnique({
+      where: { storeId_clientSaleId: { storeId, clientSaleId } },
+      include: { items: true },
+    });
+    if (already) return NextResponse.json({ sale: already, duplicate: true }, { status: 200 });
+  }
+
+  // The till's own sale time (offline sales are uploaded later) — trusted only inside a sane window.
+  let soldAtDate: Date | undefined;
+  if (soldAt) {
+    const t = new Date(soldAt).getTime();
+    const now = Date.now();
+    if (Number.isFinite(t) && t <= now + MAX_CLOCK_AHEAD_MS && t >= now - MAX_OFFLINE_AGE_MS) soldAtDate = new Date(Math.min(t, now));
+  }
+
+  const saleUserId = await attributedUserId(actor, storeId, cashierUserId);
   const references = await resolveReferenceValues(storeId, "SALE", referenceChoices);
   if (!references.ok) return NextResponse.json({ error: references.error }, { status: 400 });
   const settings = await prisma.businessSettings.findUnique({ where: { storeId } });
@@ -324,7 +367,21 @@ export async function POST(req: NextRequest) {
       ? Math.max(0, paidTotal - total)
       : undefined;
 
-  const openShift = await getOpenShift(actor.userId, storeId);
+  // A sale uploaded later belongs to the shift the till says it was rung up in, else the one that was running
+  // when it was rung up — not to whatever is open now.
+  const openShift =
+    (shiftId ? await prisma.shift.findFirst({ where: { id: shiftId, storeId } }) : null) ??
+    (soldAtDate
+      ? await prisma.shift.findFirst({
+          where: {
+            userId: saleUserId,
+            storeId,
+            openedAt: { lte: soldAtDate },
+            OR: [{ closedAt: null }, { closedAt: { gte: soldAtDate } }],
+          },
+          orderBy: { openedAt: "desc" },
+        })
+      : null) ?? (await getOpenShift(saleUserId, storeId));
   if (settings?.requireOpenShift && !openShift) {
     return NextResponse.json(
       { error: "Для проведения продажи необходимо открыть смену" },
@@ -371,7 +428,7 @@ export async function POST(req: NextRequest) {
       const created = await tx.sale.create({
         data: {
           storeId,
-          userId: actor.userId,
+          userId: saleUserId,
           referenceValues: references.values.length ? references.values : undefined,
           customerId: customerId || undefined,
           consultantId: consultantId || undefined,
@@ -389,8 +446,13 @@ export async function POST(req: NextRequest) {
           changeDue,
           notes: note,
           promoDetails: promoLines.length > 0 ? promoLines : undefined,
+          clientSaleId: clientSaleId ?? undefined,
+          receiptNo: receiptNo ?? undefined,
+          offline: Boolean(offline),
+          createdAt: soldAtDate,
           items: {
-            create: items.map((i) => ({
+            create: items.map((i, lineNo) => ({
+              lineNo,
               productId: i.productId ?? undefined,
               name: i.name,
               price: i.price,
@@ -448,7 +510,7 @@ export async function POST(req: NextRequest) {
         for (const line of lines) {
           await applyInventoryMovement(tx, {
             productId: line.productId,
-            userId: actor.userId,
+            userId: saleUserId,
             type: "SALE",
             quantity: -line.quantity,
             referenceType: "Sale",
@@ -504,6 +566,14 @@ export async function POST(req: NextRequest) {
       return created;
     });
   } catch (e) {
+    // Two uploads of the same sale raced: the loser hits the unique (storeId, clientSaleId) index.
+    if (clientSaleId && (e as { code?: string })?.code === "P2002") {
+      const winner = await prisma.sale.findUnique({
+        where: { storeId_clientSaleId: { storeId, clientSaleId } },
+        include: { items: true },
+      });
+      if (winner) return NextResponse.json({ sale: winner, duplicate: true }, { status: 200 });
+    }
     if (e instanceof Error && e.message === "INSUFFICIENT_STOCK") {
       return NextResponse.json({ error: "Недостаточно товара на складе" }, { status: 409 });
     }

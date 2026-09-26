@@ -30,6 +30,10 @@ import { EditItemModal } from "./edit-item-modal";
 import { PriceCheckModal } from "./price-check-modal";
 import { GlobalSearchModal } from "./global-search-modal";
 import { KioskTopBar } from "./kiosk-top-bar";
+import { OfflineManager } from "./offline-manager";
+import { loadCurrentShift } from "@/lib/offline/shift";
+import { getTillAuth, tillAuthValid } from "@/lib/offline/auth";
+import { UnsyncedBanner } from "./unsynced-banner";
 import { POSSalesPanel } from "./pos-sales-modal";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { NumericKeypad } from "@/components/ui/numeric-keypad";
@@ -80,7 +84,15 @@ const DEFAULT_KIOSK_PERMISSIONS: KioskPermissions = {
   posAccessReturn: "ALL", posAccessReturnNoReceipt: "ALL", posAccessDeleteItem: "ALL", posAccessDecreaseQty: "ALL",
 };
 
-export function POSScreen({ cashierName, cashierRole }: { cashierName: string; cashierRole: string }) {
+export function POSScreen({ cashierName: serverCashierName, cashierRole: serverCashierRole, cashierId, storeId }: { cashierName: string; cashierRole: string; cashierId: string; storeId: string }) {
+  // Signed in without a connection (see src/lib/offline/auth.ts): the page may have come from the cache and still carry
+  // the previous cashier's name, so the till's own record of who is working wins.
+  const [tillWho, setTillWho] = useState<{ name: string; role: string } | null>(null);
+  useEffect(() => {
+    getTillAuth().then((a) => { if (a && a.mode === "offline" && tillAuthValid(a)) setTillWho({ name: a.name, role: a.role }); }).catch(() => {});
+  }, []);
+  const cashierName = tillWho?.name ?? serverCashierName;
+  const cashierRole = tillWho?.role ?? serverCashierRole;
   const t = useTranslations("pos");
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX_RATE);
   const [showHeldOrders, setShowHeldOrders] = useState(false);
@@ -169,9 +181,9 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
 
   // Track whether the cashier has an open shift.
   useEffect(() => {
-    fetch("/api/shifts?scope=current")
-      .then((r) => r.json())
-      .then((d) => setHasOpenShift(Boolean(d?.shift)))
+    // the server, or this till's own record of its shift when there is no connection
+    loadCurrentShift()
+      .then((r) => setHasOpenShift(Boolean(r.shift)))
       .catch(() => {});
   }, [shiftRefreshKey]);
 
@@ -386,7 +398,8 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
       : (useCartStore.getState().amountTendered ?? 0);
     const data: ReceiptData = {
       saleId,
-      documentNo: s ? Number(s.documentNo) : undefined,
+      documentNo: s && s.documentNo != null ? Number(s.documentNo) : undefined,
+      receiptNo: s?.receiptNo ? String(s.receiptNo) : undefined,
       customerName: customer?.name || undefined,
       items: items.map((i) => ({
         name: i.name,
@@ -508,6 +521,8 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
         onShowSales={() => setSalesPanel(null)}
         hasOpenShift={hasOpenShift}
       />
+      <OfflineManager cashierId={cashierId} cashierName={serverCashierName} cashierRole={serverCashierRole} storeId={storeId} />
+      <UnsyncedBanner />
 
       <div className={salesPanel ? "hidden" : "contents"}>
 
@@ -958,16 +973,13 @@ export function POSScreen({ cashierName, cashierRole }: { cashierName: string; c
         allowDecimal={items.find((item) => item.id === keypad.itemId)?.unit !== "pcs"}
         presets={items.find((item) => item.id === keypad.itemId)?.unit === "pcs" ? [1, 2, 3, 5, 10] : [0.1, 0.25, 0.5, 1, 2]}
         unit={unitLabel(items.find((item) => item.id === keypad.itemId)?.unit, true)}
-        max={(() => {
-          const item = items.find((candidate) => candidate.id === keypad.itemId);
-          return item && Number.isFinite(item.stock) ? item.stock : undefined;
-        })()}
         onValueChange={(v) => setKeypad((k) => ({ ...k, value: v }))}
         onConfirm={() => {
           const item = items.find((candidate) => candidate.id === keypad.itemId);
           const parsed = parseFloat(keypad.value);
           const val = item?.unit === "pcs" ? Math.floor(parsed) : parsed;
-          if (!isNaN(val) && val > 0) updateQuantity(keypad.itemId, Math.min(item?.stock ?? val, val));
+          // Not limited by stock — same as UMAG (see docs/kasa-offline-plan.md).
+          if (!isNaN(val) && val > 0) updateQuantity(keypad.itemId, val);
           setKeypad({ open: false, itemId: "", value: "1" });
         }}
         onCancel={() => setKeypad({ open: false, itemId: "", value: "1" })}

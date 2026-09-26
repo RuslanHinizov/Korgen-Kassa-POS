@@ -10,6 +10,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { xlsxResponse } from "@/lib/xlsx-response";
+import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +89,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ shift: shift ? serialize(shift) : null });
 }
 
-const openSchema = z.object({ openingFloat: z.number().min(0).default(0) });
+const openSchema = z.object({
+  openingFloat: z.number().min(0).default(0),
+  /** Offline till: id made on the till (becomes the shift's id), time it was opened, who opened it. */
+  id: z.string().regex(CLIENT_ID).optional(),
+  openedAt: z.string().datetime().optional(),
+  cashierUserId: z.string().optional(),
+});
 
 export async function POST(req: NextRequest) {
   const actor = await resolvePosActor();
@@ -98,17 +105,32 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const storeId = await getStoreId();
-  const existing = await getOpenShift(actor.userId, storeId);
+
+  // The same upload twice returns the shift it already created.
+  if (parsed.data.id) {
+    const already = await prisma.shift.findFirst({ where: { id: parsed.data.id, storeId } });
+    if (already) return NextResponse.json({ shift: serialize(already), duplicate: true }, { status: 200 });
+  }
+
+  const shiftUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  const existing = await getOpenShift(shiftUserId, storeId);
   if (existing) {
     return NextResponse.json({ error: "A shift is already open", shift: serialize(existing) }, { status: 409 });
   }
 
   const shift = await prisma.shift.create({
-    data: { storeId, userId: actor.userId, openingFloat: parsed.data.openingFloat, status: "OPEN" },
+    data: {
+      ...(parsed.data.id ? { id: parsed.data.id } : {}),
+      storeId,
+      userId: shiftUserId,
+      openingFloat: parsed.data.openingFloat,
+      status: "OPEN",
+      openedAt: trustedTime(parsed.data.openedAt),
+    },
   });
 
   await logAudit({
-    userId: actor.userId,
+    userId: shiftUserId,
     action: "SHIFT_OPEN",
     entityType: "Shift",
     entityId: shift.id,

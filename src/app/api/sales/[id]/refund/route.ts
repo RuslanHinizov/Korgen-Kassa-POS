@@ -10,15 +10,21 @@ import { applyInventoryMovement, restoreReturnedLot } from "@/lib/inventory-ledg
 import { resolveStockLines } from "@/lib/bundle";
 import { resolvePosActor } from "@/lib/pos-actor";
 import { canUsePosAction } from "@/lib/pos-permissions";
+import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
 
 const refundSchema = z.object({
   reason: z.string().optional(),
   referenceValues: z.array(z.object({ bookId: z.string(), entryId: z.string() })).optional(),
   restoreStock: z.boolean().default(true),
   items: z.array(z.object({
+    /** a sale item id, or "L:<n>" (n-th line) for a sale an offline till has not uploaded yet */
     saleItemId: z.string(),
     quantity: z.number().positive(),
   })).min(1),
+  /** Offline till: id made on the till (becomes the refund id), time, who. */
+  id: z.string().regex(CLIENT_ID).optional(),
+  refundedAt: z.string().datetime().optional(),
+  cashierUserId: z.string().optional(),
 });
 
 export async function POST(
@@ -30,7 +36,7 @@ export async function POST(
 
   const privileged = ["ADMIN", "MANAGER"].includes(actor.role ?? "");
   const mgrCookie = (await cookies()).get(MANAGER_COOKIE)?.value;
-  const { id: saleId } = await params;
+  const { id: saleIdParam } = await params;
   const storeId = await getStoreId();
   const permissions = await prisma.businessSettings.findUnique({
     where: { storeId },
@@ -41,8 +47,9 @@ export async function POST(
   if (!allowedByRole && !managerOk) {
     return NextResponse.json({ error: "Возврат запрещен настройками кассы" }, { status: 403 });
   }
+  // An offline till names a sale it has not uploaded yet by the id it made for it (clientSaleId).
   const sale = await prisma.sale.findFirst({
-    where: { id: saleId, storeId },
+    where: { storeId, OR: [{ id: saleIdParam }, { clientSaleId: saleIdParam }] },
     include: {
       items: true,
       refunds: { select: { items: true } },
@@ -50,11 +57,20 @@ export async function POST(
     },
   });
   if (!sale) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
-  if (sale.status !== "COMPLETED") return NextResponse.json({ error: "Sale is not refundable" }, { status: 400 });
+  const saleId = sale.id;
 
   const body = await req.json();
   const parsed = refundSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+
+  // The same upload twice returns the refund it already created — checked before "is the sale still refundable",
+  // because the first upload may have refunded it completely.
+  if (parsed.data.id) {
+    const already = await prisma.refund.findFirst({ where: { id: parsed.data.id, sale: { storeId } } });
+    if (already) return NextResponse.json({ refund: already, duplicate: true }, { status: 200 });
+  }
+  if (sale.status !== "COMPLETED") return NextResponse.json({ error: "Sale is not refundable" }, { status: 400 });
+  const refundUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
 
   const { reason, restoreStock, items: requestedItems } = parsed.data;
   const references = await resolveReferenceValues(storeId, "RETURN", parsed.data.referenceValues);
@@ -73,13 +89,14 @@ export async function POST(
   let items: { saleItemId: string; productId: string | null; name: string; quantity: number; price: number; unit: string }[];
   try {
     items = requestedItems.map((requested) => {
-      if (seen.has(requested.saleItemId)) throw new Error("DUPLICATE_ITEM");
-      seen.add(requested.saleItemId);
-      const source = sale.items.find((item) => item.id === requested.saleItemId);
+      const line = /^L:(\d+)$/.exec(requested.saleItemId);
+      const source = line ? sale.items.find((item) => item.lineNo === Number(line[1])) : sale.items.find((item) => item.id === requested.saleItemId);
       if (!source) throw new Error("ITEM_NOT_IN_SALE");
       const remaining = Number(source.quantity) - (refunded.get(source.id) ?? 0);
       if (source.unit === "pcs" && !Number.isInteger(requested.quantity)) throw new Error("PIECE_QUANTITY_MUST_BE_WHOLE");
       if (requested.quantity > remaining + 0.0001) throw new Error("RETURN_QUANTITY_EXCEEDED");
+      if (seen.has(source.id)) throw new Error("DUPLICATE_ITEM");
+      seen.add(source.id);
       return { saleItemId: source.id, productId: source.productId, name: source.name, quantity: requested.quantity, price: Number(source.total) / Number(source.quantity), unit: source.unit };
     });
   } catch (error) {
@@ -90,8 +107,10 @@ export async function POST(
   const refund = await prisma.$transaction(async (tx) => {
     const r = await tx.refund.create({
       data: {
+        ...(parsed.data.id ? { id: parsed.data.id } : {}),
         saleId,
-        userId: actor.userId,
+        userId: refundUserId,
+        createdAt: trustedTime(parsed.data.refundedAt),
         amount: refundAmount,
         reason: reason || null,
         referenceValues: references.values.length ? references.values : undefined,
@@ -122,7 +141,7 @@ export async function POST(
         if (item.productId) {
           const lines = await resolveStockLines(tx, item.productId, item.quantity);
           for (const line of lines) {
-            await applyInventoryMovement(tx, { productId: line.productId, userId: actor.userId, type: "SALE_RETURN", quantity: line.quantity, referenceType: "Refund", referenceId: r.id, note: reason || "Sale return" });
+            await applyInventoryMovement(tx, { productId: line.productId, userId: refundUserId, type: "SALE_RETURN", quantity: line.quantity, referenceType: "Refund", referenceId: r.id, note: reason || "Sale return" });
             await restoreReturnedLot(tx, { productId: line.productId, quantity: line.quantity, referenceId: r.id });
           }
         }
@@ -133,7 +152,7 @@ export async function POST(
   });
 
   await logAudit({
-    userId: actor.userId,
+    userId: refundUserId,
     action: "SALE_REFUND",
     entityType: "Sale",
     entityId: saleId,

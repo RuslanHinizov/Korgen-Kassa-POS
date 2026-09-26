@@ -7,6 +7,7 @@ import { useCartStore, PaymentMethod } from "@/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { getDeviceSettings } from "@/hooks/use-device-settings";
 import { kickCashDrawer } from "@/lib/thermal-print";
+import { submitSale } from "@/lib/offline/submit-sale";
 import { useRouter } from "next/navigation";
 import {
   PauseCircle,
@@ -260,19 +261,23 @@ export function PaymentPanel({
         if (paymentMethod === "CASH") body.amountTendered = amountTendered || tot;
       }
 
-      const res = await fetch("/api/sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const resp = await res.json();
-        throw new Error(resp.error ?? t("failed_complete_sale"));
-      }
+      // No connection? The sale is kept on the till and uploaded later (see src/lib/offline).
+      const submitted = await submitSale(
+        body,
+        {
+          total: tot,
+          subtotal: subtotal(),
+          discountAmount: discountValue() + loyaltyDiscount,
+          taxAmount: taxAmount(effectiveTaxRate),
+          tipAmount,
+          amountTendered: splitMode ? splitPaid : paymentMethod === "CASH" ? amountTendered || tot : tot,
+        },
+        t("failed_complete_sale")
+      );
+      if (!submitted.ok) throw new Error(submitted.error);
 
       referenceBooks.reset();
-      const resp = await res.json();
+      const resp = { sale: submitted.sale };
       const saleId: string = resp.sale?.id ?? "";
 
       // Cash-drawer kick (if enabled on this device and cash was involved)
@@ -288,7 +293,7 @@ export function PaymentPanel({
       } else {
         onClear();
       }
-      router.refresh();
+      if (navigator.onLine && !submitted.queued) router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("unknown_error"));
     } finally {

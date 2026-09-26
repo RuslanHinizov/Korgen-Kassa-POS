@@ -10,11 +10,16 @@ import { canUsePosAction } from "@/lib/pos-permissions";
 import { applyInventoryMovement } from "@/lib/inventory-ledger";
 import { resolveStockLines } from "@/lib/bundle";
 import { logAudit } from "@/lib/audit";
+import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
 
 const schema = z.object({
   reason: z.string().trim().max(500).optional(),
   referenceValues: z.array(z.object({ bookId: z.string(), entryId: z.string() })).optional(),
   items: z.array(z.object({ productId: z.string(), quantity: z.number().positive().max(1_000_000) })).min(1),
+  /** Offline till: id made on the till (becomes the return id), time, who. */
+  id: z.string().regex(CLIENT_ID).optional(),
+  returnedAt: z.string().datetime().optional(),
+  cashierUserId: z.string().optional(),
 });
 
 /** Cash-register return without a receipt. Prices and product data are always taken
@@ -26,6 +31,15 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const storeId = await getStoreId();
+
+  // The same upload twice returns the return it already created.
+  if (parsed.data.id) {
+    const already = await prisma.customerReturn.findFirst({ where: { id: parsed.data.id, storeId } });
+    if (already) return NextResponse.json({ customerReturn: already, duplicate: true }, { status: 200 });
+  }
+  const returnUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  const returnedAt = trustedTime(parsed.data.returnedAt);
+
   const references = await resolveReferenceValues(storeId, "RETURN", parsed.data.referenceValues);
   if (!references.ok) return NextResponse.json({ error: references.error }, { status: 400 });
   const settings = await prisma.businessSettings.findUnique({
@@ -54,7 +68,9 @@ export async function POST(req: NextRequest) {
   const customerReturn = await prisma.$transaction(async (tx) => {
     const created = await tx.customerReturn.create({
       data: {
-        storeId, userId: actor.userId, status: "POSTED", postedAt: new Date(),
+        ...(parsed.data.id ? { id: parsed.data.id } : {}),
+        storeId, userId: returnUserId, status: "POSTED", postedAt: returnedAt ?? new Date(),
+        ...(returnedAt ? { createdAt: returnedAt } : {}),
         referenceValues: references.values.length ? references.values : undefined,
         comment: parsed.data.reason || "Возврат без чека", totalAmount,
         items: { create: products.map((product) => ({
@@ -64,7 +80,7 @@ export async function POST(req: NextRequest) {
         })) },
       },
     });
-    await tx.customerReturnPayment.create({ data: { returnId: created.id, amount: totalAmount, method: "CASH", userId: actor.userId, note: "Возврат без чека" } });
+    await tx.customerReturnPayment.create({ data: { returnId: created.id, amount: totalAmount, method: "CASH", userId: returnUserId, note: "Возврат без чека" } });
     if (cashbox?.accountId && totalAmount > 0) {
       await tx.financeAccount.update({ where: { id: cashbox.accountId }, data: { balance: { decrement: totalAmount } } });
     }
@@ -73,7 +89,7 @@ export async function POST(req: NextRequest) {
       const lines = await resolveStockLines(tx, product.id, quantity);
       for (const line of lines) {
         await applyInventoryMovement(tx, {
-          productId: line.productId, userId: actor.userId, type: "SALE_RETURN", quantity: line.quantity,
+          productId: line.productId, userId: returnUserId, type: "SALE_RETURN", quantity: line.quantity,
           referenceType: "CustomerReturn", referenceId: created.id, documentNo: String(created.documentNo),
           note: parsed.data.reason || "Возврат без чека",
         });
@@ -82,6 +98,6 @@ export async function POST(req: NextRequest) {
     return created;
   });
 
-  await logAudit({ userId: actor.userId, action: "CUSTOMER_RETURN_POST", entityType: "CustomerReturn", entityId: customerReturn.id, details: { documentNo: customerReturn.documentNo, withoutReceipt: true, totalAmount } });
+  await logAudit({ userId: returnUserId, action: "CUSTOMER_RETURN_POST", entityType: "CustomerReturn", entityId: customerReturn.id, details: { documentNo: customerReturn.documentNo, withoutReceipt: true, totalAmount } });
   return NextResponse.json({ customerReturn }, { status: 201 });
 }

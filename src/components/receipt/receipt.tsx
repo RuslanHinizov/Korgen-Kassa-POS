@@ -10,6 +10,8 @@ export interface ReceiptItem {
 export interface ReceiptData {
   saleId?: string;
   documentNo?: number;
+  /** Receipt number the till made itself while offline (e.g. "A1F3-000123"); shown until the server numbers the sale. */
+  receiptNo?: string;
   /** Document reference for returns that were created without an original sale receipt. */
   referenceText?: string;
   isRefund?: boolean;
@@ -114,11 +116,13 @@ export function Receipt({ data, settings }: ReceiptProps) {
       {data.isRefund && <p className="mb-2 text-center text-sm font-black tracking-wide">ВОЗВРАТ</p>}
       {data.referenceText ? (
         <p className="text-[10px] text-center mb-2">{data.referenceText}</p>
-      ) : data.documentNo != null && (
+      ) : data.documentNo != null ? (
         <p className="text-[10px] text-center mb-2">
           {data.isRefund ? `К чеку №${data.documentNo}` : t("sale_no", { id: data.documentNo })}
         </p>
-      )}
+      ) : data.receiptNo ? (
+        <p className="text-[10px] text-center mb-2">{`Чек №${data.receiptNo}`}</p>
+      ) : null}
       {data.customerName && (
         <p className="text-[10px] text-center mb-2">{t("for", { name: data.customerName })}</p>
       )}
