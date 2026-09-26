@@ -32,7 +32,9 @@ export function ErrorInbox() {
     if (r?.ok) setRows((await r.json()).errors);
     setLoading(false);
   }, [status]);
-  useEffect(() => { setLoading(true); void load(); const id = setInterval(load, 15_000); return () => clearInterval(id); }, [load]);
+  // initial + periodic fetch: state is set after the awaited request, not synchronously (lint rule cannot see that)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); const id = setInterval(load, 15_000); return () => clearInterval(id); }, [load]);
 
   async function mark(id: string, to: "OPEN" | "RESOLVED") {
     await fetch("/api/superadmin/errors", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: to }) });
@@ -59,7 +61,7 @@ export function ErrorInbox() {
       <main className="mx-auto max-w-6xl space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
           {(["OPEN", "RESOLVED"] as const).map((s) => (
-            <button key={s} onClick={() => setStatus(s)} className={`rounded-md px-4 py-1.5 text-sm ${status === s ? "bg-[#15503A] text-white" : "border bg-white hover:bg-slate-50"}`}>{s === "OPEN" ? "Открытые" : "Исправленные"}</button>
+            <button key={s} onClick={() => { setLoading(true); setStatus(s); }} className={`rounded-md px-4 py-1.5 text-sm ${status === s ? "bg-[#15503A] text-white" : "border bg-white hover:bg-slate-50"}`}>{s === "OPEN" ? "Открытые" : "Исправленные"}</button>
           ))}
           <span className="ml-auto text-xs text-slate-500">Проверка системы:</span>
           <button onClick={testClient} className="rounded-md border bg-white px-3 py-1.5 text-xs hover:bg-slate-50">Ошибка браузера</button>

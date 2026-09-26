@@ -411,8 +411,9 @@ export function KioskSearchBar() {
     debounceRef.current = setTimeout(() => search(next), 120);
   }
 
-  async function submitSearch() {
-    const code = query.trim();
+  /** `raw` = what the input really holds right now (a scanner is faster than React state). */
+  async function submitSearch(raw?: string) {
+    const code = (raw ?? query).trim();
     if (!code) return;
     if (/^[A-Za-z0-9]{6,20}$/.test(code)) window.dispatchEvent(new Event("pos-scanner-read"));
     // A scanner sends the full barcode and Enter before the result list renders.
@@ -421,8 +422,41 @@ export function KioskSearchBar() {
     if (product) {
       selectProduct(product);
       setTouchKeyboardOpen(false);
+    } else if (/^[A-Za-z0-9]{6,20}$/.test(code)) {
+      // an unknown barcode: the toast already told the cashier; empty the box so the next scan does not
+      // get glued onto this one («232123349232123349» → "not found" forever)
+      queryRef.current = "";
+      priorEmptyQuery.current = "";
+      setQuery("");
+      setResults([]);
     }
   }
+
+  // A scanner types like a very fast keyboard. When no field has the focus (the cashier tapped a button…) its keystrokes
+  // would vanish, so digits arriving <80 ms apart and ended by Enter are taken as a scan.
+  const submitRef = useRef(submitSearch);
+  useEffect(() => { submitRef.current = submitSearch; });
+  useEffect(() => {
+    let buf = "";
+    let last = 0;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (document.querySelector('[role="dialog"]')) return; // payment / other windows own the keyboard
+      const now = Date.now();
+      if (e.key === "Enter") {
+        if (buf.length >= 6) { e.preventDefault(); void submitRef.current(buf); }
+        buf = "";
+        return;
+      }
+      if (e.key.length !== 1) return;
+      buf = now - last > 80 ? e.key : buf + e.key;
+      last = now;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="relative flex-1">
@@ -435,7 +469,7 @@ export function KioskSearchBar() {
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              void submitSearch();
+              void submitSearch(e.currentTarget.value);
             }
             if (e.key === "Escape") {
               queryRef.current = "";

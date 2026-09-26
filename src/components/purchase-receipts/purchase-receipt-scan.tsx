@@ -42,20 +42,19 @@ function beep(freq: number, ms: number) {
 
 /** Quantity you can type: scan a product once, then tap the number and enter how many really arrived. */
 function QtyInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
-  const [text, setText] = useState(String(value));
+  const [text, setText] = useState("");
   const [editing, setEditing] = useState(false);
-  useEffect(() => { if (!editing) setText(String(value)); }, [value, editing]);
   function commit() {
     setEditing(false);
     const n = Number(text.replace(",", ".").trim());
-    if (!Number.isFinite(n) || n < 0) { setText(String(value)); return; }
+    if (!Number.isFinite(n) || n < 0) return;
     if (n !== value) onCommit(n);
   }
   return (
     <input
       inputMode="decimal"
-      value={text}
-      onFocus={(e) => { setEditing(true); e.currentTarget.select(); }}
+      value={editing ? text : String(value)}
+      onFocus={(e) => { setText(String(value)); setEditing(true); e.currentTarget.select(); }}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
@@ -77,8 +76,6 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   const storePath = useStorePath();
   const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
   const [feedback, setFeedback] = useState<Feedback>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Phone / tablet: scan with the camera instead of a hardware scanner. Remembered per device.
@@ -101,6 +98,31 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
   }, [id, router, storePath]);
   useEffect(() => { load(); }, [load]);
 
+  // A hardware scanner types like a very fast keyboard. If nothing is focused (the worker clicked on the page,
+  // the box lost focus…) the keystrokes would vanish, so digits arriving <80 ms apart and ended by Enter are taken as a scan.
+  const submitRef = useRef(submitScan);
+  useEffect(() => { submitRef.current = submitScan; });
+  useEffect(() => {
+    let buf = "";
+    let last = 0;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // a field handles its own typing
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const now = Date.now();
+      if (e.key === "Enter") {
+        if (buf.length >= 4) { e.preventDefault(); submitRef.current(buf); }
+        buf = "";
+        return;
+      }
+      if (e.key.length !== 1) return;
+      buf = now - last > 80 ? e.key : buf + e.key;
+      last = now;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // with the camera on, do not grab focus: it would pop up the phone keyboard over the camera
   const focusInput = useCallback(() => { if (!cameraOn) inputRef.current?.focus(); }, [cameraOn]);
   useEffect(() => { focusInput(); }, [focusInput]);
@@ -112,11 +134,23 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
     feedbackTimer.current = setTimeout(() => setFeedback(null), 2200);
   }
 
-  async function submitScan(fromCamera?: string) {
-    const raw = (fromCamera ?? code).trim();
-    if (!raw || busy) return;
-    if (fromCamera === undefined) setCode("");
-    setBusy(true);
+  // Scans that arrive while one is still being processed wait their turn instead of being lost
+  // (a worker scanning a pile of boxes is faster than the network).
+  const queue = useRef<string[]>([]);
+  const draining = useRef(false);
+  function submitScan(code: string) {
+    const raw = code.trim();
+    if (!raw) return;
+    queue.current.push(raw);
+    void drain();
+  }
+  async function drain() {
+    if (draining.current) return;
+    draining.current = true;
+    try { while (queue.current.length) await processScan(queue.current.shift()!); } finally { draining.current = false; }
+  }
+
+  async function processScan(raw: string) {
     try {
       const r = await fetch(`/api/products/search?q=${encodeURIComponent(raw)}`);
       const results: { id: string; barcode: string | null; name: string; unit?: string; scanQuantity?: number }[] = r.ok ? await r.json() : [];
@@ -140,7 +174,6 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
       flash({ kind: "ok", text: `${match.name} × ${quantity} ${unitLabel(match.unit, true)}` });
       await load();
     } finally {
-      setBusy(false);
       focusInput();
     }
   }
@@ -215,9 +248,12 @@ export function PurchaseReceiptScan({ id }: { id: string }) {
             <ScanLine className="text-muted-foreground absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2" />
             <input
               ref={inputRef}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submitScan(); }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                const v = e.currentTarget.value;
+                e.currentTarget.value = "";
+                submitScan(v);
+              }}
               onBlur={(e) => { if (e.relatedTarget instanceof HTMLInputElement) return; focusInput(); }}
               autoFocus={!cameraOn}
               placeholder={cameraOn ? "Или введите штрихкод вручную…" : "Отсканируйте штрихкод…"}
