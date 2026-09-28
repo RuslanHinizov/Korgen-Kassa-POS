@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { getDeviceSettings, playErrorBeep } from "@/hooks/use-device-settings";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
 import { searchLocal } from "@/lib/offline/catalog";
+import { cacheConfig, getCachedConfig } from "@/lib/offline/config-cache";
 
 export interface ProductResult {
   id: string;
@@ -65,10 +66,21 @@ export function QuickProductsDialog({
           fetch("/api/quick-product-groups"),
           fetch("/api/quick-products"),
         ]);
-        const gData = gRes.ok ? await gRes.json() : { groups: [] };
-        const iData = iRes.ok ? await iRes.json() : { items: [] };
+        if (!gRes.ok || !iRes.ok) throw new Error("offline");
+        const gData = await gRes.json();
+        const iData = await iRes.json();
         setGroups(gData.groups ?? []);
         setItems(iData.items ?? []);
+        void cacheConfig("quickProductGroups", gData.groups ?? []);
+        void cacheConfig("quickProducts", iData.items ?? []);
+      } catch {
+        // No connection: fall back to whatever this till last downloaded (see src/lib/offline/config-cache.ts).
+        const [cachedGroups, cachedItems] = await Promise.all([
+          getCachedConfig<QuickGroup[]>("quickProductGroups"),
+          getCachedConfig<QuickItem[]>("quickProducts"),
+        ]);
+        setGroups(cachedGroups ?? []);
+        setItems(cachedItems ?? []);
       } finally {
         setLoading(false);
       }

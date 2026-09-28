@@ -4,19 +4,23 @@ import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useCartStore } from "@/store/cart";
 import { lineGross } from "@/lib/rounding";
-import { X, History, PackagePlus } from "lucide-react";
+import { X, History } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { listLocalHeldOrders, removeLocalHeldOrder } from "@/lib/offline/held-orders";
+
+interface HeldOrderSnapshot {
+  items: Array<{ productId: string | null; name: string; price: number; quantity: number; stock: number; unit?: "pcs" | "kg" | "l" | "m"; categoryId?: string | null; notes?: string; lineDiscount?: number }>;
+  discountAmount?: number;
+  discountType?: "fixed" | "percent";
+  paymentMethod: "CASH" | "CARD" | "OTHER";
+}
 
 interface HeldOrder {
-  id: string;
+  localId: string | null;
+  serverId: string | null;
   label: string | null;
   createdAt: string;
-  cartSnapshot: {
-    items: Array<{ productId: string | null; name: string; price: number; quantity: number; stock: number; unit?: "pcs" | "kg" | "l" | "m"; categoryId?: string | null; notes?: string; lineDiscount?: number }>;
-    discountAmount?: number;
-    discountType?: "fixed" | "percent";
-    paymentMethod: "CASH" | "CARD" | "OTHER";
-  };
+  cartSnapshot: HeldOrderSnapshot;
 }
 
 interface HeldOrdersModalProps {
@@ -28,14 +32,32 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
   const t = useTranslations("pos.held");
   const [orders, setOrders] = useState<HeldOrder[]>([]);
   const [loading, setLoading] = useState(false);
-  const { items, setDiscount, setPaymentMethod, addItem, clearCart, roundingWeight } = useCartStore();
+  const { setDiscount, setPaymentMethod, addItem, clearCart, roundingWeight } = useCartStore();
 
   async function fetchOrders() {
     setLoading(true);
-    const res = await fetch("/api/held-orders");
-    const data = await res.json();
-    setOrders(data);
-    setLoading(false);
+    const local = await listLocalHeldOrders();
+    const localOnly: HeldOrder[] = local
+      .filter((o) => !o.serverId)
+      .map((o) => ({ localId: o.id, serverId: null, label: o.label, createdAt: o.createdAt, cartSnapshot: o.cartSnapshot as HeldOrderSnapshot }));
+    try {
+      const res = await fetch("/api/held-orders");
+      if (!res.ok) throw new Error();
+      const data: Array<{ id: string; label: string | null; createdAt: string; cartSnapshot: HeldOrderSnapshot }> = await res.json();
+      const server: HeldOrder[] = data.map((o) => ({
+        localId: local.find((l) => l.serverId === o.id)?.id ?? null,
+        serverId: o.id,
+        label: o.label,
+        createdAt: o.createdAt,
+        cartSnapshot: o.cartSnapshot,
+      }));
+      setOrders([...localOnly, ...server]);
+    } catch {
+      // No connection: this till's own not-yet-synced held orders are still usable.
+      setOrders(localOnly);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Fetch when modal opens; reset when it closes
@@ -45,8 +67,22 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
     } else {
       setOrders([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  async function removeOrder(order: HeldOrder) {
+    if (order.localId) await removeLocalHeldOrder(order.localId);
+    if (order.serverId) {
+      try {
+        await fetch("/api/held-orders", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: order.serverId }),
+        });
+      } catch {
+        /* offline: local copy is already gone, server will just keep its own until it's cleaned up */
+      }
+    }
+  }
 
   async function recallOrder(order: HeldOrder) {
     clearCart();
@@ -54,22 +90,13 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
     snap.items.forEach((i) => addItem(i, i.quantity));
     setDiscount(snap.discountAmount ?? 0, snap.discountType ?? "fixed");
     setPaymentMethod(snap.paymentMethod);
-    // Delete from server
-    await fetch("/api/held-orders", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: order.id }),
-    });
+    await removeOrder(order);
     onClose();
   }
 
-  async function deleteOrder(id: string) {
-    await fetch("/api/held-orders", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+  async function deleteOrder(order: HeldOrder) {
+    await removeOrder(order);
+    setOrders((prev) => prev.filter((o) => o !== order));
   }
 
   if (!open) return null;
@@ -99,7 +126,7 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
             const total = snap.items.reduce((s, i) => s + lineGross(i.price, i.quantity, i.unit, roundingWeight) - (i.lineDiscount || 0), 0);
             return (
               <div
-                key={order.id}
+                key={order.serverId ?? order.localId ?? order.createdAt}
                 className="flex items-center justify-between rounded-lg border p-3 mb-2"
               >
                 <div>
@@ -118,7 +145,7 @@ export function HeldOrdersModal({ open, onClose }: HeldOrdersModalProps) {
                     {t("recall")}
                   </button>
                   <button
-                    onClick={() => deleteOrder(order.id)}
+                    onClick={() => deleteOrder(order)}
                     className="rounded border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                   >
                     {t("delete")}

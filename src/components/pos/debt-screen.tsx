@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { formatPhoneInput } from "@/lib/phone";
+import { refreshCustomerCache, searchCachedCustomers } from "@/lib/offline/customers";
 import { X } from "lucide-react";
 
 export interface Debtor {
@@ -52,12 +53,20 @@ export function DebtScreen({
     setLoading(true);
     try {
       const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}&limit=50`);
+      if (!res.ok) throw new Error("offline");
       const data = await res.json();
       setResults(
         (data.customers ?? []).map((c: { id: string; name: string; phone: string | null; balance: number; lastVisit: string | null }) => ({
           id: c.id, name: c.name, phone: c.phone, balance: c.balance, lastVisit: c.lastVisit,
         }))
       );
+      void refreshCustomerCache();
+    } catch {
+      // No connection: this till's own cached customer list, name/phone only — a stale balance would be
+      // misleading, so it's shown as unknown (0) rather than guessed; the credit sale itself still queues
+      // safely offline regardless (see submitSale) and the server has the real balance when it uploads.
+      const cached = await searchCachedCustomers(q);
+      setResults(cached.map((c) => ({ id: c.id, name: c.name, phone: c.phone, balance: 0, lastVisit: null })));
     } finally {
       setLoading(false);
     }

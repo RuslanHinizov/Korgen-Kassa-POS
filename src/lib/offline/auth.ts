@@ -137,6 +137,13 @@ export async function clearTillAuth(): Promise<void> {
   await idbDelete("meta", "tillAuth");
 }
 
+/** Call when the server confirms a cashier is fired: this till must no longer accept them offline. */
+export async function forgetCashier(phone: string): Promise<void> {
+  const key = recordKey(phone);
+  await idbDelete("meta", key);
+  await idbDelete("meta", `attempts:${key}`);
+}
+
 /** Is the till still allowed to run without asking for a sign-in? */
 export function tillAuthValid(auth: TillAuth | undefined): boolean {
   return Boolean(auth) && Date.now() - (auth as TillAuth).at < TILL_AUTH_TTL_MS;

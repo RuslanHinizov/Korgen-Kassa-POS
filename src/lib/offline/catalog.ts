@@ -111,6 +111,18 @@ async function doSync(): Promise<{ ok: boolean; changed: number }> {
   return { ok: true, changed };
 }
 
+/**
+ * A sale made offline can't tell the server to decrement stock, so this till adjusts its own copy
+ * to avoid overselling until the next catalogue sync brings the server's real (authoritative) value.
+ */
+export async function applyLocalStockDelta(productId: string, quantityDelta: number): Promise<void> {
+  const product = await idbGet<LocalProduct>("products", productId);
+  if (!product) return;
+  const updated = { ...product, stock: product.stock - quantityDelta };
+  await idbPut("products", updated);
+  if (memory) memory = memory.map((p) => (p.id === productId ? updated : p));
+}
+
 /** Same rules as the server search: name/SKU contains the text, barcode equals it, scale barcodes carry a weight. */
 export async function searchLocal(query: string, limit = 20): Promise<LocalProduct[]> {
   const q = query.trim();

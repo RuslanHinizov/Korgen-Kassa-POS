@@ -8,6 +8,8 @@ import { formatCurrency } from "@/lib/utils";
 import { getDeviceSettings } from "@/hooks/use-device-settings";
 import { kickCashDrawer } from "@/lib/thermal-print";
 import { submitSale } from "@/lib/offline/submit-sale";
+import { applyLocalStockDelta } from "@/lib/offline/catalog";
+import { addLocalHeldOrder } from "@/lib/offline/held-orders";
 import { useRouter } from "next/navigation";
 import { DebtScreen, type Debtor } from "./debt-screen";
 import {
@@ -308,6 +310,10 @@ export function PaymentPanel({
       );
       if (!submitted.ok) throw new Error(submitted.error);
 
+      if (submitted.queued) {
+        await Promise.all(cartItems.filter((item) => item.productId).map((item) => applyLocalStockDelta(item.productId!, item.quantity)));
+      }
+
       referenceBooks.reset();
       const resp = { sale: submitted.sale };
       const saleId: string = resp.sale?.id ?? "";
@@ -345,9 +351,15 @@ export function PaymentPanel({
           label: `Hold ${new Date().toLocaleTimeString()}`,
         }),
       });
-      if (res.ok) {
-        clearCart();
-      }
+      if (!res.ok) throw new Error("hold-order-unavailable");
+      clearCart();
+    } catch {
+      await addLocalHeldOrder({
+        serverId: null,
+        label: `Отложено ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`,
+        cartSnapshot: { items, paymentMethod, amountTendered, discountAmount, discountType },
+      });
+      clearCart();
     } finally {
       setHoldLoading(false);
     }

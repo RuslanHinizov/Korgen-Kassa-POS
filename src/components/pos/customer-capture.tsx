@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { User, UserPlus, X, Search, ChevronDown } from "lucide-react";
+import { refreshCustomerCache, searchCachedCustomers } from "@/lib/offline/customers";
 
 export interface CustomerSummary {
   id: string;
@@ -42,8 +43,13 @@ export function CustomerCapture({ value, onChange }: CustomerCaptureProps) {
       setLoading(true);
       try {
         const res = await fetch(`/api/customers?q=${encodeURIComponent(query.trim())}`);
+        if (!res.ok) throw new Error("offline");
         const data = await res.json();
         setResults(data.customers ?? []);
+        // Keep a local copy this till can search from with no connection (see below).
+        void refreshCustomerCache();
+      } catch {
+        setResults(await searchCachedCustomers(query));
       } finally {
         setLoading(false);
       }

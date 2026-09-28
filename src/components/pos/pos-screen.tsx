@@ -38,6 +38,8 @@ import { isTillLocked, setTillLocked } from "@/lib/till-lock";
 import { loadCurrentShift } from "@/lib/offline/shift";
 import { getTillAuth, tillAuthValid } from "@/lib/offline/auth";
 import { cacheConfig, getCachedConfig } from "@/lib/offline/config-cache";
+import { rememberDiscountCard, getCachedDiscountCard } from "@/lib/offline/discount-cards";
+import { addLocalHeldOrder } from "@/lib/offline/held-orders";
 import { UnsyncedBanner } from "./unsynced-banner";
 import { POSSalesPanel } from "./pos-sales-modal";
 import { AlertDialog } from "@/components/ui/alert-dialog";
@@ -304,16 +306,20 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     }
     try {
       const r = await fetch(`/api/discount-cards?code=${encodeURIComponent(code)}`);
-      if (!r.ok) {
-        setCardMsg(t("card_not_found"));
-        setDiscountCard("", 0);
-        return;
-      }
+      if (!r.ok) throw new Error("discount-card-unavailable");
       const { card } = await r.json();
       setDiscountCard(card.code, card.percent);
       setCardMsg(`${card.holderName ? card.holderName + " · " : ""}−${card.percent}%`);
+      void rememberDiscountCard({ code: card.code, holderName: card.holderName ?? null, percent: card.percent });
     } catch {
-      setCardMsg(t("card_not_found"));
+      // No connection: fall back to a card this till has already looked up successfully before.
+      const cached = await getCachedDiscountCard(code);
+      if (cached) {
+        setDiscountCard(cached.code, cached.percent);
+        setCardMsg(`${cached.holderName ? cached.holderName + " · " : ""}−${cached.percent}%`);
+      } else {
+        setCardMsg(t("card_not_found"));
+      }
     }
   }
 
@@ -381,20 +387,19 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     }
     const state = useCartStore.getState();
     setHoldLoading(true);
+    const cartSnapshot = {
+      items: state.items,
+      paymentMethod: state.paymentMethod,
+      amountTendered: state.amountTendered,
+      discountAmount: state.discountAmount,
+      discountType: state.discountType,
+    };
+    const label = `Отложено ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
     try {
       const response = await fetch("/api/held-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cartSnapshot: {
-            items: state.items,
-            paymentMethod: state.paymentMethod,
-            amountTendered: state.amountTendered,
-            discountAmount: state.discountAmount,
-            discountType: state.discountType,
-          },
-          label: `Отложено ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`,
-        }),
+        body: JSON.stringify({ cartSnapshot, label }),
       });
       if (!response.ok) throw new Error();
       clearCart();
@@ -403,7 +408,17 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       toast.success("Чек отложен");
       setShowHeldOrders(true);
     } catch {
-      toast.error("Не удалось отложить чек");
+      // No connection: hold it purely on this till, it still shows up in the list below.
+      try {
+        await addLocalHeldOrder({ serverId: null, label, cartSnapshot });
+        clearCart();
+        setSelected(new Set());
+        setActiveItemId(null);
+        toast.success("Чек отложен (офлайн)");
+        setShowHeldOrders(true);
+      } catch {
+        toast.error("Не удалось отложить чек");
+      }
     } finally {
       setHoldLoading(false);
     }
