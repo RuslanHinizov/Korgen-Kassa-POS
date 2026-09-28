@@ -581,27 +581,6 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       {/* Search / sale parameters row */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 px-3 py-2">
         <KioskSearchBar />
-        <select
-          aria-label="Производитель"
-          defaultValue=""
-          className="h-9 min-w-36 rounded-md border-2 border-[#15ad68] bg-white px-3 text-sm text-slate-600 outline-none"
-        >
-          <option value="">Производитель</option>
-        </select>
-        <select
-          aria-label="Заказ"
-          defaultValue=""
-          className="h-9 min-w-32 rounded-md border-2 border-[#15ad68] bg-white px-3 text-sm text-slate-600 outline-none"
-        >
-          <option value="">Заказ</option>
-        </select>
-        <select
-          aria-label="Доставка"
-          defaultValue=""
-          className="h-9 min-w-28 rounded-md border-2 border-[#15ad68] bg-white px-3 text-sm text-slate-600 outline-none"
-        >
-          <option value="">Доставка</option>
-        </select>
         <div className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
           {customer ? (
             <span className="rounded-md border px-2 py-1.5 text-xs">{customer.name}</span>

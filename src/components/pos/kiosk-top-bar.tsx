@@ -27,7 +27,7 @@ interface KioskTopBarProps {
 
 /** Top bar for the kiosk-mode kassa screen, matching UMAG's dedicated kassa header:
  * cashier/time/status on the left, Продажи/Возврат/Смена/История продаж tabs on the right. The bar
- * itself turns red/bordo on the СМЕНА tab, matching UMAG's observed behavior (green everywhere else). */
+ * colours follow UMAG's work areas: sale green, return yellow, history turquoise, shift red/bordo. */
 export function KioskTopBar({
   cashierName,
   showSalesHistory,
@@ -45,7 +45,13 @@ export function KioskTopBar({
   const { online } = useOfflineStatus();
   const [printerReady, setPrinterReady] = useState(false);
   const [scannerSeen, setScannerSeen] = useState(false);
-  const onShift = activeTab === "shift";
+  const palette = activeTab === "shift"
+    ? "border-red-900 bg-[#c0392b] text-white"
+    : activeTab === "returns"
+      ? "border-[#c88d00] bg-[#f2c94c] text-[#3d2f00]"
+      : activeTab === "history"
+        ? "border-[#137d82] bg-[#22a6ad] text-white"
+        : "border-emerald-700 bg-[#00bd61] text-[#10281b]";
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000 * 30);
@@ -78,10 +84,9 @@ export function KioskTopBar({
   return (
     <div
       className={`flex min-h-10 shrink-0 items-center gap-3 border-b px-3 text-sm font-semibold ${
-        onShift ? "border-red-900 bg-[#c0392b] text-white" : "border-emerald-700 bg-[#00bd61] text-[#10281b]"
+        palette
       }`}
     >
-      <span className="hidden text-xs font-bold sm:inline">Учебный</span>
       <span className="font-medium">
         Время:{" "}
         <span className="font-bold">
