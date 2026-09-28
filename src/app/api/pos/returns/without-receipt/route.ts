@@ -14,7 +14,12 @@ import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 const schema = z.object({
   reason: z.string().trim().max(500).optional(),
   referenceValues: z.array(z.object({ bookId: z.string(), entryId: z.string() })).optional(),
-  items: z.array(z.object({ productId: z.string(), quantity: z.number().positive().max(1_000_000) })).min(1),
+  items: z.array(z.object({
+    productId: z.string(),
+    quantity: z.number().positive().max(1_000_000),
+    /** DataMatrix code captured from the physical item, if the cashier marked it. */
+    markingCode: z.string().trim().min(1).max(500).optional(),
+  })).min(1),
   /** Offline till: id made on the till (becomes the return id), time, who. */
   id: z.string().regex(CLIENT_ID).optional(),
   returnedAt: z.string().datetime().optional(),
@@ -76,11 +81,17 @@ export async function POST(req: NextRequest) {
         ...(returnedAt ? { createdAt: returnedAt } : {}),
         referenceValues: references.values.length ? references.values : undefined,
         comment: parsed.data.reason || "Возврат без чека", totalAmount,
-        items: { create: products.map((product) => ({
-          productId: product.id, name: product.name, unit: product.unit,
-          quantity: quantities.get(product.id) ?? 0, price: product.price,
-          total: Number(product.price) * (quantities.get(product.id) ?? 0),
-        })) },
+        // Do not merge product lines here: separate marked units may carry separate
+        // DataMatrix codes, while stock movements below can still be aggregated safely.
+        items: { create: parsed.data.items.map((line) => {
+          const product = products.find((candidate) => candidate.id === line.productId)!;
+          return {
+            productId: product.id, name: product.name, unit: product.unit,
+            markingCode: line.markingCode,
+            quantity: line.quantity, price: product.price,
+            total: Number(product.price) * line.quantity,
+          };
+        }) },
       },
     });
     await tx.customerReturnPayment.create({ data: { returnId: created.id, amount: totalAmount, method: "CASH", userId: returnUserId, note: "Возврат без чека" } });

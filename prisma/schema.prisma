@@ -892,6 +892,8 @@ model CustomerReturnItem {
   name      String
   quantity  Decimal @db.Decimal(10, 3)
   unit      String  @default("pcs")
+  /// DataMatrix / marking code scanned on the return screen, when the product requires marking.
+  markingCode String?
   price     Decimal @db.Decimal(10, 2)
   total     Decimal @db.Decimal(10, 2)
 

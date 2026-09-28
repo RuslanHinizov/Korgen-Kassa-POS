@@ -297,7 +297,7 @@ async function pushRefunds() {
 async function pushReturnsWithoutReceipt() {
   const { rows } = await db.query(
     `SELECT cr.id, cr."userId", cr.comment, cr."createdAt",
-            coalesce(json_agg(json_build_object('productId', i."productId", 'quantity', i.quantity)) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
+            coalesce(json_agg(json_build_object('productId', i."productId", 'quantity', i.quantity, 'markingCode', i."markingCode")) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
      FROM "CustomerReturn" cr LEFT JOIN "CustomerReturnItem" i ON i."returnId" = cr.id
      WHERE cr."syncedToCloudAt" IS NULL AND cr."storeId" = $1
      GROUP BY cr.id ORDER BY cr."createdAt" ASC`,
@@ -310,7 +310,7 @@ async function pushReturnsWithoutReceipt() {
       returnedAt: r.createdAt.toISOString(),
       cashierUserId: r.userId,
       reason: r.comment ?? undefined,
-      items: r.items.map((i) => ({ productId: i.productId, quantity: Number(i.quantity) })),
+      items: r.items.map((i) => ({ productId: i.productId, quantity: Number(i.quantity), ...(i.markingCode ? { markingCode: i.markingCode } : {}) })),
     });
   }
   return rows.length;

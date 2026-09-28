@@ -291,9 +291,9 @@ Yapılacaklar:
 **Tip kontrolü, lint, 65 test temiz.**
 
 ### İade
-- [ ] Маркировка товара (işaretli ürün iadesi).
-- [ ] Поиск по штрихкоду.
-- [ ] "С чеком / Без чека" düzeni ve fiş numarası arama UMAG ile aynı.
+- [+] **Маркировка товара:** fişsiz iadede kasa satırı seçilir; seçim yoksa UMAG'ın aynı uyarısı açılır: **"Выберите продукт — Не выбран продукт"**. Seçilen satırın DataMatrix kodu kaydedilir; çevrimdışı kuyrukta ve Hub→bulut senkronunda korunur.
+- [+] **Поиск по штрихкоду:** çevrimiçiyken sunucuda, bağlantı yokken kasanın yerel katalog kopyasında arar.
+- [+] **"С чеком / Без чека"** düzeni ve fiş numarası arama çalışıyor.
 
 ### Küçük düzeltmeler
 - [ ] Üst çubukta sabit "Учебный" yazısını kaldır; yerine kasa adı (örn. "Касса-4") göster.
@@ -400,6 +400,6 @@ Kasa 1 / Kasa 2 / Kasa 3 / Kasa 4 — uygulama gibi açılır, hep aynı kasaya 
 | 1 | Çevrimdışı katman | [+] kod tamam: satış, iade, fişsiz iade, vardiya, para hareketi, katalog/yerel stok, sayfa önbelleği, çevrimdışı giriş, UMAG saat doğrulama ekranı, promosyon/ayar/izin/hızlı ürün/müşteri yerel kopyası, daha önce okutulmuş indirim kartı, bekleyen satışlar ve gönderilmemiş fiş simgesi. Kalan yalnızca canlı sunucu migration/deploy'u ve gerçek market donanım testleri. |
 | 2 | Vardiya ekranı | [+] bitti (tam sayfa, kırmızı üst çubuk, КУПЮРЫ/СУММА/ВНОС-ВЫНОС, UMAG'ın 3 para-hareketi türü, gerçek tarayıcı testiyle doğrulandı). Kalan: açılışta saat doğrulama ekranı (istenirse) |
 | 2b | Ödeme ekranı (görünüm + davranış birebir) | [+] bitti — Наличная/Безналичная/Смешанная/В долг hepsi UMAG düzeninde, gerçek testle doğrulandı (bir gerçek hata bulunup düzeltildi: hazır tutar düğmeleri) |
-| 3 | Ek fonksiyonlar, iade, düzeltmeler | [~] Ek fonksiyonlar menüsü (12 düğme, hepsi gerçek testle doğrulandı), fişli/fişsiz iade ve barkodla ürün arama çalışıyor. Üst çubuk artık satışta yeşil, iadede sarı, geçmişte turkuaz, vardiyada bordo; işlevsiz Учебный/Производитель/Заказ/Доставка öğeleri kaldırıldı. Kalan: Маркировка товара akışı ve her metin alanı için ekran klavyesi. |
+| 3 | Ek fonksiyonlar, iade, düzeltmeler | [~] Ek fonksiyonlar menüsü (12 düğme, hepsi gerçek testle doğrulandı), fişli/fişsiz iade, barkod araması ve DataMatrix işaretli ürün iadesi çalışıyor. Üst çubuk artık satışta yeşil, iadede sarı, geçmişte turkuaz, vardiyada bordo; işlevsiz Учебный/Производитель/Заказ/Доставка öğeleri kaldırıldı. Kalan: her metin alanı için ekran klavyesi. |
 | 4 | Fiskal | [ ] giriş bilgisi bekleniyor |
 | 5 | Yerel Hub (çok kasalı market) | [~] Docker paketi + kimlik doğrulama + 6 uç + `hub-sync.mjs` (gerçek pull/push döngüsü) + kasa eşleştirme (`Cashbox`/`UserStoreAssignment` senkronu, 9b.3) uçtan uca test edildi. Kalan: Hub sağlık sayfası, promosyon/hızlı ürün pull'u, gerçek ofis bilgisayarı + market testi |

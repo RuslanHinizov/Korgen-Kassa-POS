@@ -287,7 +287,7 @@ function WeightDialog({
 }
 
 /** Built into the POS so a cash monitor never depends on Windows' keyboard. */
-function TouchSearchKeyboard({
+export function TouchSearchKeyboard({
   value,
   onChange,
   onSubmit,
