@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { resolvePosActor } from "@/lib/pos-actor";
 import { counterpartyScope } from "@/lib/counterparty-scope";
-import { getStoreId } from "@/lib/store-context";
 import { CASHBOX_DEVICE_COOKIE, getPairedCashboxId } from "@/lib/cashbox-device";
 import { resolveReferenceValues } from "@/lib/reference-values";
 import { z } from "zod";
@@ -15,6 +13,7 @@ import { lineGross, roundAmount } from "@/lib/rounding";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { findBlockedCategory, type SaleRestrictionRule } from "@/lib/sale-restrictions";
 import { attributedUserId } from "@/lib/offline-write";
+import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 
 const saleSchema = z.object({
   items: z
@@ -64,8 +63,10 @@ const saleSchema = z.object({
   offline: z.boolean().optional(),
   /** The shift the till says the sale belongs to (an offline till knows it before the server does). */
   shiftId: z.string().optional(),
-  /** Who really rang the sale up, when another cashier's session uploads it. */
+  /** Who really rang the sale up, when another cashier's session uploads it (mandatory for a Hub upload). */
   cashierUserId: z.string().optional(),
+  /** Which physical register (Cashbox), when a local Hub uploads this — a Hub has no cashbox-device cookie of its own. */
+  cashboxId: z.string().optional(),
 });
 
 /** An offline till may upload a sale days later; accept its own timestamp only inside this window. */
@@ -73,10 +74,9 @@ const MAX_OFFLINE_AGE_MS = 14 * 24 * 3600_000;
 const MAX_CLOCK_AHEAD_MS = 5 * 60_000;
 
 export async function POST(req: NextRequest) {
-  const actor = await resolvePosActor();
-  if (!actor) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ctx = await resolvePosRequest(req);
+  if (isPosRequestError(ctx)) return ctx.error;
+  const { storeId, actor } = ctx;
 
   const body = await req.json();
   const parsed = saleSchema.safeParse(body);
@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
     offline,
     shiftId,
     cashierUserId,
+    cashboxId: cashboxIdInput,
   } = parsed.data;
 
   // Derive primary paymentMethod from largest split-tender line (if split mode).
@@ -124,8 +125,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const storeId = await getStoreId();
-
   // A retried upload (lost response, flaky connection) must return the sale it already created —
   // checked first, before any rule that could reject a replay.
   if (clientSaleId) {
@@ -143,15 +142,20 @@ export async function POST(req: NextRequest) {
     const now = Date.now();
     if (Number.isFinite(t) && t <= now + MAX_CLOCK_AHEAD_MS && t >= now - MAX_OFFLINE_AGE_MS) soldAtDate = new Date(Math.min(t, now));
   }
+  // The till claimed a time outside that window (clock wrong, or offline too long) — server "now" was used
+  // instead. Reported back so the cashier can be warned (see UnsyncedBanner).
+  const timeAdjusted = !!soldAt && !soldAtDate;
 
   const saleUserId = await attributedUserId(actor, storeId, cashierUserId);
+  if (!saleUserId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
   const references = await resolveReferenceValues(storeId, "SALE", referenceChoices);
   if (!references.ok) return NextResponse.json({ error: references.error }, { status: 400 });
   const settings = await prisma.businessSettings.findUnique({ where: { storeId } });
 
-  // Which physical register this sale was rung up on, if the terminal is paired to one —
-  // also its linked accounts, so cash/card proceeds land on the register's real balance.
-  const pairedCashboxId = getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
+  // Which physical register this sale was rung up on: a Hub names it explicitly (it has no cashbox-device
+  // cookie of its own — that cookie lives on the till's browser, one hop further away); a browser till reads
+  // its own pairing cookie. Its linked accounts get the proceeds, so cash/card lands on the register's real balance.
+  const pairedCashboxId = cashboxIdInput ?? getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
   const pairedCashbox = pairedCashboxId
     ? await prisma.cashbox.findFirst({
         where: { id: pairedCashboxId, storeId },
@@ -610,5 +614,5 @@ export async function POST(req: NextRequest) {
       /* handled inside fire() */
     });
 
-  return NextResponse.json({ sale }, { status: 201 });
+  return NextResponse.json({ sale, timeAdjusted }, { status: 201 });
 }

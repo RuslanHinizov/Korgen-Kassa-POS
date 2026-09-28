@@ -40,11 +40,11 @@ enum ShiftStatus {
   CLOSED
 }
 
+/// Matches UMAG's own 3 types exactly (Вложения/Расходы/Дивиденды) — see docs/kasa-offline-plan.md §6.
 enum CashMovementType {
-  IN
-  OUT
-  PAYOUT
-  DROP
+  DEPOSIT
+  EXPENSE
+  DIVIDEND
 }
 
 enum InventoryMovementType {
@@ -107,6 +107,7 @@ model Store {
   supportThreads   SupportThread[]
   productCharacteristics ProductCharacteristic[]
   cashboxes        Cashbox[]
+  hubTokens        HubToken[]
   expenseTypes     ExpenseType[]
   payments         Payment[]
   transfers        Transfer[]
@@ -565,6 +566,8 @@ model Sale {
   receiptNo      String?
   /// True when the sale was rung up without a connection and uploaded later.
   offline        Boolean       @default(false)
+  /// A local Hub only: when this row (created by one of its own tills) was pushed to the cloud. Always null on the cloud itself.
+  syncedToCloudAt DateTime?
   createdAt      DateTime      @default(now())
 
   store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -869,6 +872,8 @@ model CustomerReturn {
   totalAmount Decimal              @default(0) @db.Decimal(10, 2)
   createdAt   DateTime             @default(now())
   postedAt    DateTime?
+  /// A local Hub only: when this row was pushed to the cloud. Always null on the cloud itself.
+  syncedToCloudAt DateTime?
 
   store    Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   customer Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -1512,6 +1517,8 @@ model Refund {
   items      Json
   restoreStock Boolean @default(true)
   createdAt  DateTime @default(now())
+  /// A local Hub only: when this row was pushed to the cloud. Always null on the cloud itself.
+  syncedToCloudAt DateTime?
 
   sale Sale @relation(fields: [saleId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -1533,11 +1540,30 @@ model Shift {
   difference   Decimal?    @db.Decimal(10, 2)
   status       ShiftStatus @default(OPEN)
   notes        String?
+  /// A local Hub only: when this row was pushed to the cloud. Always null on the cloud itself.
+  syncedToCloudAt DateTime?
 
   store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id])
   sales         Sale[]
   cashMovements CashMovement[]
+
+  @@index([storeId])
+}
+
+/// A local Hub (office computer of a multi-till market, see docs/kasa-offline-plan.md §9b) authenticates to the
+/// cloud with one of these instead of a cashier session. Scoped to exactly one store; never grants office/admin access.
+model HubToken {
+  id         String    @id @default(cuid())
+  storeId    String
+  /// SHA-256 of the actual token — the token itself is shown once, at creation, and never stored in the clear.
+  tokenHash  String    @unique
+  label      String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId])
 }
@@ -1550,6 +1576,8 @@ model CashMovement {
   amount    Decimal          @db.Decimal(10, 2)
   reason    String?
   createdAt DateTime         @default(now())
+  /// A local Hub only: when this row was pushed to the cloud. Always null on the cloud itself.
+  syncedToCloudAt DateTime?
 
   shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id])

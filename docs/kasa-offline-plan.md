@@ -90,7 +90,7 @@ Marketteki kasa ekranı şu an tamamen internete bağlı. İnternet giderse **sa
 
 **Vardiya:** bkz. 6. bölüm. **Geçmiş / ek fonksiyonlar menüsü / hızlı ürünler:** ekran görüntüleri `_umag-sandbox/shots/`.
 
-**Henüz bakılmayanlar (bilerek):** СИНХ. С СЕРВЕРОМ, ПРОВЕРИТЬ ОБНОВЛЕНИЕ (ağa çıkmaya çalışır), ЗАБЛОКИРОВАТЬ КАССУ (kilitler, şifre gerekir), ВЫХОД ИЗ ПРОГРАММЫ, СВЕРНУТЬ, РАСПЕЧАТАТЬ ЧЕК, ВКЛ/ВЫКЛ ПРИНТЕР, ДОБАВИТЬ ДОП ПРИНТЕР, giriş ekranı ayrıntıları, СДАТЬ СМЕНУ akışı, история 2. sayfa/takvim.
+**Henüz bakılmayanlar (bilerek):** СИНХ. С СЕРВЕРОМ, ПРОВЕРИТЬ ОБНОВЛЕНИЕ (ağa çıkmaya çalışır), ЗАБЛОКИРОВАТЬ КАССУ (kilitler, şifre gerekir), ВЫХОД ИЗ ПРОГРАММЫ, СВЕРНУТЬ, РАСПЕЧАТАТЬ ЧЕК, ВКЛ/ВЫКЛ ПРИНТЕР, ДОБАВИТЬ ДОП ПРИНТЕР, giriş ekranı ayrıntıları, история 2. sayfa/takvim. **СДАТЬ СМЕНУ akışı (2026-09-27):** kısmen bakıldı — banknot/сумма/внос ekranları ve açılıştaki saat doğrulama ekranı gözlendi (bkz. 6. bölüm), ama gerçek rakamlarla kapatınca çıkan sonuç ekranı giriş ekranı şifresi bilinmediği için görülemedi.
 
 **Bulunan yan bilgi:** UMAG'ın satış ekranında **ödeme penceresi ayrı bir pencere** (Java penceresi), borç ekranı ise ana pencerenin içinde tam ekran.
 
@@ -155,7 +155,7 @@ Bunların hepsi aşağıdaki adımlarda ele alınıyor.
 - [+] Mağazalar arası izolasyon: her yeni uç `getStoreId()` ile korunur; **çapraz mağaza tarayıcısı** (`scripts/tenant-scan`) yeni uçlar için çalıştırılır. *(Çalıştırıldı 2026-09-26: 0 API bulgusu.)*
 
 ### 5.3 Tarayıcı tarafı
-- [~] Yerel depo (IndexedDB): ürünler, barkodlar, fiyatlar, hızlı ürünler, kategoriler, kasiyerler, ayarlar, promosyonlar, müşteriler. *(Yapıldı: yalnızca ürünler. Kasiyer, ayar, promosyon, hızlı ürün, müşteri kopyası henüz yok.)*
+- [~] Yerel depo (IndexedDB): ürünler, barkodlar, fiyatlar, hızlı ürünler, kategoriler, kasiyerler, ayarlar, promosyonlar, müşteriler. *(Yapıldı: ürünler, kasiyerler (offline giriş, `auth.ts`), ayarlar/izinler ve aktif promosyonlar — bkz. 5.5. Henüz yok: hızlı ürünler, müşteri kopyası, indirim kartı sorgusu.)*
 - [+] Yerel depo: **gönderilmemiş kuyruk** (satış, iade, vardiya, para hareketi, iptal). Her kayıtta durum (bekliyor / gönderiliyor / gönderildi / hata) ve deneme sayısı. *(Yapıldı: yalnızca satış. İade, vardiya, para hareketi, iptal kaydı henüz kuyruğa girmiyor.)* *(Yapıldı: satış, iade, fişsiz iade, vardiya açma/kapama, para hareketi. Kuyruk kimliği = kasanın ürettiği kimlik.)*
 - [+] Kasa fiş sayacı (yerelde saklanır, yenileme/kapanma sonrası korunur).
 - [+] Ürün arama yerelden yapılsın (internet olsun olmasın aynı hız).
@@ -163,7 +163,7 @@ Bunların hepsi aşağıdaki adımlarda ele alınıyor.
 - [+] Yeniden deneme: üstel bekleme, internet geri geldiğinde hemen dene (`online` olayı). *(Sabit aralıklarla: 15 sn bağlantı denetimi, 30 sn kuyruk gönderme, `online` olayında hemen; üstel bekleme yok.)*
 - [+] Artımlı veri çekme: açılışta ve periyodik (varsayılan 5 dakika), değişen ürünleri günceller.
 - [ ] Yerel veride stok: satışta yerel stok düşer (eşitlenince sunucunun gerçek değeri gelir).
-- [ ] Promosyonlar ve indirim kartı yerelden hesaplanır (mevcut `evaluatePromotions` kullanılır).
+- [+] **Promosyonlar yerelden hesaplanır (2026-09-27):** `evaluatePromotions` zaten saf/izomorfikti (sunucu VE kasa ekranı aynı fonksiyonu çağırıyordu) — eksik olan kuralların kendisiydi: `/api/promotions/active`'in tek seferlik `fetch`'i internetsizken sessizce boş kalıyordu (`.catch(() => {})`), yani sayfa çevrimdışı açılırsa hiç indirim uygulanmıyordu (bu, projenin başındaki orijinal UMAG şikâyetinin ta kendisi). Düzeltme: yeni `src/lib/offline/config-cache.ts` (IndexedDB `meta` deposu, şema değişikliği yok) — her başarılı `fetch` sonucu önbelleğe yazılıyor, başarısız `fetch`'te son iyi kopya okunuyor. Aynı mekanizma `/api/settings` (vergi oranı + kasa izinleri: iade/silme/miktar-azaltma kimlere açık) için de uygulandı — internetsiz açılışta varsayılanlara (hepsi "ALL") sessizce dönmek, marketin bilerek kısıtladığı bir izni görünmeden gevşetmek anlamına gelirdi, artık son bilinen gerçek ayar kullanılıyor. İndirim kartı sorgusu (`/api/discount-cards`) kapsam dışı bırakıldı — ayrı bir iş.
 - [ ] Bekleyen satışlar (beklemeye al) yerel de çalışsın.
 
 ### 5.4 Sayfa internetsiz açılsın
@@ -181,7 +181,7 @@ Bunların hepsi aşağıdaki adımlarda ele alınıyor.
 - [+] Üst çubukta bağlantı noktası: internet varsa yeşil, yoksa kırmızı.
 - [+] Gönderilmemiş kayıt varsa uyarı çubuğu: "Есть не синхронизированные данные. Пожалуйста подключите интернет." (kapatılabilir).
 - [+] Gönderilmemiş kayıt sayısı gösterilir; hata alan kayıtlar için ayrı uyarı ve elle tekrar deneme. *(Yapıldı; ayrıca **oturum kapalıyken** yükleme bekliyorsa kırmızı 'Данные ждут отправки: войдите в кассу заново' + Войти bağlantısı.)*
-- [ ] Açılışta, internet yoksa **saat doğrulama ekranı** (4 saat seçeneği, doğru olanı seç; yanlışsa satış engellenir ya da işaretlenir). Neden: yanlış saatli satışlar raporları bozar.
+- [+] **Saat doğrulama, farklı bir yolla çözüldü (2026-09-27):** UMAG'daki gibi kasiyere "hangisi doğru saat?" sordurmak yerine — o, insan hatasına açık — sunucu zaten her offline yazımın zaman damgasını kendi penceresinde doğruluyordu (`trustedTime()`, bkz. 5.2). Eksik olan, bunun kasiyere hiç bildirilmemesiydi. Şimdi 5 offline uç (`sales`, `shifts` aç/kapat, `cash-movements`, `refund`, `returns/without-receipt`) kasanın gönderdiği zaman pencerenin dışındaysa (`timeAdjusted: true`) bunu yanıtla bildiriyor; `UnsyncedBanner`'da kırmızı bir satır çıkıyor: "Часы кассы были неверны — часть операций записана со временем сервера." Rapor asla bozulmuyor (sunucu zaten "şimdi"yi kullanıyordu), kasiyer sadece haberdar oluyor. UMAG'ın açılıştaki 4 seçenekli ekranı isteniyorsa ayrı bir iş olarak eklenebilir.
 - [ ] Satış geçmişinde gönderilmemiş fişlerin işareti (UMAG'daki eşitleme simgesi gibi).
 
 ### 5.7 Fiskal (WebKassa) ile ilişki
@@ -211,14 +211,29 @@ Bunların hepsi aşağıdaki adımlarda ele alınıyor.
 
 ## 6. ADIM 2 — Vardiya ekranı (UMAG ile aynı)
 
-- [ ] Vardiya, açılır pencere yerine **tam sayfa** sekme olsun.
-- [ ] Sekme **КУПЮРЫ**: banknot adetleri (20000, 10000, 5000, 2000, 1000, 500, 200 тг) ve bozuk para adetleri (100, 50, 20, 10, 5 тг), rakam tuş takımı (7-8-9 / 4-5-6 / 1-2-3 / 0 . ve удл., <<, >>).
-- [ ] Sekme **СУММА**: doğrudan tutar girişi.
-- [ ] Sekme **ВНОС, ВЫНОС СРЕДСТВ**: pencere, tür listesi **Вложения / Расходы / Дивиденды**, tutar, yorum, ЗАКРЫТЬ / СОХРАНИТЬ.
-- [ ] "ВСЕ ПОЛЯ ОБЯЗАТЕЛЬНЫ ДЛЯ ЗАПОЛНЕНИЯ" uyarısı (kapatırken).
-- [ ] **СДАТЬ СМЕНУ** (vardiya kapat) düğmesi, Z raporu.
-- [ ] Mevcut para hareketi türleri (IN/OUT/PAYOUT/DROP) ile uyum ve raporlara yansıması (kasa akışı raporu).
-- [+] Çevrimdışı çalışır (Adım 1 kuyruğu kullanır). *(Doğrulandı: vardiya çevrimdışı açıldı, satış+para girişi+iade yapıldı, vardiya kapatıldı; internet gelince hepsi sırayla yüklendi (vardiya açılışı 500, sunucunun hesapladığı beklenen nakit 750, sayılan 1200, fark 450).)*
+**2026-09-27, canlı gözlem (`_umag-sandbox`, ağ kapalı, gerçek ekran görüntüleri alındı — bkz. `shots/01-smena.png` … `07-closed.png` + bu oturumun yeni `live-*`/`full-*` görüntüleri):**
+
+- Üst çubuk **СМЕНА** sekmesindeyken **kırmızı/bordo** olur (satışta yeşil — 5.6'daki not doğrulandı).
+- Üstte sabit kırmızı şerit: **"ВСЕ ПОЛЯ ОБЯЗАТЕЛЬНЫ ДЛЯ ЗАПОЛНЕНИЯ"** — üç sekme boyunca hep görünür, kapatılamıyor.
+- 3 sekme yan yana, açık gri kutular, seçili olan yeşil/altı çizili: **КУПЮРЫ | СУММА | ВНОС, ВЫНОС СРЕДСТВ**.
+- **КУПЮРЫ:** iki sütun — "КОЛ-ВО КУПЮР" (20000, 10000, 5000, 2000, 1000, 500, 200 тг, her biri kendi metin kutusu, varsayılan `0`) ve "КОЛ-ВО МОНЕТ" (100, 50, 20, 10, 5 тг). Sağda ortak rakam tuş takımı: `7 8 9 / УДЛ.(kırmızı)`, `4 5 6 / <<`, `1 2 3 / >>`, `0 .` — **`<<`/`>>` bir sonraki/önceki tutar kutusuna geçiş** (imleç odağını taşıyor), silme ayrı kırmızı **УДЛ.** düğmesinde.
+- **СУММА:** tek bir "СУММА" kutusu, aynı tuş takımı — banknot saymadan direkt toplam tutar girmek için.
+- **ВНОС, ВЫНОС СРЕДСТВ:** ayrı bir **pencere** (tab içeriği değil, modal) açılıyor: üstte açılır liste (varsayılan seçili **ВЛОЖЕНИЯ**, altında **РАСХОДЫ**, **ДИВИДЕНДЫ** — tam olarak 3 seçenek, Korgen'deki 4 türden [IN/OUT/PAYOUT/DROP] farklı), altında boş "Сумма" kutusu, altında "Комментарий" çok satırlı metin alanı (sağ üstte klavye simgesi), altta **ЗАКРЫТЬ** (kırmızı, kapat) / **СОХРАНИТЬ** (turkuaz, tutar girilmeden soluk/pasif).
+- Sağ altta sabit, üç sekmede de aynı yerde duran **СДАТЬ СМЕНУ** (turkuaz) düğmesi.
+- **Yeni bulunan, plandaki `[ ]` maddesini karşılayan ekran — saat doğrulama:** uygulama internetsiz açılışta **её dosyalanmamış** bir ekranla karşılıyor: **"ПРОВЕРКА ПРАВИЛЬНОСТИ УСТАНОВЛЕННОГО ВРЕМЕНИ КАССЫ"** başlığı, açıklama ("İnternet olmadığı için saat sunucuyla karşılaştırılamadı, kasa saati fiş ve işlemlerde böyle görünecek, yanlışsa senkron çalışmaz"), altında **"ДЛЯ ПРОВЕРКИ ВЫБЕРИТЕ ПРАВИЛЬНОЕ ТЕКУЩЕЕ ВРЕМЯ"** ve **2×2 dört seçenek kutusu** (ör. gerçek saat + 1 gün + 1 saat + 30 dk ileri gibi 4 aday, ilki — genelde doğrusu — mavi çerçeveyle **ön seçili**), altında ayrı bir kutuda **"НИЧТО ИЗ ВЫШЕПЕРЕЧИСЛЕННОГО"** (hiçbiri) düğmesi. Bir kutuya tıklamak saati onaylayıp doğrudan giriş ekranına geçiriyor (ayrı bir "onayla" düğmesi yok). *(Bu, Korgen'in şu an yaptığı sessiz `trustedTime()` + sonradan uyarı banner'ından — bkz. 5.6 — daha proaktif: kasiyer açılışta bilerek onaylıyor. İkisi de aynı sorunu çözüyor; UMAG'ınki ekstra bir adım daha var. Birebir istenirse bu ekran ayrıca eklenebilir — aşağıya madde olarak not edildi.)*
+- **Gözlenemeyen (bloke):** gerçek rakamlarla **СДАТЬ СМЕНУ**'ye basılınca çıkan kapanış onay/Z-raporu ekranı — giriş ekranına kadar ilerlendi (saat onayı → "ВХОД В СИСТЕМУ", КАССИР: Касса 5, şifre alanı zaten bir nokta ile dolu duruyordu — hatırlanan offline giriş) ama **şifre bilinmediği için** öteye geçilemedi. Korgen'in kendi vardiya kapanış özeti (açılış/satış/giriş/çıkış/iade/beklenen/sayılan/fark — zaten `shift-bar.tsx`'te var ve gerçek offline testte doğrulanmış, bkz. altındaki `[+]` madde) bu ekranın makul bir eşleniği; UMAG'ın gerçek metnini görmek için şifre gerekiyor.
+
+Yapılacaklar:
+- [+] **Vardiya artık tam sayfa** — `KioskTopBar`'daki СМЕНА, açılır pencere yerine ПРОДАЖИ/ВОЗВРАТ/ИСТОРИЯ ile aynı tür gerçek sekme oldu (`pos-screen.tsx`'teki `salesPanel` state'ine `"shift"` eklendi); yeni `src/components/pos/shift-screen.tsx` — eski popover `ShiftBar` (`shift-bar.tsx`) kiosk ekranından tamamen kaldırıldı, `shift-bar.tsx` artık yalnızca ofis tarafında da kullanılan `ShiftReportModal`'ı barındırıyor.
+- [+] Üst çubuk (`KioskTopBar`) СМЕНА sekmesindeyken **kırmızı/bordo** (`#c0392b`) oluyor, diğer sekmelerde yeşil kalıyor — gerçek gözlemle birebir.
+- [+] Sekme **КУПЮРЫ**: banknot/bozuk para adetleri, iki sütun, ortak tuş takımı — `<<`/`>>` odağı bir önceki/sonraki tutar kutusuna taşıyor, УДЛ. son haneyi siliyor (bu son ikisi UMAG'da gözlemlenemedi, en makul yorumla uygulandı — not düşüldü).
+- [+] Sekme **СУММА**: doğrudan tutar girişi, aynı tuş takımı.
+- [+] **ВНОС, ВЫНОС СРЕДСТВ** ayrı pencere: tür açılır listesi **Вложения/Расходы/Дивиденды** — Korgen'in `CashMovementType` enum'u UMAG'ın 3 türüne **birebir geçirildi** (2026-09-28, kullanıcı kararı: "UMAG'ın 3 türüne geç"). Eski `IN/OUT/PAYOUT/DROP` → `DEPOSIT/EXPENSE/DIVIDEND`; veri migration'ı (`20260928090000_cash_movement_umag_types`) mevcut kayıtları `IN→DEPOSIT`, `OUT|PAYOUT|DROP→EXPENSE` olarak taşıdı (raporlar zaten bunları tek "kasadan çıkan" grubunda topluyordu, davranış değişmedi). Tutar, Комментарий, ЗАКРЫТЬ/СОХРАНИТЬ — hepsi birebir.
+- [+] "ВСЕ ПОЛЯ ОБЯЗАТЕЛЬНЫ ДЛЯ ЗАПОЛНЕНИЯ" uyarısı, üstte sabit.
+- [+] **СДАТЬ СМЕНУ** düğmesi kapatıyor, ardından Korgen'in kendi Z-raporu (`ShiftReportModal`) açılıyor — gerçek UMAG kapanış ekranı görülemediği için (şifre engeliyle) kullanıcı kararıyla bu temel alındı.
+- [ ] Açılışta saat doğrulama ekranı (yukarıdaki spesifikasyon) — istenirse ayrı bir iş, henüz yapılmadı.
+- [+] Çevrimdışı çalışır (Adım 1 kuyruğu kullanır, değişmedi). *(Daha önce doğrulandı: vardiya çevrimdışı açıldı, satış+para girişi+iade yapıldı, vardiya kapatıldı; internet gelince hepsi sırayla yüklendi.)*
+- [+] **Gerçek tarayıcı testiyle uçtan uca doğrulandı (2026-09-28):** geçici bir test kasiyer hesabıyla giriş yapılıp СМЕНА sekmesi açıldı — üst çubuk kırmızıya döndü, vardiya açıldı, КУПЮРЫ sekmesinde 1000 тг×5 + `>>` ile 500 тг×7 girildi (₸8500 doğru toplandı, alan odağı `>>` ile doğru taşındı), ВНОС,ВЫНОС penceresi UMAG'daki gibi açılıp kapatıldı, СДАТЬ СМЕНУ ile kapatıldı ve Z-raporu **Фактические наличные ₸8 500, Расхождение +₸8 500** olarak doğru göründü, kapatınca satış ekranına dönüldü ve üst çubuk yeşile geri döndü. Test hesabı ve tüm izleri (Shift/AuditLog/Account/UserStoreAssignment/User) temizlendi. Tip kontrolü, lint ve 65 birim testi temiz.
 
 ---
 
@@ -236,30 +251,44 @@ Bunların hepsi aşağıdaki adımlarda ele alınıyor.
 - Sepet satırı: `№ | наименование | цена ТГ | количество ШТ | скидка % | сумма ТГ`. Satır indirimi **yüzde** olarak gösterilir.
 
 Yapılacaklar:
-- [ ] Mevcut Korgen ödeme penceresini (`payment-modal.tsx`, `payment-panel.tsx`) bu düzene çevir; UMAG'da olmayan Korgen özellikleri (bahşiş, sadakat puanı vb.) yerinde kalır ama düzeni bozmaz.
-- [ ] Hazır tutar düğmelerinin **davranışı** UMAG'daki gibi (gözleme göre: ekler mi, yerine mi yazar).
-- [ ] БЕЗ СДАЧИ, ОЧИСТИТЬ, ← davranışı.
-- [ ] Karma ödeme ve borç sekmeleri UMAG'daki alan ve doğrulamalarla (bkz. 3.1 gözlemleri).
-- [ ] ОПЛАТА С ОФД: fiskal hazır olunca (Adım 4) bağlanır; o zamana kadar UMAG'daki gibi pasif.
-- [+] Ödeme, çevrimdışı kuyruğa (Adım 1) yazar. *(Yapıldı: ödeme `submitSale` ile kuyruğa yazar; henüz UMAG ödeme penceresi düzeni yok.)*
+- [+] Mevcut Korgen ödeme penceresi (`payment-panel.tsx`) UMAG düzenine çevrildi; Korgen'e özgü ekler (bahşiş, sadakat puanı, vergi geçersiz kılma, beklet/geri çağır) yerinde kaldı, en altta/üstte, UMAG'ın kendi akışını bozmadan.
+- [+] **Hazır tutar düğmelerinin davranışı düzeltildi** — burada gerçek bir hata bulundu: eski kod `tot + amount` yazıyordu (ödenecek tutara ekliyordu), gözlemlenen UMAG davranışı ise **alandaki mevcut tutara** ekliyor (`0 → +500 = 500 → +200 = 700`). Gerçek tarayıcı testiyle doğrulandı: +500 sonra +200 → Получено tam ₸700 çıktı.
+- [+] **ОЧИСТИТЬ** eklendi (alanı sıfırlıyor, `←` tek hane siliyor — ayrı davranışlar). **БЕЗ СДАЧИ** eklendi (tam tutarı anında, para üstü beklemeden öder — `handleCompleteSale`'e stale-state riski olmadan doğrudan tutar geçiriliyor). Gerçek testte: ₸1750 ürün, БЕЗ СДАЧИ → satış anında tamamlandı, fiş "Внесено ₸1 750" gösterdi.
+- [+] Üst üçlü **К ОПЛАТЕ / ПОЛУЧЕНО (yeşil) / СДАЧА (kırmızı)** — birebir; "Осталось" (Korgen eklentisi) yalnızca karma ödemede 4. sütun olarak görünüyor.
+- [+] Alt düğmeler **ОТМЕНА (kırmızı, sepeti bozmadan kapatır) / БЕЗ СДАЧИ (yalnızca nakit sekmesinde) / ОПЛАТА (yeşil)** — birebir sırada. Eski "Void" (sepeti boşaltan Korgen eklentisi) bu üçünün altında ayrı bir düğme olarak kaldı.
+- [+] **Безналичная (kart):** sekmeye geçince ПОЛУЧЕНО anında tam tutarla doluyor (gözlemlenen davranış) — yeni bir `useEffect` ile.
+- [+] **ОПЛАТА С ОФД** düğmesi eklendi, soluk/pasif (Adım 4'te fiskal bağlanınca aktifleşecek).
+- [+] **Смешанная (karma):** UMAG'ın gözlemlenen iki-alanlı (üstte nakit/altta kart, büyük simgeli alanlar) düzenine çevrildi — Korgen'in 3. ödeme türü (Другое) aynı stille altta 3. alan olarak kaldı (Korgen eklentisi, işlev bozulmadı).
+- [+] **В долг (borç) — yepyeni tam ekran, `debt-screen.tsx`:** UMAG'daki gibi ayrı tam sayfa, turkuaz üst çubuk, НОВЫЙ ДОЛЖНИК + arama + tablo (Полное имя/Тел. номер/Сумма/Дата и время), alt kart ("Продажа в долг на сумму X", "Должник: Y", "Общая сумма долга Z"), НАЗАД (doğrudan satış ekranına döner, sepet korunur — ödeme penceresine değil) / ЗАПИСАТЬ. Yeni ekran değil, **mevcut müşteri/borç altyapısı** (`/api/customers` arama+oluşturma, `getCustomerBalance`, CREDIT satış türü) üzerine kuruldu — hiç yeni API yazılmadı. Yeni borçlu formu (`*Полное имя`, `*Номер телефона`, maskeli `+7 (7__) ___ __ __` — mevcut `formatPhoneInput` ile) ОТМЕНИТЬ/СОЗДАТЬ.
+  - **Kapsam dışı bırakılan (bilerek):** Ek fonksiyonlar menüsünden (Adım 3) erişilen ДОЛГ varyantı — "Продажа в долг" satırı olmadan, ПОГАСИТЬ (borç kapat) düğmesiyle — bu ayrı bir akış ve `/api/customers/[id]/payments` şu an yalnızca ADMIN/MANAGER/WAREHOUSE'a açık (bir `accountId` seçimi gerektiriyor); kasadan borç kapatma Adım 3'te ele alınacak.
+- [+] **Gerçek tarayıcı testiyle uçtan uca doğrulandı (2026-09-28):** ₸2000'lik ürünle В долг açıldı, НОВЫЙ ДОЛЖНИК ile "+7 (705) 123-45-67" telefon maskesi doğru çalıştı, borçlu oluşturulup otomatik seçildi ("Общая сумма долга ₸2 000" doğru), ЗАПИСАТЬ ile satış tamamlandı, fiş "Оплата: В долг" gösterdi. Ayrı bir denemede НАЗАД'ın gerçekten satış ekranına (ödeme penceresine değil) döndüğü ve sepetin korunduğu doğrulandı. Test verisi (kullanıcı, satışlar, borçlu müşteri) temizlendi.
+- [+] Ödeme, çevrimdışı kuyruğa (Adım 1) yazar (`submitSale`, değişmedi).
+- [+] **Gerçek tarayıcı testiyle uçtan uca doğrulandı (2026-09-28):** test kasiyer hesabıyla ₸1750'lik ürün eklendi, ödeme ekranı açıldı — +500/+200 presetleri doğru topladı, ОЧИСТИТЬ sıfırladı, Карта sekmesi anında ₸1750 doldu, ОТМЕНА sepeti bozmadan kapattı, БЕЗ СДАЧИ ile satış tamamlandı ve fiş doğru göründü. Tip kontrolü, lint, 65 birim test temiz. Test verisi (kullanıcı, satış, iade) temizlendi.
 
 ---
 
 ## 7. ADIM 3 — Ek fonksiyonlar, iade ve küçük düzeltmeler
 
-### Ek fonksiyonlar menüsü (UMAG ile aynı 12 düğme)
-- [ ] Выход из программы
-- [ ] Заблокировать кассу (PIN ile kilit)
-- [ ] Вкл/выкл принтер
-- [ ] Распечатать чек последней продажи
-- [ ] Синх. с сервером (elle eşitleme; kuyruğu hemen dener)
-- [ ] Поиск по штрихкоду
-- [ ] Свернуть
-- [ ] Долг (kasada müşteri borcu)
-- [ ] Проверить обновление (yeni sürüm kontrolü ve sayfayı yenileme)
-- [ ] Добавить доп принтер
-- [ ] Проверка цены (var; kapalıyken de görünsün mü, UMAG'a göre kontrol)
-- [ ] Быстрая приемка (kasada hızlı mal kabul)
+### Ek fonksiyonlar menüsü (UMAG ile aynı 12 düğme) — [+] bitti (2026-09-28)
+
+**Gerçek menü, `_umag-sandbox/shots/14-dop.png`/`133-dop.png` ile karşılaştırılarak birebir kuruldu** — yeni `extra-functions-menu.tsx`, 5 sütunlu grid, aynı 12 buton adı. Eskiden "Доп. функции" düğmesi yanlışlıkla müşteri/indirim kartı panelini açıyordu (o panel artık yalnızca kendi "Не выбран консультант" tetikleyicisinden açılıyor — UMAG'ın 12 düğmesiyle hiç ilgisi yoktu).
+
+- [+] **Выход из программы** — signOut() + kasa girişe yönlendirme.
+- [+] **Заблокировать кассу** — yeni `lock-screen.tsx`, tam ekran kilit, açmak için mevcut ManagerGate/PIN altyapısı (refund/kasa-ayır akışlarındaki aynı mgr-ok çerezi). Gerçek testle doğrulandı: CASHIER rolüyle PIN istendi, doğru PIN ile açıldı. **Gerçek kullanıcı testinde bulunan ciddi hata (2026-09-28):** kilit durumu yalnızca React state'inde tutuluyordu — kasiyer kilitledikten sonra sayfayı yenileyince (veya `/pos`'a tekrar girince) kilit sessizce sıfırlanıyor, hiç PIN sormadan direkt satış ekranına dönüyordu. Düzeltildi: kilit artık `localStorage`'da tutuluyor (yeni `src/lib/till-lock.ts`), `pos-screen.tsx` sayfa açılışında bunu okuyup kilidi PIN girilene kadar her koşulda (yenileme dahil) gösteriyor.
+- [+] **Вкл/выкл принтер** — yerel (localStorage) açık/kapalı anahtarı, buton metni UMAG gibi dinamik ("ВКЛЮЧЕН"/"ВЫКЛЮЧЕН").
+- [+] **Распечатать чек последней продажи** — /api/pos/sales?pageSize=1 ile son satış çekilip mevcut ReceiptModal açılıyor. Gerçek testle doğrulandı: doğru ürün/tutar/ödeme türüyle fiş çıktı; satış yokken "Продаж пока нет" doğru gösterildi.
+- [+] **Синх. с сервером** — flushQueue() + syncCatalog() anında çağrılıyor. Gerçek testle doğrulandı: "Синхронизировано" toast'ı çıktı.
+- [+] **Поиск по штрихкоду** — yeni `barcode-search-modal.tsx`, sadece tuş takımı (UMAG'daki gibi serbest yazı yok), УДАЛИТЬ/ОТМЕНА/OK. Gerçek testle doğrulandı: bilinmeyen kod için "Не найдено — Продукт с данным кодом не найден" UMAG'daki metinle birebir çıktı.
+- [+] **Свернуть** — mevcut tam ekran aç/kapa mantığı (eskiden başka bir menüdeydi) buraya taşındı.
+- [+] **Долг** — `debt-screen.tsx`'e "repay" modu eklendi (ЗАПИСАТЬ yerine ПОГАСИТЬ, "Продажа в долг" satırı yok — UMAG'ın iki farklı çağrı yeri arasındaki farkla birebir). PIN gerekiyor (aşağıdaki API notuna bak). Gerçek testle doğrulandı: ₸1000 borçlu seçilip tamamı ödendi, bakiye doğru şekilde ₸0'a düştü.
+- [+] **Проверить обновление** — window.location.reload().
+- [+] **Добавить доп принтер** — bu tarayıcı tabanlı kasada gerçek çoklu yazıcı sürücü katmanı yok (yalnızca tek USB/seri cihaz algılama var); dürüstçe basit tutuldu — localStorage'da isim listesi, ekleme/silme. Gerçek bir sürücü kaydı değil, sadece kasiyerin görebileceği bir etiket listesi olduğu koda not düşüldü.
+- [+] **Проверка цены** — zaten var olan PriceCheckModal buraya taşındı (izin kapalıyken soluk/pasif, tıklanamaz — UMAG'daki gibi).
+- [+] **Быстрая приемка** — yeni `quick-receiving-modal.tsx`, UMAG'ın gerçek formuyla birebir (Сумма, Дата приёмки, Поставщик, Комментарии, Под консигнацию, Взнос, ОТМЕНА/СОХРАНИТЬ) — mevcut /api/purchase-receipts/quick ucu zaten tam bu forma göre yazılmıştı, kullanıldı. Взнос varsa /api/purchase-receipts/:id/payments'e ikinci bir çağrı. Gerçek testle doğrulandı: ₸5000'lik приёмка POSTED olarak oluştu.
+
+**API tarafında yapılan (birebir yetki deseni):** ДОЛГ→ПОГАСИТЬ (/api/customers/[id]/payments) ve БЫСТРАЯ ПРИЁМКА (/api/purchase-receipts/quick, /api/purchase-receipts/[id]/payments) eskiden yalnızca ADMIN/MANAGER/WAREHOUSE oturumuna açıktı — UMAG'da ise kasadan herkes yapabiliyor. Üç uç da refund/kasa-ayır akışlarında zaten kullanılan aynı manager-PIN çerezi (mgr-ok, verifyManagerToken) ile genişletildi: yetkili rol VEYA geçerli PIN. Ayrıca accountId artık isteğe bağlı — kiosk'ta hesap seçme arayüzü olmadığı için terminalin eşleştiği kasadan (Cashbox.accountId) otomatik çözülüyor (satış/iade akışlarındaki aynı desen).
+
+**Tip kontrolü, lint, 65 test temiz.**
 
 ### İade
 - [ ] Маркировка товара (işaretli ürün iadesi).
@@ -297,6 +326,62 @@ Ayrı iş: `docs` altındaki fiskalleştirme planı (Kazakistan OFD, test kasas�
 
 ---
 
+## 9b. ADIM 5 — Yerel Hub (ofis bilgisayarı, çok kasalı market)
+
+**Neden (2026-09-26/27, kullanıcı):** Nuray'da 4 kasa var, hepsi aynı ağda. Biri satıp bir ürünü tüketirse **diğer kasalarda hâlâ satılabilir** görünüyor — çünkü şu anki çevrimdışı katman her kasanın **kendi tarayıcı kopyasını** tutuyor, kasalar birbirini görmüyor, yalnızca 5 dakikada bir buluta bakıyor. UMAG'da bunun çözümü **`umag.local`**: ofis bilgisayarında yerel bir sunucu, kasalar ona bağlı, o sunucu buluta senkronize.
+
+**Kapsam netleştirildi:** Yönetim paneli (ürün/fiyat girişi) **değişmiyor**, bulutta kalıyor (korgenkassa.kz), patron oradan (ofis PC'sinden ya da telefondan) yönetmeye devam ediyor, internet ister. Yalnızca **kasa/satış katmanı** yerelleşiyor: ofis PC'sinde görünmez bir arka plan servisi (Hub), buluttaki ürün/fiyat/kasiyer bilgisini çeker, 4 kasaya yerel ağdan sunar, satışları toplayıp buluta gönderir.
+
+**Karar netleşti (2026-09-27, kullanıcı):** İki seçenek karşılaştırıldı (yalnızca Adım 1 / Hub / internet donanımını düzelt), kullanıcı **kasaların internetsizken de birbirini anında görmesini** istedi → Hub tam olarak yapılıyor.
+
+```
+BULUT (korgenkassa.kz) — ürün/fiyat/ayar burada yönetilir, "gerçek kaynak"
+        ↕ internet varsa: Hub buradan çeker (ürün/fiyat/kasiyer), buraya gönderir (satış/vardiya/...)
+OFİS BİLGİSAYARI (Hub) — kendi veritabanı, 24 saat açık, LAN'da hep erişilebilir
+        ↕ yerel ağ (ethernet/wifi) — kasa ↔ Hub bağlantısı pratikte hiç kopmaz
+Kasa 1 / Kasa 2 / Kasa 3 / Kasa 4 — uygulama gibi açılır, hep aynı kasaya girer (UMAG'daki "Касса 5" gibi)
+```
+
+**Önemli sonuç:** Hub mimarisinde kasa tarayıcısının kendi çevrimdışı kuyruğuna (Adım 1) ihtiyacı kalmıyor — kasa her zaman Hub'a bağlı (yerel ağ neredeyse hiç kopmaz), Adım 1'in kuyruk/senkron mantığı **Hub seviyesine taşınıyor** (tarayıcı yerine Node.js arka plan servisi, IndexedDB yerine Hub'ın kendi Postgres'i). Adım 1 kodu **çöp olmuyor**: tek kasalı / Hub kurulmamış marketler için hâlâ geçerli (doğrudan buluta bağlı, tarayıcı içi kuyruk). İki mod:
+- **Tek kasa / Hub yok:** Adım 1 (tarayıcı içi çevrimdışı kuyruk), doğrudan buluta.
+- **Çok kasa / Hub var:** kasalar Hub'a bağlı, Hub buluta bağlı.
+
+**Zaten var olan altyapı:** `Cashbox` modeli + `cashbox-device.ts` (tek kullanımlık eşleştirme anahtarı → kalıcı imzalı çerez → "bu tarayıcı Kasa 5'tir"). Kasanın "uygulama gibi açılıp direkt kendi kimliğine girmesi" bunun üzerine kurulacak, yeniden yazılmayacak.
+
+### 9b.1 Hub paketi
+- [+] `docker-compose.hub.yml`: mevcut `Dockerfile` + yerel Postgres, Caddy/HTTPS yok (LAN, düz HTTP yeterli — kasa her zaman Hub'a bağlı olduğu için service-worker/PWA çevrimdışı katmanına ihtiyaç yok). Ofis bilgisayarının LAN IP'sinde (örn. `192.168.1.50:3000`) yayında. Yerelde ayağa kaldırılıp doğrulandı (`/api/health` cevap verdi).
+- [ ] Ofis bilgisayarında kurulum: Docker Desktop (kullanıcı onayladı: kurulabilir), `.env.hub` (Hub'ın kendi `BETTER_AUTH_SECRET`'i, bulut adresi, Hub servis anahtarı).
+- [+] Hub'ın kendi veritabanı migration'ları (aynı Prisma şeması) — sadece bu marketin verisini tutar (`storeId` sabit). Yerelde denendi.
+
+### 9b.2 Hub ↔ Bulut senkronizasyonu
+- [+] **Servis kimlik doğrulama:** `HubToken` modeli (migration `20260927100000_hub_token`) — SHA-256 hash'i saklanır, düz metin token yalnızca üretimde bir kez gösterilir. `src/lib/hub-auth.ts`: `createHubToken`/`revokeHubToken`/`resolveHubActor`. Üretim script'i: `scripts/create-hub-token.mjs <storeId> [label]`. Token yalnızca o `storeId`'ye erişebilir; iptal edilince anında geçersiz (test edildi).
+- [+] **Aşağı doğru (bulut → Hub):** `GET /api/hub/pull` — ürünler (mevcut `/api/pos/catalog` mantığı `catalog-query.ts`'e taşınıp paylaşıldı, `since`/`afterId` ile artımlı), kasiyer listesi (`name`, `phone`, `role`, `allowCashierLogin`, **şifre hash'i** — Better Auth'un `Account.password` alanından, düz metin asla yok), `BusinessSettings`. Gerçek HTTP isteğiyle test edildi (yanlış/eksik token → 401 JSON; doğru token → ürün+5 kasiyer+ayarlar geldi). **Henüz yok:** promosyonlar, hızlı ürünler (ayrı bir geçişte eklenecek — Hub bunlar olmadan da satış/vardiya/iade için tam çalışır).
+- [+] **Yukarı doğru (Hub → bulut):** aynı 6 uç, artık hem oturum çerezi hem Hub Bearer token'ı kabul ediyor (`src/lib/pos-request.ts` → `resolvePosRequest`): `POST /api/sales`, `POST /api/shifts` (aç), `POST /api/shifts/[id]` (kapat), `POST /api/cash-movements`, `POST /api/sales/[id]/refund`, `POST /api/pos/returns/without-receipt`. Hub isteğinde `cashierUserId` **zorunlu** (Hub'ın kendi oturumu yok, `attributedUserId` boş dönerse 400 "cashierUserId required"). Hepsi gerçek istekle tek tek denendi: doğru kasiyer/vardiyaya bağlanma, tekrar gönderilince çift kayıt olmama, vardiya kapanışında beklenen nakidin doğru hesaplanması (200 açılış + 130 satış − 130 iade + 50 giriş = 250 doğrulandı).
+- [+] **Kritik bulgu ve düzeltme (satır 1):** `src/proxy.ts` (middleware), oturum çerezi olmayan her isteği `/login`'e yönlendiriyordu — `fetch` bunu takip edip **200 (HTML)** döndürüyordu, Hub bunu "başarılı" sanabilirdi. Düzeltme: `Authorization: Bearer hub_...` taşıyan her `/api/` isteği middleware'de doğrudan geçiriliyor.
+- [+] **Kritik bulgu ve düzeltme (satır 2):** ilk düzeltme middleware'in setup-tamamlama kontrolünden SONRA eklenmişti — oturumsuz+çerezsiz istek önce `/api/setup/resume`'a yönlendirilip sonsuz döngüye giriyordu (`hub-sync.mjs` ilk gerçek denemede "redirect count exceeded" ile çöktü). Hub kontrolü middleware'in en başına (health-check'ten hemen sonra) taşındı, sorun düzeldi ve doğrulandı.
+- [+] **`scripts/hub-sync.mjs` tamamlandı** — gerçek pull/push döngüsü (artık iskelet değil):
+  - **Push sırası (bağımlılık zinciri):** vardiya açılışları → satışlar/para hareketleri (vardiyaya referans verir) → iadeler (satışa referans verir) → fişsiz iadeler → vardiya kapanışları (açılışın bulutta olmasını gerektirir). Her satır kendi yerel kimliğiyle gönderilir (`Shift`/`CashMovement`/`CustomerReturn` kimliği doğrudan, `Sale`/`Refund` `clientSaleId`/kendi `id`'si ile) — bulut aynı kimliği görünce tekrar oluşturmuyor.
+  - **Bulunan ince hata:** iade, Hub'daki yerel `SaleItem.id`'yi taşıyordu; bu kimlik bulutta hiçbir anlam ifade etmiyor (bulut satışı alınca kendi yeni satır kimliklerini üretiyor). Düzeltme: iade satırları **satır sırasına** (`L:<lineNo>`) çevrilip gönderiliyor — bu, çevrimdışı kasanın zaten kullandığı mekanizmanın aynısı (bkz. Adım 1).
+  - **Bulunan ikinci ince hata:** vardiya kapanışını "gönderildi mi" diye `syncedToCloudAt` sütunuyla takip etmek, açılış için de kullanılan aynı sütunla çakışıyordu (açılış "şimdi" ile işaretlenince kapanışın daha eski saatiyle karşılaştırma yanlış sonuç veriyordu). Düzeltme: kapanış, Hub'ın küçük anahtar-değer tablosunda (`shift_closed:<id>`) ayrı takip ediliyor.
+  - **Senkron durumu sütunları:** `Sale`/`Shift`/`CashMovement`/`Refund`/`CustomerReturn`'e `syncedToCloudAt` eklendi (migration `20260927120000_hub_sync_columns`) — yalnızca Hub'da anlamlı, bulutta hep boş kalır.
+  - **Gerçek uçtan uca test** (yerel ikinci bir "Hub" veritabanı + çalışan bulut sunucusuna karşı): çekme (ürün + 5 kasiyer + gerçek şifre hash'leri geldi), bir kasanın internetsizken üreteceği tam veri seti elle Hub'a yazıldı (vardiya aç/satış/para girişi/iade/fişsiz iade/vardiya kapat) → tek çalıştırmada hepsi buluta gönderildi, doğru bağlantılarla (satış doğru vardiyaya, iade doğru satışın doğru satırına) → **stok tam 60'ta kaldı** (60 −2 satış +1 iade +1 fişsiz iade = 60, matematiksel olarak doğrulandı) → ikinci ve üçüncü çalıştırmada **hiçbir şey tekrar gönderilmedi** (çift kayıt yok) → fiyat değişikliği bulutta yapılıp artımlı çekme ile Hub'a doğru şekilde indi.
+  - **Henüz yok:** promosyonlar/hızlı ürünler pull'u; ürün/fiyat çakışma kuralı (zaten tek yönlü olduğu için doğal olarak bulut kazanıyor, ayrıca kod gerekmedi); Hub'ın kendi sağlık/durum sayfası.
+
+### 9b.3 Kasaların Hub'a bağlanması
+- [+] Kasa girişi artık Hub'ın **kendi** kullanıcı tablosuna karşı çalışır (buluttan senkronlanan kasiyer + şifre hash'i — `/api/hub/pull` bunu zaten getiriyor). Better Auth aynı algoritmayı kullandığı için kopyalanan hash yerelde doğrulanabilir.
+- [+] Her kasa PC'sinde: tarayıcı **uygulama modunda** (`--app=http://<hub-ip>:3000/...`) açan bir kısayol; o PC daha önce bir `Cashbox` kaydına eşleştirilmiş — **mevcut `cashbox-device.ts` mekanizması, hiçbir değişiklik yapılmadan** (aynı `/api/pos/cashbox` GET/POST/DELETE, sadece hedef adres artık Hub). Kasa açılışında kasiyer seçimi yok — bu zaten mevcut pairing çerezinin sağladığı davranış (bir terminal = bir `Cashbox`); UMAG'daki "Касса 5" tam olarak bu.
+- [+] **Bulunan ve kapatılan boşluk:** `hub-sync.mjs`'in senkronladığı tek şey ürün + kasiyer(User/Account) idi — `UserStoreAssignment` hiç yoktu, bu yüzden Hub'da gerçek bir tarayıcı oturumuyla giriş yapan kasiyer `getStoreId()`'de `NO_STORE_ACCESS` ile patlardı (Bearer token'lı testler bunu hiç yakalamamıştı çünkü o yol `getStoreId()`'e hiç uğramıyor). Aynı şekilde `Cashbox` hiç senkronlanmıyordu, yani mevcut eşleştirme akışının yerelde eşleşecek hiçbir kaydı yoktu. Düzeltme: `/api/hub/pull` artık `cashboxes` dizisini de döndürüyor; `hub-sync.mjs`'in `upsertCashiers`'ı artık `UserStoreAssignment` satırı da yazıyor, yeni `upsertCashboxes` ise `Cashbox` satırlarını yazıyor.
+- [+] **İnce nokta:** `Cashbox` senkronunda `name`/`active`/fiş ayarları her pull'da bulut değerine güncellenir, ama `oneTimeKey`/`pairedAt` yalnızca **ilk** ekleme sırasında yazılır — sonraki pull'larda dokunulmaz. Aksi halde, bir terminal Hub'da yerel olarak eşleştikten sonra (oneTimeKey temizlenip pairedAt yazıldıktan sonra) bir sonraki pull, bulutun hâlâ eski/boş `oneTimeKey`'ini geri yazıp eşleşmeyi görünüşte bozardı — çünkü Hub'daki eşleşme durumu bulutun haberi olmayan bir şey (bkz. 9b.2'nin "henüz yok" notu, geri-yansıtma ayrı bir iş). Bilinen sınır: bulut tarafında admin panelinden **yeni** bir eşleştirme anahtarı üretilirse, bu Hub zaten eşleşmiş bir kasaya hiç ulaşmaz — bu, eşleştirme durumunun Hub→bulut yönünde henüz yansıtılmamasının doğal sonucu, ayrı bir iş olarak bekliyor.
+- [+] **Gerçek uçtan uca doğrulama:** ikinci bir Postgres'e ("hub-test") tüm migration'lar uygulanıp gerçek bir Hub token ile çalışan dev sunucusuna karşı `hub-sync.mjs --one-shot` çalıştırıldı — `Cashbox` (Касса-1, no 5), 5 kasiyer + `Account` + `UserStoreAssignment` hepsi doğru geldi. Bulut tarafında test kassasına `oneTimeKey` yazılıp senkron tekrar çalıştırıldı: Hub'daki (zaten var olan, boş) `oneTimeKey` **değişmedi** — üstteki korumanın gerçekten çalıştığı doğrulandı. Test verisi (Hub token, geçici veritabanı, test anahtarı) temizlendi.
+
+### 9b.4 Test
+- [+] Çapraz market taraması yeni Hub uçlarıyla çalıştırıldı: 0 API bulgusu.
+- [+] Birim testleri (65) ve tip kontrolü Hub değişiklikleriyle birlikte temiz.
+- [+] Yerelde iki Postgres ("bulut" = çalışan dev sunucusu, "hub" = ikinci boş veritabanı) ile uçtan uca doğrulandı — bkz. 9b.2 (fiyat değişikliği iniyor, satış/vardiya/iade/para hareketi/fişsiz iade çıkıyor, tekrar çalıştırmada çift kayıt yok). Kalan: 4 gerçek tarayıcı sekmesiyle (Hub'ın kendi API'sinden değil, gerçek kasa arayüzünden) canlı deneme.
+- [ ] Gerçek ofis bilgisayarında kurulum ve markette gerçek test.
+
+---
+
 ## 10. Çalışma kuralları
 
 1. Her adımdan önce yedek ve yerelde test.
@@ -312,8 +397,9 @@ Ayrı iş: `docs` altındaki fiskalleştirme planı (Kazakistan OFD, test kasas�
 | Adım | Konu | Durum |
 |------|------|-------|
 | 0 | Araştırma ve karşılaştırma | [+] büyük ölçüde bitti (kalan: bakılmamış ekranlar, kopyanın silinmesi) |
-| 1 | Çevrimdışı katman | [+] büyük ölçüde bitti (satış, iade, fişsiz iade, vardiya, para hareketi, katalog, sayfa önbelleği, çevrimdışı giriş; yerelde doğrulandı). Kalan: saat doğrulama ekranı, promosyon/kasiyer/ayar yerel kopyası, canlıya alma |
-| 2 | Vardiya ekranı | [ ] başlanmadı |
-| 2b | Ödeme ekranı (görünüm + davranış birebir) | [ ] başlanmadı (ekran görüldü) |
-| 3 | Ek fonksiyonlar, iade, düzeltmeler | [ ] başlanmadı |
+| 1 | Çevrimdışı katman | [+] bitti (satış, iade, fişsiz iade, vardiya, para hareketi, katalog, sayfa önbelleği, çevrimdışı giriş, saat doğrulama uyarısı, promosyon/ayar/izin yerel kopyası; yerelde doğrulandı). Kalan: hızlı ürün + müşteri yerel kopyası (küçük, ayrı iş), indirim kartı sorgusu offline, canlıya alma (son değişikliklerin deploy edilip edilmediği teyit edilmeli) |
+| 2 | Vardiya ekranı | [+] bitti (tam sayfa, kırmızı üst çubuk, КУПЮРЫ/СУММА/ВНОС-ВЫНОС, UMAG'ın 3 para-hareketi türü, gerçek tarayıcı testiyle doğrulandı). Kalan: açılışta saat doğrulama ekranı (istenirse) |
+| 2b | Ödeme ekranı (görünüm + davranış birebir) | [+] bitti — Наличная/Безналичная/Смешанная/В долг hepsi UMAG düzeninde, gerçek testle doğrulandı (bir gerçek hata bulunup düzeltildi: hazır tutar düğmeleri) |
+| 3 | Ek fonksiyonlar, iade, düzeltmeler | [~] Ek fonksiyonlar menüsü (12 düğme, hepsi gerçek testle doğrulandı) bitti. Kalan: İade (Маркировка товара, Поиск по штрихкоду, С чеком/Без чека), Küçük düzeltmeler (Учебный yazısı, boş açılır listeler, sekmeye göre üst çubuk rengi, ekran klavyesi) |
 | 4 | Fiskal | [ ] giriş bilgisi bekleniyor |
+| 5 | Yerel Hub (çok kasalı market) | [~] Docker paketi + kimlik doğrulama + 6 uç + `hub-sync.mjs` (gerçek pull/push döngüsü) + kasa eşleştirme (`Cashbox`/`UserStoreAssignment` senkronu, 9b.3) uçtan uca test edildi. Kalan: Hub sağlık sayfası, promosyon/hızlı ürün pull'u, gerçek ofis bilgisayarı + market testi |

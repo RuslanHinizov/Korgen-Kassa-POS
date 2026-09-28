@@ -14,7 +14,7 @@ type Section = (typeof SECTIONS)[number];
 
 const SALE_STATUS: Record<string, string> = { COMPLETED: "Завершена", VOIDED: "Отменена", REFUNDED: "Возврат" };
 const PAYMENT_LABEL: Record<string, string> = { CASH: "Наличные", CARD: "Карта", OTHER: "Другое", CREDIT: "В долг" };
-const CASH_TYPE: Record<string, string> = { IN: "Внесение", OUT: "Изъятие", PAYOUT: "Выплата", DROP: "Инкассация" };
+const CASH_TYPE: Record<string, string> = { DEPOSIT: "Вложения", EXPENSE: "Расходы", DIVIDEND: "Дивиденды" };
 
 // GET /api/reports/full-export?from=&to=&sections=sales,writeOffs,... — «Полный отчёт»:
 // one multi-sheet Excel with everything that happened in the store over a date range,
@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
         ...rows.map((r) => [r.createdAt, CASH_TYPE[r.type] ?? r.type, Number(r.amount), r.user.name, r.reason ?? ""]),
       ],
     });
-    const netCash = rows.reduce((s, r) => s + (r.type === "IN" ? Number(r.amount) : -Number(r.amount)), 0);
+    const netCash = rows.reduce((s, r) => s + (r.type === "DEPOSIT" ? Number(r.amount) : -Number(r.amount)), 0);
     summary.push(["Движение денег (нетто, ₸)", rows.length, netCash]);
   }
 
@@ -239,8 +239,8 @@ export async function GET(req: NextRequest) {
         ["Кассир", "Открыта", "Закрыта", "Длительность", "Статус", "Нач. остаток", "Чеков", "Выручка", "Внесения", "Изъятия/выплаты/инкассация", "Ожидалось в кассе", "Посчитано", "Расхождение", "Примечание"],
         ...rows.map((s) => {
           const done = s.sales.filter((x) => x.status === "COMPLETED");
-          const cashIn = s.cashMovements.filter((m) => m.type === "IN").reduce((a, m) => a + Number(m.amount), 0);
-          const cashOut = s.cashMovements.filter((m) => m.type !== "IN").reduce((a, m) => a + Number(m.amount), 0);
+          const cashIn = s.cashMovements.filter((m) => m.type === "DEPOSIT").reduce((a, m) => a + Number(m.amount), 0);
+          const cashOut = s.cashMovements.filter((m) => m.type !== "DEPOSIT").reduce((a, m) => a + Number(m.amount), 0);
           return [s.user.name, s.openedAt, s.closedAt ?? "", fmtDuration(s.openedAt, s.closedAt), s.status === "OPEN" ? "Открыта" : "Закрыта",
             Number(s.openingFloat), done.length, done.reduce((a, x) => a + Number(x.total), 0), cashIn, cashOut,
             s.expectedCash != null ? Number(s.expectedCash) : "", s.countedCash != null ? Number(s.countedCash) : "", s.difference != null ? Number(s.difference) : "", s.notes ?? ""];
@@ -337,7 +337,7 @@ export async function GET(req: NextRequest) {
     ]);
     for (const s of tSales) ev.push({ t: s.createdAt, kind: s.status === "VOIDED" ? "Чек отменён" : "Продажа", who: s.user.name, what: `Чек №${s.documentNo} · ${PAYMENT_LABEL[s.paymentMethod] ?? s.paymentMethod}${s.voidReason ? ` · ${s.voidReason}` : ""}`, amount: Number(s.total) });
     for (const r of tRefunds) ev.push({ t: r.createdAt, kind: "Возврат по чеку", who: r.user.name, what: `Чек №${r.sale.documentNo}${r.reason ? ` · ${r.reason}` : ""}`, amount: -Number(r.amount) });
-    for (const m of tCash) ev.push({ t: m.createdAt, kind: `Касса: ${CASH_TYPE[m.type] ?? m.type}`, who: m.user.name, what: m.reason ?? "", amount: m.type === "IN" ? Number(m.amount) : -Number(m.amount) });
+    for (const m of tCash) ev.push({ t: m.createdAt, kind: `Касса: ${CASH_TYPE[m.type] ?? m.type}`, who: m.user.name, what: m.reason ?? "", amount: m.type === "DEPOSIT" ? Number(m.amount) : -Number(m.amount) });
     for (const s of tShifts) {
       ev.push({ t: s.openedAt, kind: "Смена открыта", who: s.user.name, what: `Нач. остаток ${Number(s.openingFloat)}`, amount: null });
       if (s.closedAt) ev.push({ t: s.closedAt, kind: "Смена закрыта", who: s.user.name, what: `Посчитано ${s.countedCash != null ? Number(s.countedCash) : "—"}, расхождение ${s.difference != null ? Number(s.difference) : "—"}`, amount: null });

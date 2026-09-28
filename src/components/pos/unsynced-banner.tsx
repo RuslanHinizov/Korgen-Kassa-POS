@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
-import { retryFailed } from "@/lib/offline/queue";
+import { retryFailed, clearTimeAdjusted } from "@/lib/offline/queue";
 
 /**
  * UMAG's «Есть не синхронизированные данные» strip: shown while something made on this till has not reached the server yet.
@@ -14,7 +14,7 @@ export function UnsyncedBanner() {
   const [dismissedFor, setDismissedFor] = useState<number | null>(null);
   const waiting = status.pending;
 
-  if (waiting === 0 && status.failed === 0) return null;
+  if (waiting === 0 && status.failed === 0 && !status.timeAdjusted) return null;
 
   return (
     <div data-testid="unsynced-banner" className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-950">
@@ -34,6 +34,14 @@ export function UnsyncedBanner() {
         <span data-testid="needs-login" className="flex items-center gap-2 font-semibold text-red-800">
           Данные ждут отправки: войдите в кассу заново.
           <a href="/kasa-giris" className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs hover:bg-red-50">Войти</a>
+        </span>
+      )}
+      {status.timeAdjusted && (
+        <span className="flex items-center gap-2 font-semibold text-red-800">
+          <span data-testid="time-adjusted-text">Часы кассы были неверны — часть операций записана со временем сервера.</span>
+          <button type="button" onClick={() => clearTimeAdjusted()} className="rounded p-0.5 hover:bg-red-100">
+            <X className="h-4 w-4" />
+          </button>
         </span>
       )}
       {status.failed > 0 && (

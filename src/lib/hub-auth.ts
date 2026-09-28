@@ -1,0 +1,55 @@
+/**
+ * Authenticates a local Hub (the office computer of a multi-till market, see docs/kasa-offline-plan.md §9b)
+ * to the cloud. A Hub sends `Authorization: Bearer <token>` instead of a cashier session cookie; the token
+ * is scoped to exactly one store and can only pull that store's catalogue and push sales/shifts/etc for it —
+ * it never grants office/admin access (no product editing, no other store, no user management).
+ */
+
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import { prisma } from "./db";
+
+const TOKEN_PREFIX = "hub_";
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Issues a new token for a store. Returns the plaintext token — shown once, never recoverable afterwards. */
+export async function createHubToken(storeId: string, label: string): Promise<string> {
+  const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
+  await prisma.hubToken.create({ data: { storeId, label, tokenHash: hashToken(token) } });
+  return token;
+}
+
+export async function revokeHubToken(id: string): Promise<void> {
+  await prisma.hubToken.update({ where: { id }, data: { revokedAt: new Date() } });
+}
+
+export interface HubActor {
+  storeId: string;
+  tokenId: string;
+}
+
+/** Resolves the store a Hub request is authorized for, from its Authorization header. Null if invalid/revoked. */
+export async function resolveHubActor(req: Request): Promise<HubActor | null> {
+  const header = req.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(\S+)$/.exec(header);
+  if (!match || !match[1].startsWith(TOKEN_PREFIX)) return null;
+
+  const tokenHash = hashToken(match[1]);
+  // Constant-time-ish: the hash is already opaque and unique-indexed, a direct lookup does not leak timing
+  // information about the token's content the way comparing raw secrets would.
+  const row = await prisma.hubToken.findUnique({ where: { tokenHash } });
+  if (!row || row.revokedAt) return null;
+
+  void prisma.hubToken.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
+  return { storeId: row.storeId, tokenId: row.id };
+}
+
+/** Constant-time string compare, for anything (rare) that still needs to compare a secret directly. */
+export function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}

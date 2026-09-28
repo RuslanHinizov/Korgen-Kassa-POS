@@ -99,10 +99,10 @@ export async function computeShiftReport(shiftId: string): Promise<ShiftReport |
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cashIn = shift.cashMovements.filter((m: any) => m.type === "IN").reduce((a: number, m: { amount: unknown }) => a + Number(m.amount), 0);
+  const cashIn = shift.cashMovements.filter((m: any) => m.type === "DEPOSIT").reduce((a: number, m: { amount: unknown }) => a + Number(m.amount), 0);
   const cashOut = shift.cashMovements
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((m: any) => m.type === "OUT" || m.type === "PAYOUT" || m.type === "DROP")
+    .filter((m: any) => m.type === "EXPENSE" || m.type === "DIVIDEND")
     .reduce((a: number, m: { amount: unknown }) => a + Number(m.amount), 0);
 
   const openingFloat = Number(shift.openingFloat);

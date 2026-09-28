@@ -6,7 +6,7 @@ export type Category = "sale" | "refund" | "cancel" | "cash" | "shift" | "doc" |
 const ALL: Category[] = ["sale", "refund", "cancel", "cash", "shift", "doc", "settings", "login", "device"];
 
 const PAYMENT_LABEL: Record<string, string> = { CASH: "Наличные", CARD: "Карта", OTHER: "Другое", CREDIT: "В долг" };
-const CASH_TYPE: Record<string, string> = { IN: "Внесение в кассу", OUT: "Изъятие из кассы", PAYOUT: "Выплата из кассы", DROP: "Инкассация" };
+const CASH_TYPE: Record<string, string> = { DEPOSIT: "Вложения", EXPENSE: "Расходы", DIVIDEND: "Дивиденды" };
 const AUDIT_LABEL: Record<string, string> = {
   SETTINGS_UPDATE: "Изменены настройки", PURCHASE_RECEIPT_POST: "Проведена приёмка", PURCHASE_RECEIPT_PAYMENT: "Оплата по приёмке",
   STOCKTAKE_POST: "Проведена инвентаризация", CUSTOMER_RETURN_POST: "Проведён возврат покупателя", CUSTOMER_RETURN_PAYMENT: "Выплата по возврату покупателя",
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     select: { id: true, createdAt: true, type: true, amount: true, reason: true, user: { select: { name: true } } },
   }).then((rows) => { for (const m of rows) events.push({
     id: `cash-${m.id}`, t: m.createdAt.toISOString(), category: "cash", title: CASH_TYPE[m.type] ?? m.type, who: m.user.name.trim(),
-    text: m.reason ?? "", amount: m.type === "IN" ? Number(m.amount) : -Number(m.amount),
+    text: m.reason ?? "", amount: m.type === "DEPOSIT" ? Number(m.amount) : -Number(m.amount),
   }); }));
 
   if (wanted.has("shift")) {

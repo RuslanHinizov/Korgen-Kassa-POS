@@ -4,13 +4,12 @@ import { CASHBOX_DEVICE_COOKIE, getPairedCashboxId } from "@/lib/cashbox-device"
 import { resolveReferenceValues } from "@/lib/reference-values";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getStoreId } from "@/lib/store-context";
-import { resolvePosActor } from "@/lib/pos-actor";
 import { canUsePosAction } from "@/lib/pos-permissions";
 import { applyInventoryMovement } from "@/lib/inventory-ledger";
 import { resolveStockLines } from "@/lib/bundle";
 import { logAudit } from "@/lib/audit";
 import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
+import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 
 const schema = z.object({
   reason: z.string().trim().max(500).optional(),
@@ -20,17 +19,18 @@ const schema = z.object({
   id: z.string().regex(CLIENT_ID).optional(),
   returnedAt: z.string().datetime().optional(),
   cashierUserId: z.string().optional(),
+  /** Which physical register, when a local Hub uploads this — see /api/sales. */
+  cashboxId: z.string().optional(),
 });
 
 /** Cash-register return without a receipt. Prices and product data are always taken
  * from the current store catalog; the browser never supplies an amount. */
 export async function POST(req: NextRequest) {
-  const actor = await resolvePosActor();
-  if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await resolvePosRequest(req);
+  if (isPosRequestError(ctx)) return ctx.error;
+  const { storeId, actor, viaHub } = ctx;
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const storeId = await getStoreId();
 
   // The same upload twice returns the return it already created.
   if (parsed.data.id) {
@@ -38,14 +38,17 @@ export async function POST(req: NextRequest) {
     if (already) return NextResponse.json({ customerReturn: already, duplicate: true }, { status: 200 });
   }
   const returnUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  if (!returnUserId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
   const returnedAt = trustedTime(parsed.data.returnedAt);
+  const timeAdjusted = !!parsed.data.returnedAt && !returnedAt;
 
   const references = await resolveReferenceValues(storeId, "RETURN", parsed.data.referenceValues);
   if (!references.ok) return NextResponse.json({ error: references.error }, { status: 400 });
   const settings = await prisma.businessSettings.findUnique({
     where: { storeId }, select: { posAccessReturnNoReceipt: true },
   });
-  if (!canUsePosAction(settings?.posAccessReturnNoReceipt, actor.role)) {
+  // A Hub upload already passed this same check on the till — see the identical note in sales/[id]/refund.
+  if (!viaHub && !canUsePosAction(settings?.posAccessReturnNoReceipt, actor.role)) {
     return NextResponse.json({ error: "Возврат без чека запрещён настройками кассы" }, { status: 403 });
   }
 
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
   const totalAmount = products.reduce((sum, product) => sum + Number(product.price) * (quantities.get(product.id) ?? 0), 0);
 
   // Cash leaves the register the return was rung up on, when the terminal is paired.
-  const pairedId = getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
+  const pairedId = parsed.data.cashboxId ?? getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
   const cashbox = pairedId ? await prisma.cashbox.findFirst({ where: { id: pairedId, storeId }, select: { accountId: true } }) : null;
 
   const customerReturn = await prisma.$transaction(async (tx) => {
@@ -99,5 +102,5 @@ export async function POST(req: NextRequest) {
   });
 
   await logAudit({ userId: returnUserId, action: "CUSTOMER_RETURN_POST", entityType: "CustomerReturn", entityId: customerReturn.id, details: { documentNo: customerReturn.documentNo, withoutReceipt: true, totalAmount } });
-  return NextResponse.json({ customerReturn }, { status: 201 });
+  return NextResponse.json({ customerReturn, timeAdjusted }, { status: 201 });
 }

@@ -1,0 +1,91 @@
+# Local Hub — runs on the office computer of a multi-till market (see docs/kasa-offline-plan.md, section 9b).
+#
+# Purpose: the 4 tills on the shop's LAN sell against THIS machine, not the cloud, so they always see each
+# other's stock instantly. This Hub keeps a copy of one store's data and syncs it with the cloud
+# (korgenkassa.kz) whenever the office computer's internet is up. Management (products, prices, reports)
+# stays on the cloud as before — this Hub does not replace it, it only serves the till/sales layer.
+#
+#   node scripts/gen-secrets.mjs korgen-hub.local     # writes .env.hub with fresh random secrets
+#   docker compose --env-file .env.hub -f docker-compose.hub.yml up -d --build
+#
+# No HTTPS/Caddy here on purpose: this only listens on the shop's own LAN (e.g. http://192.168.1.50:3000),
+# tills never lose that connection the way they can lose the internet, so the browser-side offline layer
+# (service worker, IndexedDB queue) is not needed for a Hub-connected till.
+name: korgen-hub
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Run node scripts/gen-secrets.mjs first}"
+      POSTGRES_DB: olgax_pos
+    volumes:
+      - hub_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d olgax_pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: korgen-hub-web
+    restart: "no"
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/olgax_pos?schema=public"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: korgen-hub-web
+    restart: unless-stopped
+    # Published on the LAN directly (no reverse proxy): tills on the same network reach the office
+    # computer's own IP at this port, e.g. http://192.168.1.50:3000
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/olgax_pos?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?Run node scripts/gen-secrets.mjs first}"
+      # No public DOMAIN — trusted origins cover the LAN address(es) this Hub is reached at.
+      BETTER_AUTH_URL: "${HUB_URL:?Set HUB_URL in .env.hub, e.g. http://192.168.1.50:3000}"
+      NEXT_PUBLIC_APP_URL: "${HUB_URL}"
+      BETTER_AUTH_TRUSTED_ORIGINS: "${HUB_URL}"
+      NODE_ENV: production
+      UPLOAD_DIR: /app/uploads
+      # Marks this instance as a Hub: enables the sync worker's endpoints (pull/push against the cloud)
+      # and switches till sign-in to check the locally-synced cashier table instead of requiring the cloud.
+      HUB_MODE: "true"
+      HUB_STORE_ID: "${HUB_STORE_ID:?Set HUB_STORE_ID in .env.hub — the storeId this Hub mirrors}"
+      HUB_CLOUD_URL: "${HUB_CLOUD_URL:-https://korgenkassa.kz}"
+      HUB_SYNC_TOKEN: "${HUB_SYNC_TOKEN:?Run node scripts/gen-secrets.mjs first}"
+    volumes:
+      - hub_uploads_data:/app/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Pulls products/prices/cashiers from the cloud and pushes queued sales/shifts/movements back,
+  # every SYNC_INTERVAL_MS. Runs the same image as `web`, just a different command — see scripts/hub-sync.mjs.
+  sync:
+    image: korgen-hub-web
+    restart: unless-stopped
+    command: ["node", "scripts/hub-sync.mjs"]
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/olgax_pos?schema=public"
+      HUB_STORE_ID: "${HUB_STORE_ID}"
+      HUB_CLOUD_URL: "${HUB_CLOUD_URL:-https://korgenkassa.kz}"
+      HUB_SYNC_TOKEN: "${HUB_SYNC_TOKEN}"
+      SYNC_INTERVAL_MS: "${SYNC_INTERVAL_MS:-15000}"
+    depends_on:
+      web:
+        condition: service_started
+
+volumes:
+  hub_postgres_data:
+  hub_uploads_data:

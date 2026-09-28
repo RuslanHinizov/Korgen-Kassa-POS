@@ -7,6 +7,7 @@ import { getStoreId } from "@/lib/store-context";
 import { logAudit } from "@/lib/audit";
 import { resolvePosActor } from "@/lib/pos-actor";
 import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
+import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 }
 
 const createSchema = z.object({
-  type: z.enum(["IN", "OUT", "PAYOUT", "DROP"]),
+  type: z.enum(["DEPOSIT", "EXPENSE", "DIVIDEND"]),
   amount: z.number().positive(),
   reason: z.string().max(200).optional(),
   /** Offline till: id made on the till (becomes the row's id), the shift it belongs to, when, and who. */
@@ -41,13 +42,13 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const actor = await resolvePosActor();
-  if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await resolvePosRequest(req);
+  if (isPosRequestError(ctx)) return ctx.error;
+  const { storeId, actor } = ctx;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const storeId = await getStoreId();
   const settings = await prisma.businessSettings.findUnique({ where: { storeId }, select: { posCashInOut: true } });
   if (settings && !settings.posCashInOut) {
     return NextResponse.json({ error: "Внос и вынос средств отключен в настройках кассы" }, { status: 403 });
@@ -60,11 +61,14 @@ export async function POST(req: NextRequest) {
   }
 
   const movementUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  if (!movementUserId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
   // an offline till names the shift itself (the server may not have seen it open yet)
   const shift =
     (parsed.data.shiftId ? await prisma.shift.findFirst({ where: { id: parsed.data.shiftId, storeId } }) : null) ??
     (await getOpenShift(movementUserId, storeId));
   if (!shift) return NextResponse.json({ error: "No open shift" }, { status: 409 });
+
+  const timeAdjusted = !!parsed.data.createdAt && !trustedTime(parsed.data.createdAt);
 
   const movement = await prisma.cashMovement.create({
     data: {
@@ -80,11 +84,11 @@ export async function POST(req: NextRequest) {
 
   await logAudit({
     userId: movementUserId,
-    action: parsed.data.type === "IN" ? "CASH_IN" : "CASH_OUT",
+    action: parsed.data.type === "DEPOSIT" ? "CASH_IN" : "CASH_OUT",
     entityType: "CashMovement",
     entityId: movement.id,
     details: { type: parsed.data.type, amount: parsed.data.amount, reason: parsed.data.reason },
   });
 
-  return NextResponse.json({ movement: serialize(movement) }, { status: 201 });
+  return NextResponse.json({ movement: serialize(movement), timeAdjusted }, { status: 201 });
 }

@@ -9,6 +9,7 @@ import { resolvePosActor } from "@/lib/pos-actor";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { trustedTime } from "@/lib/offline-write";
+import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 
 export const dynamic = "force-dynamic";
 
@@ -51,14 +52,14 @@ const closeSchema = z.object({
 });
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const actor = await resolvePosActor();
-  if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await resolvePosRequest(req);
+  if (isPosRequestError(ctx)) return ctx.error;
+  const { storeId, actor, viaHub } = ctx;
 
   const { id } = await params;
   const parsed = closeSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const storeId = await getStoreId();
   const shift = await prisma.shift.findFirst({ where: { id, storeId } });
   if (!shift) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (shift.status === "CLOSED") {
@@ -68,13 +69,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const isPrivileged = ["ADMIN", "MANAGER"].includes(actor.role ?? "");
-  if (shift.userId !== actor.userId && !isPrivileged && !parsed.data.offline) {
+  if (!viaHub && shift.userId !== actor.userId && !isPrivileged && !parsed.data.offline) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const report = await computeShiftReport(id);
   const expected = report?.expectedCash ?? Number(shift.openingFloat);
   const difference = parsed.data.countedCash - expected;
+  const timeAdjusted = !!parsed.data.closedAt && !trustedTime(parsed.data.closedAt);
 
   const updated = await prisma.shift.update({
     where: { id },
@@ -97,5 +99,5 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   });
 
   const finalReport = await computeShiftReport(id);
-  return NextResponse.json({ shift: serialize(updated), report: serialize(finalReport) });
+  return NextResponse.json({ shift: serialize(updated), report: serialize(finalReport), timeAdjusted });
 }

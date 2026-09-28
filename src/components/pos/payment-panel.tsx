@@ -9,6 +9,7 @@ import { getDeviceSettings } from "@/hooks/use-device-settings";
 import { kickCashDrawer } from "@/lib/thermal-print";
 import { submitSale } from "@/lib/offline/submit-sale";
 import { useRouter } from "next/navigation";
+import { DebtScreen, type Debtor } from "./debt-screen";
 import {
   PauseCircle,
   ClipboardList,
@@ -25,6 +26,8 @@ interface PaymentPanelProps {
   /** When true, checkout is disabled until a shift is opened. */
   checkoutBlocked?: boolean;
   onClear: () => void;
+  /** ОТМЕНА — leaves the payment screen with the cart untouched (UMAG: returns to the sale screen). */
+  onCancel?: () => void;
   /** Called with the new sale ID after a successful sale — triggers receipt.
    *  `sale` is the server's authoritative created-sale record (its totals reflect discounts
    *  like loyalty redemption that this panel's own cart-derived totals don't know about). */
@@ -65,6 +68,7 @@ export function PaymentPanel({
   taxRate,
   checkoutBlocked,
   onClear,
+  onCancel,
   onSaleComplete,
   onHoldOrders,
   customerId,
@@ -143,10 +147,12 @@ export function PaymentPanel({
       });
   }, [customerId, setLoyaltyPointsUsed]);
 
-  // CREDIT (веresiye) needs a customer attached and the cashbox permission on — fall back to CASH otherwise.
+  // В долг (CREDIT) needs the cashbox permission on — fall back to CASH otherwise. Unlike before, it no
+  // longer requires a customer already attached: UMAG's ЗАПИСАТЬ flow picks/creates the debtor ON that
+  // tab's own full screen (see DebtScreen below), not beforehand.
   useEffect(() => {
-    if ((!customerId || !creditSaleEnabled) && paymentMethod === "CREDIT") setPaymentMethod("CASH");
-  }, [customerId, creditSaleEnabled, paymentMethod, setPaymentMethod]);
+    if (!creditSaleEnabled && paymentMethod === "CREDIT") setPaymentMethod("CASH");
+  }, [creditSaleEnabled, paymentMethod, setPaymentMethod]);
 
   useEffect(() => {
     if (!cardPaymentEnabled && paymentMethod === "CARD") setPaymentMethod("CASH");
@@ -166,6 +172,14 @@ export function PaymentPanel({
   // customer + business settings only fetched here) -- apply it locally so the on-screen total
   // and change-due match what /api/sales actually records (it applies loyaltyDiscount server-side).
   const tot = Math.max(0, total(taxRate) - loyaltyDiscount);
+
+  // Безналичная/В долг: UMAG auto-fills ПОЛУЧЕНО with the full amount due the moment that tab is
+  // opened (observed 2026-09-26) — cash is the only method where the cashier types a tendered amount.
+  useEffect(() => {
+    if (!isSplitMode() && paymentMethod !== "CASH") setAmountTendered(tot);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod, tot]);
+
   const isEmpty = items.length === 0;
   const splitMode = isSplitMode();
   const splitPaid = paymentLinesTotal();
@@ -216,7 +230,24 @@ export function PaymentPanel({
     setAmountTendered(Number(next) || 0);
   }
 
-  async function handleCompleteSale() {
+  /** Presets ADD to whatever is already in the field (UMAG, observed 2026-09-26: 0 → +500 = 500.00 → +200 = 700.00). */
+  function addPreset(amount: number) {
+    setAmountTendered((amountTendered || 0) + amount);
+  }
+
+  /** БЕЗ СДАЧИ — pay the exact amount due, no change. Passed straight through instead of relying on
+   * `setAmountTendered` + a re-render (the state update wouldn't be visible in this same click). */
+  function payExact() {
+    setAmountTendered(tot);
+    void handleCompleteSale(tot);
+  }
+
+  /** ЗАПИСАТЬ on the В долг screen — completes the sale on credit against the picked/created debtor. */
+  async function recordDebtSale(debtor: Debtor) {
+    await handleCompleteSale(undefined, debtor.id);
+  }
+
+  async function handleCompleteSale(tenderedOverride?: number, customerIdOverride?: string) {
     if (isEmpty) return;
     setError(null);
     const missingBook = referenceBooks.missing();
@@ -248,17 +279,18 @@ export function PaymentPanel({
         discountCardCode: discountCardCode || undefined,
         tipAmount,
         note: note || undefined,
-        customerId: customerId || undefined,
+        customerId: customerIdOverride ?? customerId ?? undefined,
         consultantId: consultantId || undefined,
         loyaltyPointsUsed: loyaltyPointsUsed || 0,
         referenceValues: referenceBooks.payload(),
       };
 
+      const cashTendered = tenderedOverride ?? amountTendered ?? tot;
       if (splitMode && paymentLines.length > 0) {
         body.paymentLines = paymentLines;
       } else {
         body.paymentMethod = paymentMethod;
-        if (paymentMethod === "CASH") body.amountTendered = amountTendered || tot;
+        if (paymentMethod === "CASH") body.amountTendered = cashTendered || tot;
       }
 
       // No connection? The sale is kept on the till and uploaded later (see src/lib/offline).
@@ -270,7 +302,7 @@ export function PaymentPanel({
           discountAmount: discountValue() + loyaltyDiscount,
           taxAmount: taxAmount(effectiveTaxRate),
           tipAmount,
-          amountTendered: splitMode ? splitPaid : paymentMethod === "CASH" ? amountTendered || tot : tot,
+          amountTendered: splitMode ? splitPaid : paymentMethod === "CASH" ? cashTendered || tot : tot,
         },
         t("failed_complete_sale")
       );
@@ -321,20 +353,35 @@ export function PaymentPanel({
     }
   }
 
+  // В долг: a genuinely separate full screen in UMAG (not a panel inside the payment window) — НАЗАД goes
+  // straight back to the sale screen (onCancel), never back to this payment panel.
+  if (!splitMode && paymentMethod === "CREDIT") {
+    return (
+      <DebtScreen
+        saleTotal={tot}
+        onBack={() => onCancel?.()}
+        onRecord={(debtor) => void recordDebtSale(debtor)}
+        recording={loading}
+        error={error}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3 p-3 sm:p-4">
-      {/* UMAG-like payment totals ribbon */}
-      <div className="grid grid-cols-2 gap-2 bg-[#f1f1f1] px-4 py-2 text-center sm:grid-cols-4">
+      {/* UMAG's own payment ribbon: К ОПЛАТЕ / ПОЛУЧЕНО (green) / СДАЧА (red). "Осталось" is a Korgen
+          addition, useful for split-tender only, shown as a 4th column just there. */}
+      <div className={`grid gap-2 bg-[#f1f1f1] px-4 py-2 text-center ${splitMode ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         <PaymentStat label="К оплате" value={formatCurrency(tot)} />
         <PaymentStat
           label="Получено"
           value={formatCurrency(splitMode ? splitPaid : amountTendered)}
+          className="text-[#1fa45c]"
         />
-        <PaymentStat
-          label="Осталось"
-          value={formatCurrency(splitMode ? splitRemaining : Math.max(0, tot - amountTendered))}
-        />
-        <PaymentStat label="Сдача" value={formatCurrency(change)} />
+        {splitMode && (
+          <PaymentStat label="Осталось" value={formatCurrency(splitRemaining)} />
+        )}
+        <PaymentStat label="Сдача" value={formatCurrency(change)} className="text-[#d64545]" />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -540,39 +587,39 @@ export function PaymentPanel({
         </div>
 
         {splitMode ? (
-          /* ---- Split tender ---- */
+          /* ---- Split tender: UMAG shows exactly 2 stacked fields (cash on top, selected; card
+             below, with a card icon) — Korgen's 3rd tender (OTHER) is kept, styled the same way. ---- */
           <div className="space-y-2">
             {availablePaymentMethods.map((method) => {
               const line = paymentLines.find((p) => p.method === method);
               return (
-                <div key={method} className="flex items-center gap-2">
-                  <span
-                    className={`w-14 rounded-md border py-1.5 text-center text-xs font-medium ${
-                      line ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground"
-                    }`}
-                  >
-                    {t(METHOD_KEY[method])}
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={splitInput[method]}
-                    onChange={(e) => handleSplitInput(method, e.target.value)}
-                    placeholder="0.00"
-                    className="bg-background focus:ring-ring flex-1 rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:outline-none"
-                  />
-                  {line && (
-                    <button
-                      onClick={() => {
-                        removePaymentLine(method);
-                        setSplitInput((prev) => ({ ...prev, [method]: "" }));
-                      }}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                <div key={method} className="space-y-1">
+                  <label className="text-xs font-medium text-[#218f68]">{t(METHOD_KEY[method])}</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      autoFocus={method === "CASH"}
+                      value={splitInput[method]}
+                      onChange={(e) => handleSplitInput(method, e.target.value)}
+                      placeholder="0.00"
+                      className={`flex h-11 flex-1 rounded-sm border-2 bg-white px-3 text-lg outline-none focus:ring-2 focus:ring-[#33b8bd] ${
+                        line ? "border-[#33b8bd]" : "border-[#74cdd1]"
+                      }`}
+                    />
+                    {line && (
+                      <button
+                        onClick={() => {
+                          removePaymentLine(method);
+                          setSplitInput((prev) => ({ ...prev, [method]: "" }));
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -600,7 +647,7 @@ export function PaymentPanel({
           /* ---- Single method ---- */
           <>
             <div className="flex gap-0 rounded-sm border border-[#91d7bf] p-0.5">
-              {(customerId && creditSaleEnabled
+              {(creditSaleEnabled
                 ? [...availablePaymentMethods, "CREDIT" as const]
                 : availablePaymentMethods
               ).map((method) => (
@@ -631,24 +678,34 @@ export function PaymentPanel({
                   className="placeholder:text-muted-foreground flex h-11 w-full rounded-sm border-2 border-[#74cdd1] bg-white px-3 py-2 text-lg outline-none focus:ring-2 focus:ring-[#33b8bd]"
                 />
                 <div className="grid gap-2 sm:grid-cols-[17rem_1fr]">
-                  <div className="grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-slate-200 bg-slate-200">
-                    {["7", "8", "9", "4", "5", "6", "1", "2", "3", "⌫", "0", "."].map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => appendTendered(key)}
-                        className="flex h-11 items-center justify-center bg-white text-sm text-slate-600 hover:bg-emerald-50"
-                      >
-                        {key === "⌫" ? <Delete className="h-4 w-4" /> : key}
-                      </button>
-                    ))}
+                  <div>
+                    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-slate-200 bg-slate-200">
+                      {["7", "8", "9", "4", "5", "6", "1", "2", "3", "⌫", "0", "."].map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => appendTendered(key)}
+                          className="flex h-11 items-center justify-center bg-white text-sm text-slate-600 hover:bg-emerald-50"
+                        >
+                          {key === "⌫" ? <Delete className="h-4 w-4" /> : key}
+                        </button>
+                      ))}
+                    </div>
+                    {/* ОЧИСТИТЬ — zeroes the field (and ПОЛУЧЕНО with it), separate from ⌫ (deletes one digit). */}
+                    <button
+                      type="button"
+                      onClick={() => setAmountTendered(0)}
+                      className="mt-1 w-full rounded-sm border border-slate-300 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                    >
+                      ОЧИСТИТЬ
+                    </button>
                   </div>
                   <div className="grid grid-cols-3 gap-1">
                     {[200, 500, 1000, 2000, 5000, 10000].map((amount) => (
                       <button
                         key={amount}
                         type="button"
-                        onClick={() => setAmountTendered(tot + amount)}
+                        onClick={() => addPreset(amount)}
                         className="rounded-sm bg-slate-100 px-2 text-[10px] font-medium text-slate-600 hover:bg-emerald-50"
                       >
                         +{amount.toLocaleString("ru-RU")}
@@ -659,6 +716,15 @@ export function PaymentPanel({
                       className="col-span-3 rounded-sm border border-[#8bd1d9] py-2 text-[10px] font-medium text-[#238990] hover:bg-cyan-50"
                     >
                       Каспи QR
+                    </button>
+                    {/* ОПЛАТА С ОФД — fiscal (WebKassa) payment; pale/inactive until Adım 4. */}
+                    <button
+                      type="button"
+                      disabled
+                      title="Фискализация ещё не подключена"
+                      className="col-span-3 rounded-sm border border-slate-200 py-2 text-[10px] font-medium text-slate-300 cursor-not-allowed"
+                    >
+                      ОПЛАТА С ОФД
                     </button>
                   </div>
                 </div>
@@ -824,17 +890,39 @@ export function PaymentPanel({
         </div>
       )}
 
-      {/* Complete sale */}
-      <button
-        data-charge-btn
-        onClick={handleCompleteSale}
-        disabled={isEmpty || loading || checkoutBlocked || (splitMode && splitRemaining > 0.005)}
-        className="w-full rounded-sm bg-[#24bb69] py-3 text-sm font-bold text-white transition-colors hover:bg-[#1fa45c] disabled:pointer-events-none disabled:opacity-50"
-      >
-        {loading ? t("processing") : `${t("checkout")} ${formatCurrency(tot)}`}
-      </button>
+      {/* UMAG's own 3 bottom buttons: ОТМЕНА / БЕЗ СДАЧИ / ОПЛАТА. */}
+      <div className="flex gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-sm bg-[#d64545] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#c23a3a]"
+          >
+            ОТМЕНА
+          </button>
+        )}
+        {!splitMode && paymentMethod === "CASH" && (
+          <button
+            type="button"
+            onClick={payExact}
+            disabled={isEmpty || loading || checkoutBlocked}
+            className="flex-1 rounded-sm bg-slate-200 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-300 disabled:pointer-events-none disabled:opacity-50"
+          >
+            БЕЗ СДАЧИ
+          </button>
+        )}
+        <button
+          data-charge-btn
+          type="button"
+          onClick={() => void handleCompleteSale()}
+          disabled={isEmpty || loading || checkoutBlocked || (splitMode && splitRemaining > 0.005)}
+          className="flex-1 rounded-sm bg-[#24bb69] py-3 text-sm font-bold text-white transition-colors hover:bg-[#1fa45c] disabled:pointer-events-none disabled:opacity-50"
+        >
+          {loading ? t("processing") : `${t("checkout")} ${formatCurrency(tot)}`}
+        </button>
+      </div>
 
-      {/* Void / Clear */}
+      {/* Void / Clear — Korgen addition (empties the cart), kept below UMAG's own buttons. */}
       {!isEmpty && (
         <button
           onClick={onClear}
@@ -847,11 +935,11 @@ export function PaymentPanel({
   );
 }
 
-function PaymentStat({ label, value }: { label: string; value: string }) {
+function PaymentStat({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-medium text-slate-500">{label}</p>
-      <p className="truncate text-base leading-tight font-bold text-slate-700">{value}</p>
+      <p className={`truncate text-base leading-tight font-bold text-slate-700 ${className ?? ""}`}>{value}</p>
     </div>
   );
 }

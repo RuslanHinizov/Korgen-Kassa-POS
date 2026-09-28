@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { HelpCircle, LogOut } from "lucide-react";
-import { ShiftBar } from "./shift-bar";
 import { CashboxStatus } from "./cashbox-status";
-import { useAnchoredPopover, AnchoredPopover } from "@/components/ui/anchored-popover";
 import { APP_VERSION } from "@/lib/app-version";
 import { signOut } from "@/lib/auth-client";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
@@ -13,41 +11,41 @@ interface KioskTopBarProps {
   cashierName: string;
   showSalesHistory: boolean;
   onShowShortcuts: () => void;
-  onShiftChange?: () => void;
   /** Opens the cashier's own return screen; it must never leave POS for administration. */
   onShowReturns: () => void;
   /** Opens the cashier's own sales-history screen; it must never leave POS for administration. */
   onShowSalesHistory: () => void;
-  activeTab: "sales" | "returns" | "history";
+  /** Opens the full-page СМЕНА screen (docs/kasa-offline-plan.md §6). */
+  onShowShift: () => void;
+  activeTab: "sales" | "returns" | "history" | "shift";
   onShowSales: () => void;
   hasOpenShift: boolean;
   canReturn?: boolean;
-  cashMovementEnabled?: boolean;
   /** When set, the cashier name becomes clickable — "switch who's working". */
   onSwitchCashier?: () => void;
 }
 
 /** Top bar for the kiosk-mode kassa screen, matching UMAG's dedicated kassa header:
- * cashier/time/status on the left, Продажи/Возврат/Смена/История продаж tabs on the right. */
+ * cashier/time/status on the left, Продажи/Возврат/Смена/История продаж tabs on the right. The bar
+ * itself turns red/bordo on the СМЕНА tab, matching UMAG's observed behavior (green everywhere else). */
 export function KioskTopBar({
   cashierName,
   showSalesHistory,
   onShowShortcuts,
-  onShiftChange,
-  onSwitchCashier,
   onShowReturns,
   onShowSalesHistory,
+  onShowShift,
   activeTab,
   onShowSales,
   hasOpenShift,
   canReturn = true,
-  cashMovementEnabled = true,
+  onSwitchCashier,
 }: KioskTopBarProps) {
   const [now, setNow] = useState(() => new Date());
   const { online } = useOfflineStatus();
   const [printerReady, setPrinterReady] = useState(false);
   const [scannerSeen, setScannerSeen] = useState(false);
-  const shift = useAnchoredPopover();
+  const onShift = activeTab === "shift";
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000 * 30);
@@ -78,7 +76,11 @@ export function KioskTopBar({
   }
 
   return (
-    <div className="flex min-h-10 shrink-0 items-center gap-3 border-b border-emerald-700 bg-[#00bd61] px-3 text-sm font-semibold text-[#10281b]">
+    <div
+      className={`flex min-h-10 shrink-0 items-center gap-3 border-b px-3 text-sm font-semibold ${
+        onShift ? "border-red-900 bg-[#c0392b] text-white" : "border-emerald-700 bg-[#00bd61] text-[#10281b]"
+      }`}
+    >
       <span className="hidden text-xs font-bold sm:inline">Учебный</span>
       <span className="font-medium">
         Время:{" "}
@@ -120,15 +122,13 @@ export function KioskTopBar({
             Возврат
           </button>
         )}
-        {/* eslint-disable react-hooks/refs -- the anchored-popover hook intentionally returns stable ref/event props for JSX. */}
         <button
-          ref={shift.anchorRef}
-          onClick={shift.toggle}
-          className="self-stretch px-3 py-2.5 text-xs font-bold hover:bg-white/15"
+          type="button"
+          onClick={onShowShift}
+          className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "shift" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
         >
           Смена
         </button>
-        {/* eslint-enable react-hooks/refs */}
         {showSalesHistory && (
           <button
             type="button"
@@ -159,18 +159,6 @@ export function KioskTopBar({
           <LogOut className="h-4 w-4" /> Выйти
         </button>
       </div>
-
-      {/* eslint-disable react-hooks/refs -- see note above */}
-      {shift.open && shift.pos && (
-        <AnchoredPopover
-          pos={shift.pos}
-          onClose={shift.close}
-          className="text-foreground w-96 p-0 normal-case"
-        >
-          <ShiftBar onShiftChange={onShiftChange} cashMovementEnabled={cashMovementEnabled} />
-        </AnchoredPopover>
-      )}
-      {/* eslint-enable react-hooks/refs */}
     </div>
   );
 }

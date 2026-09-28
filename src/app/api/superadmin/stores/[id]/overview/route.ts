@@ -106,8 +106,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return {
       id: s.id, cashier: s.user.name.trim(), openedAt: s.openedAt, openingFloat: Number(s.openingFloat),
       checks: sales.length, revenue: sales.reduce((a, x) => a + Number(x.total), 0), lastSaleAt,
-      cashIn: s.cashMovements.filter((m) => m.type === "IN").reduce((a, m) => a + Number(m.amount), 0),
-      cashOut: s.cashMovements.filter((m) => m.type !== "IN").reduce((a, m) => a + Number(m.amount), 0),
+      cashIn: s.cashMovements.filter((m) => m.type === "DEPOSIT").reduce((a, m) => a + Number(m.amount), 0),
+      cashOut: s.cashMovements.filter((m) => m.type !== "DEPOSIT").reduce((a, m) => a + Number(m.amount), 0),
     };
   });
 

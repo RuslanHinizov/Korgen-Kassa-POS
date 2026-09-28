@@ -31,8 +31,13 @@ import { PriceCheckModal } from "./price-check-modal";
 import { GlobalSearchModal } from "./global-search-modal";
 import { KioskTopBar } from "./kiosk-top-bar";
 import { OfflineManager } from "./offline-manager";
+import { ShiftScreen } from "./shift-screen";
+import { ExtraFunctionsMenu } from "./extra-functions-menu";
+import { LockScreen } from "./lock-screen";
+import { isTillLocked, setTillLocked } from "@/lib/till-lock";
 import { loadCurrentShift } from "@/lib/offline/shift";
 import { getTillAuth, tillAuthValid } from "@/lib/offline/auth";
+import { cacheConfig, getCachedConfig } from "@/lib/offline/config-cache";
 import { UnsyncedBanner } from "./unsynced-banner";
 import { POSSalesPanel } from "./pos-sales-modal";
 import { AlertDialog } from "@/components/ui/alert-dialog";
@@ -130,44 +135,64 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [shiftRefreshKey, setShiftRefreshKey] = useState(0);
   const [settingsTick, setSettingsTick] = useState(0);
   const [priceCheckOpen, setPriceCheckOpen] = useState(false);
+  const [extraFunctionsOpen, setExtraFunctionsOpen] = useState(false);
+  // Lazy-initialized from localStorage so a reload/re-navigation shows the lock immediately instead of
+  // flashing the sale screen first (see src/lib/till-lock.ts — found live 2026-09-28: it didn't persist).
+  const [tillLockedState, setTillLockedState] = useState(isTillLocked);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT_SETTINGS);
 
   // Load the configured business tax rate (stored as a decimal, e.g. 0.12) and receipt branding.
+  const applySettings = useCallback((d: Record<string, unknown>) => {
+    const rate = Number(d?.taxRate);
+    if (!Number.isNaN(rate)) setTaxRate(rate);
+    setRequireShift(Boolean(d?.requireOpenShift));
+    setCreditSaleEnabled(d?.posCreditSale !== false);
+    setShowSalesHistory(Boolean(d?.posShowSalesHistory));
+    setPermissions({
+      posUniversalProduct: d?.posUniversalProduct !== false,
+      posCreateProduct: d?.posCreateProduct !== false,
+      posEditProductAtPos: d?.posEditProductAtPos !== false,
+      posHoldOrder: d?.posHoldOrder !== false,
+      posDiscount: d?.posDiscount !== false,
+      posCashInOut: d?.posCashInOut !== false,
+      posCardPayment: d?.posCardPayment !== false,
+      posChangePriceAtPos: d?.posChangePriceAtPos !== false,
+      posBanPriceDecrease: d?.posBanPriceDecrease === true,
+      wholesaleAtPos: d?.posWholesaleAtPos === true && d?.allowWholesale === true,
+      posPriceCheck: d?.posPriceCheck === true,
+      posGlobalSearch: d?.posGlobalSearch === true,
+      posCollapseWindow: d?.posCollapseWindow !== false,
+      posInstantSync: d?.posInstantSync !== false,
+      posAccessReturn: (d?.posAccessReturn as PosAccessRole) ?? "ALL",
+      posAccessReturnNoReceipt: (d?.posAccessReturnNoReceipt as PosAccessRole) ?? "ALL",
+      posAccessDeleteItem: (d?.posAccessDeleteItem as PosAccessRole) ?? "ALL",
+      posAccessDecreaseQty: (d?.posAccessDecreaseQty as PosAccessRole) ?? "ALL",
+    });
+    setRounding((d?.posRoundingWeightItems as string) ?? "NONE", (d?.posRoundingDiscount as string) ?? "NONE");
+    setReceiptSettings({ ...DEFAULT_RECEIPT_SETTINGS, ...d });
+    // setRounding comes from useCartStore, declared further down in this component — adding it to the
+    // deps array below would be a TDZ reference, not a real missing dep (the Zustand action is stable
+    // across renders anyway).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
-        const rate = Number(d?.taxRate);
-        if (!Number.isNaN(rate)) setTaxRate(rate);
-        setRequireShift(Boolean(d?.requireOpenShift));
-        setCreditSaleEnabled(d?.posCreditSale !== false);
-        setShowSalesHistory(Boolean(d?.posShowSalesHistory));
-        setPermissions({
-          posUniversalProduct: d?.posUniversalProduct !== false,
-          posCreateProduct: d?.posCreateProduct !== false,
-          posEditProductAtPos: d?.posEditProductAtPos !== false,
-          posHoldOrder: d?.posHoldOrder !== false,
-          posDiscount: d?.posDiscount !== false,
-          posCashInOut: d?.posCashInOut !== false,
-          posCardPayment: d?.posCardPayment !== false,
-          posChangePriceAtPos: d?.posChangePriceAtPos !== false,
-          posBanPriceDecrease: d?.posBanPriceDecrease === true,
-          wholesaleAtPos: d?.posWholesaleAtPos === true && d?.allowWholesale === true,
-          posPriceCheck: d?.posPriceCheck === true,
-          posGlobalSearch: d?.posGlobalSearch === true,
-          posCollapseWindow: d?.posCollapseWindow !== false,
-          posInstantSync: d?.posInstantSync !== false,
-          posAccessReturn: d?.posAccessReturn ?? "ALL",
-          posAccessReturnNoReceipt: d?.posAccessReturnNoReceipt ?? "ALL",
-          posAccessDeleteItem: d?.posAccessDeleteItem ?? "ALL",
-          posAccessDecreaseQty: d?.posAccessDecreaseQty ?? "ALL",
-        });
-        setRounding(d?.posRoundingWeightItems ?? "NONE", d?.posRoundingDiscount ?? "NONE");
-        setReceiptSettings({ ...DEFAULT_RECEIPT_SETTINGS, ...d });
+        applySettings(d);
+        void cacheConfig("settings", d);
       })
-      .catch(() => {});
-  }, [settingsTick]);
+      // No connection: keep working with the last settings/permissions this till downloaded, not with
+      // hard-coded defaults — those default permissions to "ALL", which would be a silent, wrong loosening
+      // of whatever the market actually configured (e.g. "returns: managers only").
+      .catch(() => {
+        void getCachedConfig<Record<string, unknown>>("settings").then((cached) => {
+          if (cached) applySettings(cached);
+        });
+      });
+  }, [settingsTick, applySettings]);
 
   // "Мгновенная синхронизация": re-read settings/permissions periodically and when the tab regains focus.
   useEffect(() => {
@@ -194,7 +219,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   }, []);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [salesPanel, setSalesPanel] = useState<"returns" | "history" | null>(null);
+  const [salesPanel, setSalesPanel] = useState<"returns" | "history" | "shift" | null>(null);
 
   usePosKeyboardShortcuts({
     onFocusSearch: focusSearch,
@@ -237,8 +262,17 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   useEffect(() => {
     fetch("/api/promotions/active")
       .then((r) => r.json())
-      .then((d) => setPromos(d.promotions ?? []))
-      .catch(() => {});
+      .then((d) => {
+        const promotions: PromotionRule[] = d.promotions ?? [];
+        setPromos(promotions);
+        void cacheConfig("promotions", promotions);
+      })
+      // No connection: use the last copy this till downloaded instead of silently running with none.
+      .catch(() => {
+        void getCachedConfig<PromotionRule[]>("promotions").then((cached) => {
+          if (cached) setPromos(cached);
+        });
+      });
   }, []);
 
   // Re-evaluate promotions whenever the cart / card changes
@@ -512,11 +546,10 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
         cashierName={cashierName}
         showSalesHistory={showSalesHistory}
           canReturn={canReturn || canReturnWithoutReceipt}
-        cashMovementEnabled={permissions.posCashInOut}
         onShowShortcuts={() => setShowShortcuts(true)}
-        onShiftChange={() => setShiftRefreshKey((k) => k + 1)}
         onShowReturns={() => canReturn && setSalesPanel("returns")}
         onShowSalesHistory={() => setSalesPanel("history")}
+        onShowShift={() => setSalesPanel("shift")}
         activeTab={salesPanel ?? "sales"}
         onShowSales={() => setSalesPanel(null)}
         hasOpenShift={hasOpenShift}
@@ -705,7 +738,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
             onClick={() => void holdCurrentOrder()}
             disabled={!permissions.posHoldOrder || holdLoading}
           />
-          <BottomButton icon={Grip} label="Доп. функции" onClick={extra.toggle} />
+          <BottomButton icon={Grip} label="Доп. функции" onClick={() => setExtraFunctionsOpen(true)} />
           <BottomButton
             icon={MinusCircle}
             label="−"
@@ -737,7 +770,16 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       </div>
       </div>
 
-      {salesPanel && <POSSalesPanel mode={salesPanel} canReturnWithReceipt={canReturn} canReturnWithoutReceipt={canReturnWithoutReceipt} />}
+      {(salesPanel === "returns" || salesPanel === "history") && (
+        <POSSalesPanel mode={salesPanel} canReturnWithReceipt={canReturn} canReturnWithoutReceipt={canReturnWithoutReceipt} />
+      )}
+      {salesPanel === "shift" && (
+        <ShiftScreen
+          onDone={() => { setSalesPanel(null); setShiftRefreshKey((k) => k + 1); }}
+          onShiftChange={() => setShiftRefreshKey((k) => k + 1)}
+          cashMovementEnabled={permissions.posCashInOut}
+        />
+      )}
 
       {extra.open && extra.pos && (
         <AnchoredPopover pos={extra.pos} onClose={extra.close} className="w-72 space-y-3">
@@ -823,32 +865,34 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
               <button onClick={() => { extra.close(); setLabelPickerOpen(true); }} className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted">Печать этикетки товара</button>
             </div>
           )}
-          {(permissions.posPriceCheck || permissions.posGlobalSearch || permissions.posCollapseWindow) && (
+          {permissions.posGlobalSearch && (
             <div className="flex flex-col gap-1 border-t pt-2">
-              {permissions.posPriceCheck && (
-                <button onClick={() => { extra.close(); setPriceCheckOpen(true); }} className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted">Проверка цены</button>
-              )}
-              {permissions.posGlobalSearch && (
-                <button onClick={() => { extra.close(); setGlobalSearchOpen(true); }} className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted">Поиск по глобальной базе</button>
-              )}
-              {permissions.posCollapseWindow && (
-                <button
-                  onClick={() => {
-                    extra.close();
-                    if (document.fullscreenElement) void document.exitFullscreen();
-                    else void document.documentElement.requestFullscreen?.().catch(() => {});
-                  }}
-                  className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
-                >
-                  Свернуть / развернуть окно
-                </button>
-              )}
+              <button onClick={() => { extra.close(); setGlobalSearchOpen(true); }} className="rounded-md px-2 py-2 text-left text-sm hover:bg-muted">Поиск по глобальной базе</button>
             </div>
           )}
         </AnchoredPopover>
       )}
 
       {priceCheckOpen && <PriceCheckModal onClose={() => setPriceCheckOpen(false)} showWholesale={permissions.wholesaleAtPos} />}
+      {extraFunctionsOpen && (
+        <ExtraFunctionsMenu
+          onClose={() => setExtraFunctionsOpen(false)}
+          onLock={() => { setTillLocked(true); setTillLockedState(true); }}
+          canPriceCheck={permissions.posPriceCheck}
+          onOpenPriceCheck={() => setPriceCheckOpen(true)}
+          canCollapse={permissions.posCollapseWindow}
+          onToggleCollapse={() => {
+            if (document.fullscreenElement) void document.exitFullscreen();
+            else void document.documentElement.requestFullscreen?.().catch(() => {});
+          }}
+          onShowReceipt={(data) => setReceiptData(data)}
+        />
+      )}
+      {/* ЗАБЛОКИРОВАТЬ КАССУ — localStorage-backed (src/lib/till-lock.ts) so a reload or re-navigating to
+          /pos can't silently drop the lock; must render above everything else the cashier could touch. */}
+      {tillLockedState && (
+        <LockScreen onUnlock={() => { setTillLocked(false); setTillLockedState(false); }} />
+      )}
       {globalSearchOpen && <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} canAdd={permissions.posEditProductAtPos} />}
 
       {/* Held orders modal */}
@@ -918,6 +962,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       {paymentOpen && (
         <PaymentModal
           onClose={() => setPaymentOpen(false)}
+          onCancel={() => setPaymentOpen(false)}
           taxRate={taxRate}
           checkoutBlocked={requireShift && !hasOpenShift}
           onClear={() => {

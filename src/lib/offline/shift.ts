@@ -97,7 +97,7 @@ export async function closeShiftOfflineAware(shiftId: string, countedCash: numbe
   return { ok: true, queued: false, report: sent.data.report };
 }
 
-export async function cashMovementOfflineAware(input: { type: "IN" | "OUT" | "PAYOUT" | "DROP"; amount: number; reason?: string }, fallbackError: string): Promise<{ ok: true; queued: boolean } | { ok: false; error: string }> {
+export async function cashMovementOfflineAware(input: { type: "DEPOSIT" | "EXPENSE" | "DIVIDEND"; amount: number; reason?: string }, fallbackError: string): Promise<{ ok: true; queued: boolean } | { ok: false; error: string }> {
   const id = newId();
   const shift = await getLocalShift();
   const auth = await getTillAuth();

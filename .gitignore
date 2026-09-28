@@ -69,3 +69,7 @@ scripts/tenant-scan/last-report.json
 scripts/tenant-scan/last-run.log
 
 /dist-plesk/
+
+# Local POS installers and compressed distribution archive
+/Umag Kassa/
+/umag.rar

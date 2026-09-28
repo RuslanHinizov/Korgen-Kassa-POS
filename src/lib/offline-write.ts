@@ -25,16 +25,22 @@ export function trustedTime(iso: string | undefined): Date | undefined {
  * Who a write is attributed to. Normally the signed-in cashier. An offline till may have been used by another cashier
  * of the same market than the one whose session uploads it, so it names the real one — accepted only for a person who is
  * assigned to this market and allowed to work at a till.
+ *
+ * A local Hub (src/lib/hub-auth.ts) has no cashier session of its own: pass `actor.userId: ""` for it, which means
+ * "no fallback" — `requested` is then mandatory and must resolve to a real, assigned, till-capable user, or this
+ * returns null (the caller must reject the write; there is no session identity to silently fall back to).
  */
-export async function attributedUserId(actor: { userId: string; role: string }, storeId: string, requested?: string): Promise<string> {
-  if (!requested || requested === actor.userId) return actor.userId;
+export async function attributedUserId(actor: { userId: string; role: string }, storeId: string, requested?: string): Promise<string | null> {
+  const noFallback = actor.userId === "";
+  if (!requested) return noFallback ? null : actor.userId;
+  if (!noFallback && requested === actor.userId) return actor.userId;
   const user = await prisma.user.findUnique({
     where: { id: requested },
     select: { role: true, allowCashierLogin: true, firedAt: true, storeAssignments: { where: { storeId }, select: { id: true } } },
   });
-  if (!user || user.firedAt || user.storeAssignments.length === 0) return actor.userId;
+  if (!user || user.firedAt || user.storeAssignments.length === 0) return noFallback ? null : actor.userId;
   const tillRole = ["CASHIER", "WAREHOUSE", "ADMIN", "MANAGER"].includes(user.role ?? "");
-  if (!tillRole) return actor.userId;
-  if (["CASHIER", "WAREHOUSE"].includes(user.role ?? "") && !user.allowCashierLogin) return actor.userId;
+  if (!tillRole) return noFallback ? null : actor.userId;
+  if (["CASHIER", "WAREHOUSE"].includes(user.role ?? "") && !user.allowCashierLogin) return noFallback ? null : actor.userId;
   return requested;
 }

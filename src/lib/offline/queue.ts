@@ -32,6 +32,9 @@ export interface OfflineStatus {
   lastSyncAt: number | null;
   /** The server refused the upload because nobody is signed in: the cashier must sign in again for it to go through. */
   needsLogin: boolean;
+  /** An upload's own timestamp was outside the trusted window (clock wrong, or offline too long) — the server
+   * recorded it with its own "now" instead. Sticky until dismissed; see UnsyncedBanner. */
+  timeAdjusted: boolean;
 }
 
 // ── status store (useSyncExternalStore-compatible) ────────────────────────────────────────────────────────────
@@ -43,6 +46,7 @@ let status: OfflineStatus = {
   syncing: false,
   lastSyncAt: null,
   needsLogin: false,
+  timeAdjusted: false,
 };
 const listeners = new Set<() => void>();
 
@@ -70,6 +74,10 @@ export function isApiAnswer(res: Response): boolean {
 
 export function setNeedsLogin(needsLogin: boolean) {
   if (status.needsLogin !== needsLogin) setStatus({ needsLogin });
+}
+
+export function clearTimeAdjusted() {
+  if (status.timeAdjusted) setStatus({ timeAdjusted: false });
 }
 
 export function setOnline(online: boolean) {
@@ -178,8 +186,14 @@ async function doFlush(): Promise<void> {
       }
       if (res.ok) {
         // 200 (already had it) and 201 (created) are both success.
+        let timeAdjusted = false;
+        try {
+          timeAdjusted = !!(await res.json())?.timeAdjusted;
+        } catch {
+          /* body not read-able as JSON — nothing to warn about */
+        }
         await idbDelete("queue", item.id);
-        setStatus({ needsLogin: false });
+        setStatus({ needsLogin: false, ...(timeAdjusted ? { timeAdjusted: true } : {}) });
         continue;
       }
       if (res.status === 401) setStatus({ needsLogin: true });

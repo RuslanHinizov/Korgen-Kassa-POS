@@ -1,11 +1,12 @@
 import { backdatingError } from "@/lib/backdating";
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { counterpartyScope } from "@/lib/counterparty-scope";
 import { getStoreId } from "@/lib/store-context";
 import { logAudit } from "@/lib/audit";
+import { verifyManagerToken, MANAGER_COOKIE } from "@/lib/manager-token";
 import { z } from "zod";
 
 const schema = z.object({
@@ -18,10 +19,15 @@ const schema = z.object({
 
 // POST /api/purchase-receipts/quick — Быстрая приёмка: a lump-sum debt to a
 // supplier with no line items (no specific products, so no stock movement),
-// posted immediately — matches UMAG's "Оформление быстрой приемки" form.
+// posted immediately — matches UMAG's "Оформление быстрой приемки" form. UMAG offers this straight from
+// the kiosk's Доп. функции menu, so a cashier can do it too, gated by the same manager-PIN cookie the
+// refund/cashbox-unpair/debt-repayment flows already use, not a full ADMIN/MANAGER/WAREHOUSE session.
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const privileged = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "");
+  const mgrCookie = (await cookies()).get(MANAGER_COOKIE)?.value;
+  if (!privileged && !verifyManagerToken(mgrCookie, session.user.id)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const parsed = schema.safeParse(await req.json());

@@ -11,6 +11,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { xlsxResponse } from "@/lib/xlsx-response";
 import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
+import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
 
 export const dynamic = "force-dynamic";
 
@@ -98,13 +99,12 @@ const openSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const actor = await resolvePosActor();
-  if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await resolvePosRequest(req);
+  if (isPosRequestError(ctx)) return ctx.error;
+  const { storeId, actor } = ctx;
 
   const parsed = openSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const storeId = await getStoreId();
 
   // The same upload twice returns the shift it already created.
   if (parsed.data.id) {
@@ -113,10 +113,15 @@ export async function POST(req: NextRequest) {
   }
 
   const shiftUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
+  if (!shiftUserId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
   const existing = await getOpenShift(shiftUserId, storeId);
   if (existing) {
     return NextResponse.json({ error: "A shift is already open", shift: serialize(existing) }, { status: 409 });
   }
+
+  // The till claimed a time outside the sane window (clock wrong, or offline too long) — the server used
+  // its own "now" instead. Reported back so the cashier can be warned (see UnsyncedBanner).
+  const timeAdjusted = !!parsed.data.openedAt && !trustedTime(parsed.data.openedAt);
 
   const shift = await prisma.shift.create({
     data: {
@@ -137,5 +142,5 @@ export async function POST(req: NextRequest) {
     details: { openingFloat: parsed.data.openingFloat },
   });
 
-  return NextResponse.json({ shift: serialize(shift) }, { status: 201 });
+  return NextResponse.json({ shift: serialize(shift), timeAdjusted }, { status: 201 });
 }

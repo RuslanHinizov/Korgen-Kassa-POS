@@ -5,7 +5,9 @@ import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
 // Middleware runs in Edge runtime.
 // Auth cookie presence is checked; full session validation happen in Server Components.
 
-const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping", "/api/errors"];
+// /api/hub/* carries its own Bearer-token auth (src/lib/hub-auth.ts), never a session cookie — it must
+// reach the route handler as-is instead of being redirected to /login like a signed-out browser.
+const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping", "/api/errors", "/api/hub"];
 
 // Matches "/store/<id>" or "/store/<id>/rest/of/path".
 const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
@@ -28,6 +30,14 @@ export function proxy(request: NextRequest) {
 
   // Health check for deploy scripts / uptime monitors — no cookie, no redirects.
   if (pathname === "/api/ping" || pathname === "/api/health") return NextResponse.next();
+
+  // A local Hub authenticates with `Authorization: Bearer hub_...` (src/lib/hub-auth.ts), never a cookie —
+  // it must reach the route handler as-is, before the setup-completion gate below (which redirects a
+  // cookie-less request through /api/setup/resume; a server-to-server call has no cookie jar to carry that
+  // redirect's Set-Cookie forward, so it would just loop). The token itself is verified inside the route.
+  if (pathname.startsWith("/api/") && (request.headers.get("authorization") ?? "").startsWith("Bearer hub_")) {
+    return NextResponse.next();
+  }
 
   // Check setup completion via cookie (set by /api/setup/complete)
   const setupDone = request.cookies.get("olgax-setup-complete")?.value === "1";
