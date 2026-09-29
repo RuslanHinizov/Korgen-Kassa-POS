@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
+import { resolveDeviceSession } from "@/lib/device-access";
 
 export interface StoreAccess {
   storeId: string;
@@ -22,6 +23,9 @@ export class StoreAccessError extends Error {}
  * (SUPERADMIN, the platform owner, may open any). Memoised per request.
  */
 export const resolveStoreAccess = cache(async (): Promise<StoreAccess> => {
+  // the offline till program: the market is the one its device token belongs to, never a cookie or URL
+  const device = await resolveDeviceSession(await headers());
+  if (device) return { storeId: device.storeId, mismatch: false, suspended: device.suspended, noAccess: false };
   const requested = (await cookies()).get(STORE_COOKIE)?.value || DEFAULT_STORE_ID;
   const session = await auth.api.getSession({ headers: await headers() });
   // Unauthenticated callers (login pages, kiosk sign-in) only need the id for branding.

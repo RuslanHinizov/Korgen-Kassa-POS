@@ -108,6 +108,7 @@ model Store {
   productCharacteristics ProductCharacteristic[]
   cashboxes        Cashbox[]
   hubTokens        HubToken[]
+  activationCodes  ActivationCode[]
   expenseTypes     ExpenseType[]
   payments         Payment[]
   transfers        Transfer[]
@@ -1564,6 +1565,22 @@ model HubToken {
   createdAt  DateTime  @default(now())
   lastSeenAt DateTime?
   revokedAt  DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+/// One-time code an administrator gives to a new till program so it can download its market package by itself.
+/// Stored as a SHA-256 hash; the code is shown once, expires, and works once (see src/lib/till-activation.ts).
+model ActivationCode {
+  id        String    @id @default(cuid())
+  storeId   String
+  codeHash  String    @unique
+  createdBy String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 

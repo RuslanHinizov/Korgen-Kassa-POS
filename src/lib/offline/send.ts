@@ -6,11 +6,12 @@
  */
 
 import { enqueue, isApiAnswer, setNeedsLogin, setOnline, type QueueKind } from "./queue";
+import { deviceAuthHeaders } from "./device-token";
 
 export type SendResult =
   | { ok: true; queued: false; status: number; data: Record<string, unknown> }
   | { ok: true; queued: true; payload: Record<string, unknown> }
-  | { ok: false; error: string; status: number };
+  | { ok: false; error: string; status: number; data?: Record<string, unknown> };
 
 const SEND_TIMEOUT_MS = 15_000;
 
@@ -31,26 +32,31 @@ export async function sendOrQueue(opts: {
 }): Promise<SendResult> {
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
   if (online) {
+    const deviceHeaders = await deviceAuthHeaders();
+    const deviceKey = Boolean(deviceHeaders.Authorization);
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), SEND_TIMEOUT_MS);
     let sessionGone = false;
     try {
       const res = await fetch(opts.endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...deviceHeaders },
         body: JSON.stringify(opts.payload),
         signal: ctl.signal,
       });
       clearTimeout(timer);
       // sent to the sign-in page instead of the API: nobody is signed in any more
       if (!isApiAnswer(res)) sessionGone = true;
+      // The till program's key was refused (package revoked or replaced): the sale is still real — keep it on the till,
+      // tell the cashier (needsLogin banner asks for a new package), never turn the customer away.
+      if (isApiAnswer(res) && res.status === 401 && deviceKey) sessionGone = true;
       // 502/503/504: the server (or the proxy in front of it) is down or restarting — same as no connection.
-      if (isApiAnswer(res) && (res.status < 502 || res.status > 504)) {
+      else if (isApiAnswer(res) && (res.status < 502 || res.status > 504)) {
         setOnline(true);
         setNeedsLogin(false);
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (res.ok) return { ok: true, queued: false, status: res.status, data };
-        return { ok: false, error: errorText(data?.error, opts.fallbackError), status: res.status };
+        return { ok: false, error: errorText(data?.error, opts.fallbackError), status: res.status, data };
       }
     } catch {
       clearTimeout(timer);

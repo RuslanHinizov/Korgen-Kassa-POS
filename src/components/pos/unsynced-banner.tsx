@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 import { retryFailed, clearTimeAdjusted } from "@/lib/offline/queue";
+import { PackageLoader } from "@/components/till/package-loader";
 
 /**
  * UMAG's «Есть не синхронизированные данные» strip: shown while something made on this till has not reached the server yet.
@@ -32,8 +33,17 @@ export function UnsyncedBanner() {
       )}
       {status.needsLogin && status.online && (
         <span data-testid="needs-login" className="flex items-center gap-2 font-semibold text-red-800">
-          Данные ждут отправки: войдите в кассу заново.
-          <a href="/kasa-giris" className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs hover:bg-red-50">Войти</a>
+          {typeof location !== "undefined" && location.pathname.startsWith("/till") ? (
+            <>
+              Данные ждут отправки: сервер не принял ключ кассы. Пакет магазина отозван или устарел — загрузите новый пакет.
+              <PackageLoader label="Загрузить новый пакет" onLoaded={() => window.location.reload()} />
+            </>
+          ) : (
+            <>
+              Данные ждут отправки: войдите в кассу заново.
+              <a href="/kasa-giris" className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs hover:bg-red-50">Войти</a>
+            </>
+          )}
         </span>
       )}
       {status.timeAdjusted && (

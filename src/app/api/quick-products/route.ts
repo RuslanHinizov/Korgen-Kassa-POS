@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
+import { getQuickItems } from "@/lib/till-data";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -22,20 +23,7 @@ export async function GET(req: NextRequest) {
 
   const storeId = await getStoreId();
   const groupId = req.nextUrl.searchParams.get("groupId");
-  const items = await prisma.quickProduct.findMany({
-    where: { product: { storeId, deletedAt: null }, ...(groupId ? { groupId } : {}) },
-    orderBy: [{ sortOrder: "asc" }],
-    include: { product: { select: PRODUCT_SELECT } },
-  });
-  return NextResponse.json({
-    items: items.map((i) => ({
-      id: i.id,
-      groupId: i.groupId,
-      displayName: i.displayName,
-      sortOrder: i.sortOrder,
-      product: i.product ? { ...i.product, price: Number(i.product.price), stock: Number(i.product.stock) } : null,
-    })),
-  });
+  return NextResponse.json({ items: await getQuickItems(storeId, groupId) });
 }
 
 // POST /api/quick-products — add a product as a quick-tap button

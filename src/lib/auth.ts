@@ -2,6 +2,8 @@ import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./db";
+import { headers as requestHeaders } from "next/headers";
+import { resolveDeviceSession } from "./device-access";
 
 // A guessable signing secret lets anyone forge a session cookie, so a production server refuses to start
 // with a short or placeholder one (not enforced during `next build`, when runtime env is not present).
@@ -62,3 +64,15 @@ export const auth = betterAuth({
 
 export type Session = typeof auth.$Infer.Session;
 export type AuthUser = typeof auth.$Infer.Session.user;
+
+// The offline till program (no cookie) is recognised by its device token — see device-access.ts.
+const realGetSession = auth.api.getSession.bind(auth.api);
+(auth.api as unknown as { getSession: unknown }).getSession = async (ctx: { headers?: Headers } & Record<string, unknown>) => {
+  let h = ctx?.headers;
+  if (!h) {
+    try { h = await requestHeaders(); } catch { h = undefined; }
+  }
+  const device = h ? await resolveDeviceSession(h) : null;
+  if (device) return { session: device.session, user: device.user };
+  return realGetSession(ctx as never);
+};

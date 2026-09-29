@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { flushQueue, refreshCounts, setOnline } from "@/lib/offline/queue";
 import { syncCatalog } from "@/lib/offline/catalog";
 import { getTillAuth, setTillAuth, tillAuthValid } from "@/lib/offline/auth";
+import { refreshPackageCashiers } from "@/lib/offline/pin-login";
+import { enrollDevice } from "@/lib/offline/device-token";
 import { bindTillToStore } from "@/lib/offline/clear";
 
 const PING_EVERY_MS = 15_000;
@@ -70,7 +72,9 @@ export function OfflineManager({ cashierId, cashierName, cashierRole, storeId }:
       if (reachable) {
         // A page from the cache may show a previous cashier — the server-rendered identity counts only if this page came
         // from the server, which is the case when the session it belongs to is confirmed just now.
-        if (!confirmedSession && cashierId) {
+        // On /till the cashier signed in with a PIN; whatever session cookie the browser happens to hold (an office user,
+        // a leftover) must never replace who is working the till.
+        if (!confirmedSession && cashierId && !window.location.pathname.startsWith("/till")) {
           try {
             const res = await fetch("/api/auth/get-session", { cache: "no-store" });
             const session = res.ok ? ((await res.json()) as { user?: { id: string; name: string; role: string } } | null) : null;
@@ -87,6 +91,10 @@ export function OfflineManager({ cashierId, cashierName, cashierRole, storeId }:
           if (current && current.mode === "online") await setTillAuth({ ...current, at: Date.now() });
         }
         void flushQueue();
+        if (window.location.pathname.startsWith("/till")) {
+          void enrollDevice();
+          void refreshPackageCashiers();
+        }
         warmLoginPage();
         return;
       }
@@ -94,7 +102,8 @@ export function OfflineManager({ cashierId, cashierName, cashierRole, storeId }:
       // No connection: without a valid record of who is working here, only the offline sign-in can let someone in.
       const auth = await getTillAuth();
       if (!tillAuthValid(auth) && !window.location.pathname.startsWith("/kasa-giris")) {
-        window.location.href = "/kasa-giris";
+        // the offline till program (/till) has its own sign-in screen and must never depend on the server's page
+        window.location.href = window.location.pathname.startsWith("/till") ? "/till" : "/kasa-giris";
       }
     }
 

@@ -12,11 +12,22 @@ import { headers } from "next/headers";
 import { xlsxResponse } from "@/lib/xlsx-response";
 import { CLIENT_ID, attributedUserId, trustedTime } from "@/lib/offline-write";
 import { resolvePosRequest, isPosRequestError } from "@/lib/pos-request";
+import { resolveHubActor } from "@/lib/hub-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const scope = req.nextUrl.searchParams.get("scope") ?? "current";
+  // The offline till program has no session: it asks with its device token and names the cashier (like its uploads do).
+  if (scope === "current") {
+    const hub = await resolveHubActor(req);
+    if (hub) {
+      const userId = await attributedUserId({ userId: "", role: "HUB" }, hub.storeId, req.nextUrl.searchParams.get("cashierUserId") ?? undefined);
+      if (!userId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
+      const open = await getOpenShift(userId, hub.storeId);
+      return NextResponse.json({ shift: open ? serialize(open) : null });
+    }
+  }
   // Cashiers query through their paired kiosk.  Office administrators also need
   // to read the all-shifts report, but must not gain POS write access from it.
   let actor = await resolvePosActor();

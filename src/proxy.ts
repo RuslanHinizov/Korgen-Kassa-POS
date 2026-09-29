@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { STORE_COOKIE, DEFAULT_STORE_ID } from "@/lib/store-constants";
+import { DEVICE_OK_HEADER, deviceMayCall } from "@/lib/device-access";
 
 // Middleware runs in Edge runtime.
 // Auth cookie presence is checked; full session validation happen in Server Components.
@@ -15,6 +16,11 @@ const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // DEVICE_OK_HEADER is ours alone (set below after the path check): whatever a client sends under that name is dropped.
+  const cleanHeaders = new Headers(request.headers);
+  cleanHeaders.delete(DEVICE_OK_HEADER);
+  const pass = () => NextResponse.next({ request: { headers: cleanHeaders } });
+
   // Allow Next.js internals & static assets (including all public/ files)
   if (
     pathname.startsWith("/_next") ||
@@ -25,19 +31,34 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/uploads") ||
     /\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|eot|webmanifest)$/i.test(pathname)
   ) {
-    return NextResponse.next();
+    return pass();
   }
 
   // Health check for deploy scripts / uptime monitors — no cookie, no redirects.
-  if (pathname === "/api/ping" || pathname === "/api/health") return NextResponse.next();
+  if (pathname === "/api/ping" || pathname === "/api/health") return pass();
 
   // A local Hub authenticates with `Authorization: Bearer hub_...` (src/lib/hub-auth.ts), never a cookie —
   // it must reach the route handler as-is, before the setup-completion gate below (which redirects a
   // cookie-less request through /api/setup/resume; a server-to-server call has no cookie jar to carry that
   // redirect's Set-Cookie forward, so it would just loop). The token itself is verified inside the route.
-  if (pathname.startsWith("/api/") && (request.headers.get("authorization") ?? "").startsWith("Bearer hub_")) {
-    return NextResponse.next();
+  if ((request.headers.get("authorization") ?? "").startsWith("Bearer hub_")) {
+    // A device token opens only the Hub's own routes and the API the till itself uses; pages are closed to it.
+    if (pathname.startsWith("/api/hub")) return pass();
+    if (pathname.startsWith("/api/") && deviceMayCall(pathname)) {
+      const h = new Headers(cleanHeaders);
+      h.set(DEVICE_OK_HEADER, "1");
+      return NextResponse.next({ request: { headers: h } });
+    }
+    // other API paths stay reachable for the Hub's server-to-server calls, but never carry the device flag
+    if (pathname.startsWith("/api/")) return pass();
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // The offline till shell is a static page drawn from the till's own IndexedDB: it must open with no cookie,
+  // no session and no server round-trip (the setup gate below would redirect through /api/setup/resume).
+  if (pathname === "/till" || pathname.startsWith("/till/")) return pass();
+  // A brand-new till program has no cookie either: it trades an activation code for its package (rate-limited in the route).
+  if (pathname === "/api/till-activate") return pass();
 
   // Check setup completion via cookie (set by /api/setup/complete)
   const setupDone = request.cookies.get("olgax-setup-complete")?.value === "1";
@@ -52,7 +73,7 @@ export function proxy(request: NextRequest) {
 
   // Auth routes must always be accessible (Better Auth sign-in/out/session)
   if (pathname.startsWith("/api/auth")) {
-    return NextResponse.next();
+    return pass();
   }
 
   // If setup NOT done, redirect to setup (unless already there), but allow other API routes if needed?
@@ -77,7 +98,7 @@ export function proxy(request: NextRequest) {
 
   // Allow public paths (both office and dedicated cash-register login).
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    return pass();
   }
 
   // The cash monitor is normally opened with its store in the URL.  Auth pages
@@ -88,7 +109,7 @@ export function proxy(request: NextRequest) {
   if (publicStoreMatch && (publicStoreRest === "/kasa-giris" || publicStoreRest === "/login")) {
     const url = request.nextUrl.clone();
     url.pathname = publicStoreRest;
-    const res = NextResponse.rewrite(url);
+    const res = NextResponse.rewrite(url, { request: { headers: cleanHeaders } });
     res.cookies.set(STORE_COOKIE, publicStoreMatch[1], { path: "/", sameSite: "lax" });
     return res;
   }
@@ -108,14 +129,14 @@ export function proxy(request: NextRequest) {
   // The platform owner's panel lives outside any market (no /store/:id prefix). The page
   // itself verifies the SUPERADMIN role server-side.
   if (pathname === "/superadmin" || pathname.startsWith("/superadmin/")) {
-    return NextResponse.next();
+    return pass();
   }
 
   // API routes are called directly (fetch("/api/...")), never through the
   // /store/:id prefix — they read the store id from the cookie via
   // getStoreId(), already set below whenever the user is on a /store/:id page.
   if (pathname.startsWith("/api")) {
-    return NextResponse.next();
+    return pass();
   }
 
   // Multi-store routing: the browser's address bar always shows /store/:id/...
@@ -129,7 +150,7 @@ export function proxy(request: NextRequest) {
     const rest = storeMatch[2] ?? "/";
     const url = request.nextUrl.clone();
     url.pathname = rest;
-    const res = NextResponse.rewrite(url);
+    const res = NextResponse.rewrite(url, { request: { headers: cleanHeaders } });
     res.cookies.set(STORE_COOKIE, storeId, { path: "/", sameSite: "lax" });
     return res;
   }

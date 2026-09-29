@@ -193,7 +193,7 @@ function ShiftCloseScreen({
         {t("all_fields_required")}
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-6 overflow-y-auto p-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 gap-10 overflow-y-auto p-6">
         <div className="flex-1">
           <div className="mb-6 flex gap-2">
             <TabButton active={tab === "bills"} onClick={() => setTab("bills")}>{t("tab_bills")}</TabButton>
@@ -306,14 +306,14 @@ function ShiftKeypad({
   navDisabled: boolean;
 }) {
   const tc = useTranslations("common");
-  const keyClass = "flex h-14 w-16 items-center justify-center rounded-md bg-slate-100 text-lg font-medium hover:bg-slate-200 active:bg-slate-300 transition-colors";
-  const navClass = "flex h-14 w-16 items-center justify-center rounded-md bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 transition-colors";
+  const keyClass = "flex h-16 w-20 items-center justify-center rounded-md bg-slate-100 text-lg font-medium hover:bg-slate-200 active:bg-slate-300 transition-colors";
+  const navClass = "flex h-16 w-20 items-center justify-center rounded-md bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 transition-colors";
   return (
-    <div className="grid shrink-0 grid-cols-4 gap-2">
+    <div className="grid shrink-0 grid-cols-4 content-start gap-2 self-start">
       <button className={keyClass} onClick={() => onDigit("7")}>7</button>
       <button className={keyClass} onClick={() => onDigit("8")}>8</button>
       <button className={keyClass} onClick={() => onDigit("9")}>9</button>
-      <button className="flex h-14 w-16 items-center justify-center rounded-md bg-[#c0392b] text-xs font-bold text-white hover:bg-[#a5321f] transition-colors" onClick={onDelete} title={tc("delete")}>
+      <button className="flex h-16 w-20 items-center justify-center rounded-md bg-[#c0392b] text-xs font-bold text-white hover:bg-[#a5321f] transition-colors" onClick={onDelete} title={tc("delete")}>
         {tc("delete").slice(0, 3).toUpperCase()}.
       </button>
       <button className={keyClass} onClick={() => onDigit("4")}>4</button>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
-import { CircleHelp, Loader2, Pencil, Plus } from "lucide-react";
+import { CircleHelp, Download, Loader2, Pencil, Plus } from "lucide-react";
 import { CashboxModal } from "./cashbox-modal";
 import { PosPermissionsPanel } from "./pos-permissions-panel";
 
@@ -17,6 +17,87 @@ interface Cashbox {
   appVersion: string | null;
   lastSyncAt: string | null;
   linkedAccountsCount: number;
+}
+
+interface TillKey {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+}
+
+/** Upload keys handed out inside market packages: revoke one when a flash drive / package file is lost. */
+function TillKeys() {
+  const [keys, setKeys] = useState<TillKey[] | null>(null);
+  function load() {
+    fetch("/api/till-package/keys")
+      .then((r) => (r.ok ? r.json() : { keys: [] }))
+      .then((d) => setKeys(d.keys ?? []))
+      .catch(() => setKeys([]));
+  }
+  useEffect(load, []);
+  async function revoke(k: TillKey) {
+    if (!confirm(`Отозвать ключ «${k.label}»? Кассы с этим пакетом перестанут отправлять данные, пока не загрузят новый пакет.`)) return;
+    const res = await fetch(`/api/till-package/keys/${k.id}`, { method: "DELETE" });
+    if (res.ok) { toast.success("Ключ отозван"); load(); } else toast.error("Не удалось отозвать ключ");
+  }
+  if (!keys || keys.length === 0) return null;
+  const fmt = (v: string | null) => (v ? new Date(v).toLocaleString("ru-RU") : "—");
+  return (
+    <div className="bg-card rounded-lg border">
+      <div className="border-b px-4 py-2.5 text-sm font-medium">Ключи касс (выданы вместе с пакетами)</div>
+      <table className="w-full text-sm">
+        <thead className="text-muted-foreground text-left text-xs">
+          <tr><th className="px-4 py-2 font-medium">Ключ</th><th className="px-4 py-2 font-medium">Выдан</th><th className="px-4 py-2 font-medium">Последняя связь</th><th /></tr>
+        </thead>
+        <tbody>
+          {keys.map((k) => (
+            <tr key={k.id} className="border-t">
+              <td className="px-4 py-2">{k.label}</td>
+              <td className="px-4 py-2">{fmt(k.createdAt)}</td>
+              <td className="px-4 py-2">{fmt(k.lastSeenAt)}</td>
+              <td className="px-4 py-2 text-right">
+                <button onClick={() => void revoke(k)} className="text-destructive hover:underline">Отозвать</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** One-time code for a new till program: it types it and downloads its market package by itself. */
+function ActivationCodeBox() {
+  const [result, setResult] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function create() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/till-package/activation", { method: "POST" });
+      if (res.ok) setResult(await res.json());
+      else toast.error("Не удалось создать код");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+      <div className="text-sm">
+        <div className="font-medium">Код активации новой кассы</div>
+        <div className="text-muted-foreground">Введите код в программе кассы — она сама загрузит данные магазина. Код одноразовый и действует 24 часа.</div>
+      </div>
+      {result ? (
+        <div className="text-right">
+          <div className="text-2xl font-bold tracking-widest tabular-nums" data-testid="activation-code">{result.code}</div>
+          <div className="text-muted-foreground text-xs">до {new Date(result.expiresAt).toLocaleString("ru-RU")}</div>
+        </div>
+      ) : null}
+      <button onClick={() => void create()} disabled={busy} className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-1.5 rounded-md px-4 text-sm font-medium disabled:opacity-50">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {result ? "Новый код" : "Создать код"}
+      </button>
+    </div>
+  );
 }
 
 export function CashboxesList() {
@@ -148,6 +229,20 @@ export function CashboxesList() {
               </tbody>
             </table>
           </div>
+
+          <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+            <div className="text-sm">
+              <div className="font-medium">Пакет для офлайн-кассы</div>
+              <div className="text-muted-foreground">Файл с товарами, ценами и настройками магазина. Его загружают на кассу с флешки — интернет не нужен.</div>
+            </div>
+            <a href="/api/till-package" download className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-1.5 rounded-md px-4 text-sm font-medium">
+              <Download className="h-4 w-4" /> Скачать пакет
+            </a>
+          </div>
+
+          <ActivationCodeBox />
+
+          <TillKeys />
         </>
       )}
 

@@ -257,6 +257,7 @@ export const useCartStore = create<CartState>()(
           autoDiscountTotal: 0,
           discountCardCode: "",
           discountCardPercent: 0,
+          paymentMethod: "CASH",
         }),
 
       subtotal: () =>

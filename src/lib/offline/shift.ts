@@ -9,6 +9,7 @@ import { idbDelete, idbGet, idbPut } from "./idb";
 import { listQueue, newId } from "./queue";
 import { sendOrQueue } from "./send";
 import { getTillAuth } from "./auth";
+import { deviceAuthHeaders } from "./device-token";
 
 export interface LocalShift {
   key: "shift";
@@ -41,7 +42,10 @@ export async function loadCurrentShift(): Promise<{ shift: ShiftInfo | null; off
     return { shift: null, offline: false };
   }
   try {
-    const res = await fetch("/api/shifts?scope=current", { cache: "no-store" });
+    // the offline till program (/till) has no session cookie: it asks with its device token and says who is working
+    const headers = await deviceAuthHeaders();
+    const who = headers.Authorization ? (await getTillAuth())?.userId : undefined;
+    const res = await fetch(`/api/shifts?scope=current${who ? `&cashierUserId=${encodeURIComponent(who)}` : ""}`, { cache: "no-store", headers });
     if (!res.ok) throw new Error(String(res.status));
     const data = (await res.json()) as { shift?: { id: string; openedAt: string; openingFloat: string | number } | null };
     if (data.shift) {
@@ -73,6 +77,12 @@ export async function openShiftOfflineAware(openingFloat: number, fallbackError:
     clientId: id,
     fallbackError,
   });
+  // The server already has this cashier's shift open (opened elsewhere, or this till never saw it): carry on with that one.
+  if (!sent.ok && sent.status === 409 && sent.data?.shift) {
+    const open = sent.data.shift as { id: string; openedAt: string; openingFloat: string | number };
+    await saveShift({ key: "shift", id: open.id, openedAt: open.openedAt, openingFloat: Number(open.openingFloat), status: "OPEN" });
+    return { ok: true, queued: false };
+  }
   if (!sent.ok) return sent;
   const server = sent.queued ? undefined : (sent.data.shift as { id: string; openedAt: string; openingFloat: string | number } | undefined);
   await saveShift({ key: "shift", id: server?.id ?? id, openedAt: server?.openedAt ?? openedAt, openingFloat: Number(server?.openingFloat ?? openingFloat), status: "OPEN" });

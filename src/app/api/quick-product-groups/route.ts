@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
+import { getQuickGroups } from "@/lib/till-data";
 import { z } from "zod";
 
 const createSchema = z.object({ name: z.string().min(1).max(120) });
@@ -13,14 +14,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const storeId = await getStoreId();
 
-  const groups = await prisma.quickProductGroup.findMany({
-    where: { storeId },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: { _count: { select: { items: true } } },
-  });
-  return NextResponse.json({
-    groups: groups.map((g) => ({ id: g.id, name: g.name, sortOrder: g.sortOrder, itemCount: g._count.items })),
-  });
+  return NextResponse.json({ groups: await getQuickGroups(storeId) });
 }
 
 // POST /api/quick-product-groups — create

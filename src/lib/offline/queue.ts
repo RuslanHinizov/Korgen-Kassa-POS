@@ -7,6 +7,7 @@
  */
 
 import { idbDelete, idbGetAll, idbPut, idbUpdate } from "./idb";
+import { deviceAuthHeaders } from "./device-token";
 
 export type QueueKind = "sale" | "refund" | "return" | "shift-open" | "shift-close" | "cash";
 
@@ -91,13 +92,13 @@ export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** A short code that tells this till apart from the others, kept in the browser (e.g. "A1F3"). */
+/** A short code that tells this till apart from the others, kept in the browser (e.g. "A1F3C9"; older tills keep their 4-character code). */
 export function deviceCode(): string {
   const KEY = "korgen-device-code";
   try {
     const existing = localStorage.getItem(KEY);
     if (existing) return existing;
-    const made = Math.random().toString(16).slice(2, 6).toUpperCase().padEnd(4, "0");
+    const made = Math.random().toString(16).slice(2, 8).toUpperCase().padEnd(6, "0");
     localStorage.setItem(KEY, made);
     return made;
   } catch {
@@ -171,7 +172,7 @@ async function doFlush(): Promise<void> {
     for (const item of items) {
       let res: Response;
       try {
-        res = await withTimeout(item.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item.payload) }, 20_000);
+        res = await withTimeout(item.endpoint, { method: "POST", headers: { "Content-Type": "application/json", ...(await deviceAuthHeaders()) }, body: JSON.stringify(item.payload) }, 20_000);
       } catch {
         // No connection: stop here so the order is kept, try again later.
         setOnline(false);
