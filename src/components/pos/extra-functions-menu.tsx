@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { signOut } from "@/lib/auth-client";
+import { exitProgram as closeProgram } from "@/lib/till-shell";
 import { flushQueue } from "@/lib/offline/queue";
 import { syncCatalog } from "@/lib/offline/catalog";
 import { toast } from "sonner";
@@ -60,8 +60,7 @@ export function ExtraFunctionsMenu({
   const [syncing, setSyncing] = useState(false);
 
   async function exitProgram() {
-    await signOut();
-    window.location.href = "/kasa-giris";
+    await closeProgram();
   }
 
   function togglePrinter() {

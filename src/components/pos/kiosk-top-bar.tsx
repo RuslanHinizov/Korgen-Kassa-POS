@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { HelpCircle, LogOut } from "lucide-react";
 import { CashboxStatus } from "./cashbox-status";
 import { APP_VERSION } from "@/lib/app-version";
-import { signOut } from "@/lib/auth-client";
+import { leaveCashier } from "@/lib/till-shell";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 
 interface KioskTopBarProps {
@@ -77,8 +77,7 @@ export function KioskTopBar({
   }, []);
 
   async function exitCashier() {
-    await signOut();
-    window.location.href = "/kasa-giris";
+    await leaveCashier();
   }
 
   return (

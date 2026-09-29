@@ -1,0 +1,25 @@
+{
+  "name": "korgen-kassa-till",
+  "productName": "Korgen Kassa",
+  "version": "1.0.0",
+  "description": "Korgen Kassa till program (offline-first)",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "sync-web": "node scripts/sync-web.mjs",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "kz.korgenkassa.till",
+    "productName": "Korgen Kassa",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "web/**/*", "package.json"],
+    "win": { "target": "nsis", "icon": "build/icon.ico" },
+    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false }
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  }
+}

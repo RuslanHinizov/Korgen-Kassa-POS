@@ -25,6 +25,7 @@ import { ShiftScreen } from "./shift-screen";
 import { ExtraFunctionsMenu } from "./extra-functions-menu";
 import { LockScreen } from "./lock-screen";
 import { isTillLocked, setTillLocked } from "@/lib/till-lock";
+import { collapseWindow } from "@/lib/till-shell";
 import { loadCurrentShift } from "@/lib/offline/shift";
 import { getTillAuth, tillAuthValid } from "@/lib/offline/auth";
 import { cacheConfig, getCachedConfig } from "@/lib/offline/config-cache";
@@ -167,7 +168,12 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
+      // An error answer (server down behind the till program, session gone, ...) is NOT settings: never apply it, and above
+      // all never write it over the copy this till has saved.
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((d) => {
         applySettings(d);
         void cacheConfig("settings", d);
@@ -250,7 +256,10 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [promos, setPromos] = useState<PromotionRule[]>([]);
   useEffect(() => {
     fetch("/api/promotions/active")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((d) => {
         const promotions: PromotionRule[] = d.promotions ?? [];
         setPromos(promotions);
@@ -861,10 +870,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           canPriceCheck={permissions.posPriceCheck}
           onOpenPriceCheck={() => setPriceCheckOpen(true)}
           canCollapse={permissions.posCollapseWindow}
-          onToggleCollapse={() => {
-            if (document.fullscreenElement) void document.exitFullscreen();
-            else void document.documentElement.requestFullscreen?.().catch(() => {});
-          }}
+          onToggleCollapse={collapseWindow}
           onShowReceipt={(data) => setReceiptData(data)}
         />
       )}
