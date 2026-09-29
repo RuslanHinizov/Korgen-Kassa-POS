@@ -21,12 +21,21 @@ const DEFAULTS: DeviceSettings = {
   openDrawerOnCash: false,
 };
 
+// useSyncExternalStore compares snapshots by identity: a fresh object on every read is an endless re-render
+// (React error #185), so the parsed value is reused until the stored text actually changes.
+let cachedRaw: string | null = null;
+let cachedSettings: DeviceSettings = DEFAULTS;
+
 export function getDeviceSettings(): DeviceSettings {
   if (typeof window === "undefined") return DEFAULTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (raw !== cachedRaw) {
+      cachedSettings = { ...DEFAULTS, ...JSON.parse(raw) };
+      cachedRaw = raw;
+    }
+    return cachedSettings;
   } catch {
     return DEFAULTS;
   }
