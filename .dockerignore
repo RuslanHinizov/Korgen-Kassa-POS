@@ -9,3 +9,10 @@ pnpm-debug.log
 dist-plesk
 scratchpad
 backups
+
+# UMAG reference copies (local only, never part of the app image; _umag-sandbox holds real market data)
+Umag Kassa
+_umag-sandbox
+umag.rar
+# the standalone till program is built separately (till-app/)
+till-app
