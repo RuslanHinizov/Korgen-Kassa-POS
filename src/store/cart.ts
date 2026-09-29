@@ -83,6 +83,10 @@ export interface CartState {
   updateItemNotes: (id: string, notes: string) => void;
   updateLineDiscount: (id: string, amount: number) => void;
   updateItemPrice: (id: string, price: number) => void;
+  /** «ИЗМЕНИТЬ ТОВАР» on a catalogue product: every line of it takes the new name and price (the catalogue price moves too). */
+  applyProductEdit: (productId: string, patch: { name?: string; price?: number }) => void;
+  /** «ИЗМЕНИТЬ ТОВАР» on a free-price line: only this line changes. */
+  updateItemDetails: (id: string, patch: { name: string; price: number }) => void;
   setDiscount: (amount: number, type: "fixed" | "percent") => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setAmountTendered: (amount: number) => void;
@@ -207,6 +211,24 @@ export const useCartStore = create<CartState>()(
           items: state.items.map((i) =>
             i.id === id ? { ...i, catalogPrice: i.catalogPrice ?? i.price, price: Math.max(0, finiteNumber(price)) } : i
           ),
+        })),
+
+      applyProductEdit: (productId, patch) =>
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.productId === productId
+              ? {
+                  ...i,
+                  ...(patch.name !== undefined ? { name: patch.name } : {}),
+                  ...(patch.price !== undefined ? { price: Math.max(0, finiteNumber(patch.price)), catalogPrice: Math.max(0, finiteNumber(patch.price)) } : {}),
+                }
+              : i
+          ),
+        })),
+
+      updateItemDetails: (id, patch) =>
+        set((state) => ({
+          items: state.items.map((i) => (i.id === id ? { ...i, name: patch.name, price: Math.max(0, finiteNumber(patch.price)) } : i)),
         })),
 
       updateLineDiscount: (id, amount) =>

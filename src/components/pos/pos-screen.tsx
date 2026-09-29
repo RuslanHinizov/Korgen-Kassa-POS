@@ -6,27 +6,17 @@ import { useCartStore } from "@/store/cart";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { formatCurrency, cn } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
-import {
-  ClipboardList,
-  Grip,
-  MinusCircle,
-  PlusCircle,
-  Settings2,
-  ShoppingBag,
-  Trash2,
-  User,
-  X,
-  Zap,
-} from "lucide-react";
+import { User, X } from "lucide-react";
 import { KioskSearchBar, QuickProductsDialog, type ProductResult } from "./product-search";
 import { PaymentModal } from "./payment-modal";
 import { CustomerCapture, type CustomerSummary } from "./customer-capture";
 import { HeldOrdersModal } from "./held-orders-modal";
 import { VoidItemModal } from "./void-item-modal";
-import { CustomItemModal } from "./custom-item-modal";
+import { NumberDialog } from "./number-dialog";
+import { ProductEditDialog } from "./product-edit-dialog";
+import { editProductAtTill } from "@/lib/offline/product-edit";
 import { CreateProductModal } from "./create-product-modal";
 import { LabelPickerModal, ProductLabelModal, type LabelProduct } from "./product-label";
-import { EditItemModal } from "./edit-item-modal";
 import { PriceCheckModal } from "./price-check-modal";
 import { GlobalSearchModal } from "./global-search-modal";
 import { KioskTopBar } from "./kiosk-top-bar";
@@ -43,7 +33,6 @@ import { addLocalHeldOrder } from "@/lib/offline/held-orders";
 import { UnsyncedBanner } from "./unsynced-banner";
 import { POSSalesPanel } from "./pos-sales-modal";
 import { AlertDialog } from "@/components/ui/alert-dialog";
-import { NumericKeypad } from "@/components/ui/numeric-keypad";
 import { ReceiptModal } from "@/components/receipt/receipt-modal";
 import { KeyboardShortcutsModal } from "./keyboard-shortcuts-modal";
 import { usePosKeyboardShortcuts } from "@/hooks/use-pos-keyboard-shortcuts";
@@ -106,11 +95,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [holdLoading, setHoldLoading] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [voidTargetIds, setVoidTargetIds] = useState<string[] | null>(null);
-  const [keypad, setKeypad] = useState<{ open: boolean; itemId: string; value: string }>({
-    open: false,
-    itemId: "",
-    value: "1",
-  });
+  const [quantityOpen, setQuantityOpen] = useState(false);
+  const [discountText, setDiscountText] = useState("");
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
   const [consultants, setConsultants] = useState<{ id: string; name: string; photoUrl: string | null }[]>([]);
@@ -242,9 +228,10 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     items,
     removeItems,
     updateQuantity,
-    updateItemNotes,
-    updateItemPrice,
     updateLineDiscount,
+    updateItemPrice,
+    applyProductEdit,
+    updateItemDetails,
     lineGrossOf,
     setRounding,
     addItem,
@@ -372,11 +359,19 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   }
   function selectRow(id: string) {
     setActiveItemId(id);
-    const item = items.find((candidate) => candidate.id === id);
-    if (!item) return;
-    // Touching a cart line is the quickest quantity workflow on a cash monitor.
-    // The keypad adapts to the product unit below (whole pieces vs. kg/litre/metre).
-    setKeypad({ open: true, itemId: id, value: String(item.quantity) });
+  }
+
+  // UMAG's «СКИДКА» box in the table header: a percent for the ticked lines (or the active line when none is ticked).
+  function applyDiscountPercent() {
+    if (!permissions.posDiscount) return;
+    const pct = Math.min(100, Math.max(0, Number(discountText.replace(",", "."))));
+    if (!Number.isFinite(pct)) return;
+    const ids = selected.size > 0 ? [...selected] : activeItemId ? [activeItemId] : [];
+    for (const id of ids) {
+      const item = items.find((i) => i.id === id);
+      if (item) updateLineDiscount(id, Math.round(lineGrossOf(item) * pct) / 100);
+    }
+    setDiscountText("");
   }
 
   async function holdCurrentOrder() {
@@ -628,7 +623,18 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
               <th className="px-3 py-2 text-left">Наименование</th>
               <th className="px-3 py-2 text-right">Цена</th>
               <th className="px-3 py-2 text-right">Количество</th>
-              <th className="px-3 py-2 text-right">Скидка</th>
+              <th className="px-2 py-1 text-right">
+                <input
+                  value={discountText}
+                  onChange={(e) => setDiscountText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyDiscountPercent()}
+                  onBlur={applyDiscountPercent}
+                  disabled={!permissions.posDiscount}
+                  inputMode="decimal"
+                  placeholder="Скидка"
+                  className="h-7 w-24 rounded border bg-white px-2 text-right text-xs font-normal normal-case disabled:opacity-50"
+                />
+              </th>
               <th className="px-3 py-2 text-right">Сумма</th>
             </tr>
           </thead>
@@ -646,7 +652,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
                   onClick={() => selectRow(item.id)}
                   className={cn(
                     "hover:bg-muted/40 cursor-pointer",
-                    activeItemId === item.id && "bg-primary/10"
+                    activeItemId === item.id && "bg-slate-300/70"
                   )}
                 >
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
@@ -684,7 +690,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
                     {item.unit && item.unit !== "pcs" ? ` ${unitLabel(item.unit, true)}` : ""}
                   </td>
                   <td className="text-muted-foreground px-3 py-2 text-right tabular-nums">
-                    {item.lineDiscount > 0 ? `−${formatCurrency(item.lineDiscount)}` : "—"}
+                    {`${lineGrossOf(item) > 0 ? ((item.lineDiscount / lineGrossOf(item)) * 100).toFixed(2) : "0.00"} %`}
                   </td>
                   <td className="px-3 py-2 text-right font-medium tabular-nums">
                     {formatCurrency(lineGrossOf(item) - item.lineDiscount)}
@@ -712,41 +718,21 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           {tax > 0 && <Row label={t("tax")} value={formatCurrency(tax)} />}
         </div>
 
-        <div className="ml-auto grid w-full max-w-[28rem] grid-cols-3 gap-1.5 self-center">
-          <BottomButton icon={Zap} label="Быстрые товары" onClick={() => setQuickOpen(true)} />
+        <div className="ml-auto grid w-full max-w-[36rem] grid-cols-4 gap-1.5 self-center">
+          <span />
+          <BottomButton label="Быстрые товары" onClick={() => setQuickOpen(true)} />
+          <BottomButton label="Количество" onClick={() => setQuantityOpen(true)} disabled={!activeItem} />
+          <BottomButton label="+" big onClick={() => adjustActiveQty(1)} disabled={!activeItem} />
           <BottomButton
-            icon={Settings2}
             label="Изменить товар"
             onClick={() => setEditOpen(true)}
-            disabled={!activeItem || !permissions.posEditProductAtPos}
+            disabled={!activeItem || !(permissions.posEditProductAtPos || permissions.posChangePriceAtPos)}
           />
+          <BottomButton label={holdLoading ? "…" : "Отложка"} onClick={() => void holdCurrentOrder()} disabled={!permissions.posHoldOrder || holdLoading} />
+          <BottomButton label="Доп. функции" onClick={() => setExtraFunctionsOpen(true)} />
+          <BottomButton label="−" big onClick={() => adjustActiveQty(-1)} disabled={!activeItem || !canDecreaseQty} />
+          <BottomButton label="Универсальный продукт" onClick={() => setCustomOpen(true)} disabled={!permissions.posUniversalProduct} />
           <BottomButton
-            icon={PlusCircle}
-            label="+"
-            onClick={() => adjustActiveQty(1)}
-            disabled={!activeItem}
-          />
-          <BottomButton
-            icon={ClipboardList}
-            label={holdLoading ? "…" : "Отложить"}
-            onClick={() => void holdCurrentOrder()}
-            disabled={!permissions.posHoldOrder || holdLoading}
-          />
-          <BottomButton icon={Grip} label="Доп. функции" onClick={() => setExtraFunctionsOpen(true)} />
-          <BottomButton
-            icon={MinusCircle}
-            label="−"
-            onClick={() => adjustActiveQty(-1)}
-            disabled={!activeItem || !canDecreaseQty}
-          />
-          <BottomButton
-            icon={ShoppingBag}
-            label="Универсальный продукт"
-            onClick={() => setCustomOpen(true)}
-            disabled={!permissions.posUniversalProduct}
-          />
-          <BottomButton
-            icon={Trash2}
             label="Удалить"
             variant="destructive"
             disabled={selected.size === 0 || !canDeleteItem}
@@ -927,29 +913,70 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       {newLabel && <ProductLabelModal product={newLabel} onClose={() => setNewLabel(null)} />}
 
       {customOpen && (
-        <CustomItemModal
-          onAdd={(item) => {
-            addCustomItem(item);
+        <NumberDialog
+          title={<>Редактирование универсального продукта.<br />Укажите цену</>}
+          initial="0"
+          onOk={(price) => {
+            if (price <= 0) return;
+            addCustomItem({ name: "Универсальный продукт", price, quantity: 1 });
             setCustomOpen(false);
           }}
-          onClose={() => setCustomOpen(false)}
+          onCancel={() => setCustomOpen(false)}
         />
       )}
 
       {editOpen && activeItem && (
-        <EditItemModal
-          item={activeItem}
-          discountEnabled={permissions.posDiscount}
-          priceEditable={permissions.posChangePriceAtPos}
+        <ProductEditDialog
+          key={activeItem.id}
+          name={activeItem.name}
+          price={activeItem.price}
+          catalogPrice={activeItem.catalogPrice ?? activeItem.price}
+          canEditName={permissions.posEditProductAtPos}
+          canEditPrice={permissions.posChangePriceAtPos}
           banPriceDecrease={permissions.posBanPriceDecrease}
-          wholesaleEnabled={permissions.wholesaleAtPos}
-          onSave={(patch) => {
-            if (patch.price !== undefined && patch.price !== activeItem.price) updateItemPrice(activeItem.id, patch.price);
-            updateItemNotes(activeItem.id, patch.notes);
-            updateLineDiscount(activeItem.id, patch.lineDiscount);
+          wholesalePrice={permissions.wholesaleAtPos && activeItem.wholesalePrice != null ? activeItem.wholesalePrice : null}
+          onCancel={() => setEditOpen(false)}
+          onSave={async (patch) => {
+            const item = activeItem;
+            if (!item.productId) {
+              updateItemDetails(item.id, patch);
+              setEditOpen(false);
+              return;
+            }
+            const catalog = item.catalogPrice ?? item.price;
+            const wholesale = item.wholesalePrice ?? null;
+            const priceChanged = Math.abs(patch.price - item.price) > 0.0001;
+            // choosing the retail or wholesale price is a choice for this line only; any other price is a product edit
+            const lineOnly = priceChanged && (Math.abs(patch.price - catalog) < 0.005 || (wholesale != null && Math.abs(patch.price - wholesale) < 0.005));
+            const edit: { name?: string; price?: number } = {};
+            if (patch.name !== item.name) edit.name = patch.name;
+            if (priceChanged && !lineOnly) edit.price = patch.price;
+            if (edit.name !== undefined || edit.price !== undefined) {
+              const result = await editProductAtTill(item.productId, edit, "Не удалось сохранить товар");
+              if (!result.ok) {
+                toast.error(result.error);
+                return;
+              }
+              applyProductEdit(item.productId, edit);
+            }
+            if (lineOnly) updateItemPrice(item.id, patch.price);
             setEditOpen(false);
           }}
-          onClose={() => setEditOpen(false)}
+        />
+      )}
+
+      {quantityOpen && activeItem && (
+        <NumberDialog
+          title="Количество"
+          initial={String(activeItem.quantity)}
+          allowDecimal={activeItem.unit !== "pcs"}
+          onOk={(value) => {
+            const val = activeItem.unit === "pcs" ? Math.floor(value) : value;
+            // Not limited by stock — same as UMAG (see docs/kasa-offline-plan.md).
+            if (val > 0) updateQuantity(activeItem.id, val);
+            setQuantityOpen(false);
+          }}
+          onCancel={() => setQuantityOpen(false)}
         />
       )}
 
@@ -1001,29 +1028,6 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
         onCancel={() => setConfirmClear(false)}
       />
 
-      {/* Numeric keypad (quantity edit for the active row) */}
-      <NumericKeypad
-        open={keypad.open}
-        value={keypad.value}
-        label={(() => {
-          const item = items.find((candidate) => candidate.id === keypad.itemId);
-          return item ? `${item.name} · Количество (${unitLabel(item.unit, true)})` : undefined;
-        })()}
-        allowDecimal={items.find((item) => item.id === keypad.itemId)?.unit !== "pcs"}
-        presets={items.find((item) => item.id === keypad.itemId)?.unit === "pcs" ? [1, 2, 3, 5, 10] : [0.1, 0.25, 0.5, 1, 2]}
-        unit={unitLabel(items.find((item) => item.id === keypad.itemId)?.unit, true)}
-        onValueChange={(v) => setKeypad((k) => ({ ...k, value: v }))}
-        onConfirm={() => {
-          const item = items.find((candidate) => candidate.id === keypad.itemId);
-          const parsed = parseFloat(keypad.value);
-          const val = item?.unit === "pcs" ? Math.floor(parsed) : parsed;
-          // Not limited by stock — same as UMAG (see docs/kasa-offline-plan.md).
-          if (!isNaN(val) && val > 0) updateQuantity(keypad.itemId, val);
-          setKeypad({ open: false, itemId: "", value: "1" });
-        }}
-        onCancel={() => setKeypad({ open: false, itemId: "", value: "1" })}
-      />
-
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
@@ -1044,9 +1048,11 @@ function BottomButton({
   onClick,
   disabled,
   variant,
+  big,
   anchorRef,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
+  big?: boolean;
   label: string;
   onClick: () => void;
   disabled?: boolean;
@@ -1065,8 +1071,8 @@ function BottomButton({
           : "hover:text-foreground hover:bg-white"
       )}
     >
-      <Icon className="h-4 w-4" />
-      {label}
+      {Icon && <Icon className="h-4 w-4" />}
+      <span className={big ? "text-3xl leading-none" : undefined}>{label}</span>
     </button>
   );
 }

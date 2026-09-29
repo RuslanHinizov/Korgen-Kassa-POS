@@ -123,6 +123,15 @@ export async function applyLocalStockDelta(productId: string, quantityDelta: num
   if (memory) memory = memory.map((p) => (p.id === productId ? updated : p));
 }
 
+/** «ИЗМЕНИТЬ ТОВАР» at this till: the local copy changes at once (search, next sale); the server gets the same edit from the queue. */
+export async function updateLocalProduct(productId: string, patch: { name?: string; price?: number }): Promise<void> {
+  const product = await idbGet<LocalProduct>("products", productId);
+  if (!product) return;
+  const updated = { ...product, ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.price !== undefined ? { price: patch.price } : {}) };
+  await idbPut("products", updated);
+  if (memory) memory = memory.map((p) => (p.id === productId ? updated : p));
+}
+
 /** Same rules as the server search: name/SKU contains the text, barcode equals it, scale barcodes carry a weight. */
 export async function searchLocal(query: string, limit = 20): Promise<LocalProduct[]> {
   const q = query.trim();

@@ -9,7 +9,7 @@
 import { idbDelete, idbGetAll, idbPut, idbUpdate } from "./idb";
 import { deviceAuthHeaders } from "./device-token";
 
-export type QueueKind = "sale" | "refund" | "return" | "shift-open" | "shift-close" | "cash";
+export type QueueKind = "sale" | "refund" | "return" | "shift-open" | "shift-close" | "cash" | "product-edit";
 
 export interface QueueItem {
   id: string;
