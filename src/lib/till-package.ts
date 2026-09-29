@@ -9,7 +9,7 @@ import type { TillPackageBody } from "@/lib/till-package-format";
 /** Who can work the till of this market, with the PIN hash each signs in with offline. */
 export async function listPackageCashiers(storeId: string) {
   const staff = await prisma.userStoreAssignment.findMany({
-    where: { storeId, user: { role: { in: ["CASHIER", "MANAGER", "WAREHOUSE"] }, firedAt: null, allowCashierLogin: true } },
+    where: { storeId, user: { role: { in: ["CASHIER", "MANAGER", "ADMIN", "WAREHOUSE"] }, firedAt: null, allowCashierLogin: true } },
     select: { user: { select: { id: true, name: true, lastName: true, role: true, pin: true } } },
   });
   return staff.map((a) => ({ id: a.user.id, name: [a.user.name, a.user.lastName].filter(Boolean).join(" "), role: a.user.role, pin: a.user.pin }));

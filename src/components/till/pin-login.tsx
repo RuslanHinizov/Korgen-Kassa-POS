@@ -5,7 +5,7 @@ import { Delete, ArrowLeft } from "lucide-react";
 import type { PackageCashier } from "@/lib/till-package-format";
 import { listPinCashiers, signInWithPin } from "@/lib/offline/pin-login";
 
-const ROLE_LABEL: Record<string, string> = { CASHIER: "Кассир", MANAGER: "Менеджер", WAREHOUSE: "Складской работник" };
+const ROLE_LABEL: Record<string, string> = { CASHIER: "Кассир", MANAGER: "Менеджер", ADMIN: "Администратор", WAREHOUSE: "Складской работник" };
 
 /**
  * Touch sign-in for the till: pick your name, tap your 4-digit PIN. Works with no connection — the PINs come from the

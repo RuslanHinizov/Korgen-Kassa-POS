@@ -48,7 +48,7 @@ async function resolve(h: Headers): Promise<DeviceSession | null> {
       id: cashierId,
       firedAt: null,
       allowCashierLogin: true,
-      role: { in: ["CASHIER", "WAREHOUSE", "MANAGER"] },
+      role: { in: ["CASHIER", "WAREHOUSE", "MANAGER", "ADMIN"] },
       storeAssignments: { some: { storeId: hub.storeId } },
     },
     select: { id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true },
@@ -61,7 +61,7 @@ async function resolve(h: Headers): Promise<DeviceSession | null> {
     storeId: hub.storeId,
     suspended: store?.suspendedAt ? { message: store.suspendedMessage } : null,
     session: { id: `device:${hub.tokenId}`, userId: user.id, token: "", expiresAt: new Date(now.getTime() + 3600_000), createdAt: now, updatedAt: now, ipAddress: null, userAgent: null },
-    user: { id: user.id, name: user.name, email: user.email, emailVerified: false, image: null, createdAt: user.createdAt, updatedAt: user.updatedAt, role: user.role === "MANAGER" ? "CASHIER" : user.role },
+    user: { id: user.id, name: user.name, email: user.email, emailVerified: false, image: null, createdAt: user.createdAt, updatedAt: user.updatedAt, role: user.role === "MANAGER" || user.role === "ADMIN" ? "CASHIER" : user.role },
   };
 }
 
