@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { X, Printer } from "lucide-react";
 import { Receipt } from "@/components/receipt/receipt";
 import { printReceipt } from "@/lib/thermal-print";
+import { programCanPrint, printReceiptOnProgram } from "@/lib/program-print";
 
 interface RefundItem {
   name: string;
@@ -109,13 +110,13 @@ export function RefundReceiptModal({
           <h2 className="font-semibold text-sm text-destructive">{t("refund_receipt")}</h2>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => void printReceipt({ data: receiptData, settings })}
+              onClick={() => void (programCanPrint() ? printReceiptOnProgram() : printReceipt({ data: receiptData, settings }))}
               className="rounded border px-3 py-1.5 text-xs font-medium hover:bg-accent"
             >
               <Printer className="mr-1 inline h-3.5 w-3.5" /> {t("thermal")}
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={() => void (programCanPrint() ? printReceiptOnProgram() : window.print())}
               className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 hover:bg-primary/90 transition-colors"
             >
               <Printer className="h-3.5 w-3.5" />

@@ -1014,6 +1014,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           onClose={() => setReceiptData(null)}
           data={receiptData}
           settings={receiptSettings}
+          autoPrint
         />
       )}
 

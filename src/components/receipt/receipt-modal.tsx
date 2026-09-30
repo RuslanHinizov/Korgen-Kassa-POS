@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { X, Printer } from "lucide-react";
 import { Receipt } from "./receipt";
 import { printReceipt } from "@/lib/thermal-print";
+import { programCanPrint, printerEnabled, printReceiptOnProgram } from "@/lib/program-print";
+import { toast } from "sonner";
 
 interface ReceiptSettings {
   name: string;
@@ -44,9 +46,11 @@ interface ReceiptModalProps {
     changeDue?: number;
   };
   settings: ReceiptSettings;
+  /** On the till program: print by itself as soon as the receipt is on screen (when the printer is switched on). */
+  autoPrint?: boolean;
 }
 
-export function ReceiptModal({ open, onClose, data, settings }: ReceiptModalProps) {
+export function ReceiptModal({ open, onClose, data, settings, autoPrint }: ReceiptModalProps) {
   const t = useTranslations("receipt");
   const [liveSettings, setLiveSettings] = useState<ReceiptSettings>(settings);
 
@@ -61,13 +65,36 @@ export function ReceiptModal({ open, onClose, data, settings }: ReceiptModalProp
       .catch(() => {});
   }, []);
 
+  // Print once, after the real settings (store name, footer) have loaded into the receipt.
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const autoPrinted = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSettingsLoaded(true), 1200);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (!open || !autoPrint || !settingsLoaded || autoPrinted.current) return;
+    if (!programCanPrint() || !printerEnabled()) return;
+    autoPrinted.current = true;
+    void printReceiptOnProgram().then((r) => { if (!r.ok) toast.error(`Чек не напечатан: ${r.error ?? "ошибка принтера"}`); });
+  }, [open, autoPrint, settingsLoaded]);
+
   if (!open || typeof document === "undefined") return null;
 
-  function handleBrowserPrint() {
+  async function handleBrowserPrint() {
+    if (programCanPrint()) {
+      const r = await printReceiptOnProgram();
+      if (!r.ok) toast.error(`Чек не напечатан: ${r.error ?? "ошибка принтера"}`);
+      return;
+    }
     window.print();
   }
 
   async function handleThermalPrint() {
+    if (programCanPrint()) {
+      await handleBrowserPrint();
+      return;
+    }
     await printReceipt({ data, settings: liveSettings });
   }
 

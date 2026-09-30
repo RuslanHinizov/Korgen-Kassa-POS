@@ -174,6 +174,56 @@ function setupUpdates() {
   setInterval(() => void checkForUpdate(), 4 * 3600_000);
 }
 
+/**
+ * Receipt printing. The cashier's screen hands over the finished receipt (HTML with its styles); the program prints it
+ * silently — no dialog — on the receipt printer through its normal Windows driver, so Russian letters, ₸ and the paper
+ * width are the driver's job. Which printer: {"printer": "XP-76"} in %APPDATA%\Korgen Kassa\config.json, else the first
+ * installed printer that looks like a receipt printer (XP-..., POS-..., Xprinter, thermal, receipt), else the Windows default.
+ */
+const VIRTUAL_PRINTER = /onenote|pdf|xps|fax|anydesk|microsoft print|send to/i;
+const RECEIPT_PRINTER = /(^|[^a-z])(xp|pos)[-\s]?\d|xprinter|thermal|receipt|чек/i;
+function configuredPrinter() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "config.json"), "utf8"));
+    return typeof cfg.printer === "string" && cfg.printer ? cfg.printer : null;
+  } catch {
+    return null;
+  }
+}
+async function pickPrinter(webContents) {
+  const printers = await webContents.getPrintersAsync();
+  const want = configuredPrinter();
+  if (want) {
+    const hit = printers.find((p) => p.name === want);
+    if (hit) return hit.name;
+  }
+  const real = printers.filter((p) => !VIRTUAL_PRINTER.test(p.name));
+  const receipt = real.find((p) => RECEIPT_PRINTER.test(p.name));
+  if (receipt) return receipt.name;
+  const def = real.find((p) => p.isDefault) || real[0];
+  return def ? def.name : null;
+}
+async function printReceiptHtml(html) {
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try {
+    await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+    const deviceName = await pickPrinter(win.webContents);
+    if (!deviceName) return { ok: false, error: "Принтер не найден. Установите драйвер принтера." };
+    const px = await win.webContents.executeJavaScript("Math.ceil(document.documentElement.scrollHeight)");
+    const heightMicrons = Math.max(60_000, Math.ceil((px * 25.4) / 96) * 1000 + 8_000);
+    return await new Promise((resolve) => {
+      win.webContents.print(
+        { silent: true, deviceName, printBackground: true, margins: { marginType: "none" }, pageSize: { width: 76_000, height: heightMicrons } },
+        (success, reason) => resolve(success ? { ok: true, printer: deviceName } : { ok: false, error: reason || "Не удалось напечатать" }),
+      );
+    });
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  } finally {
+    setTimeout(() => win.destroy(), 1500);
+  }
+}
+
 let server;
 function startServer() {
   return new Promise((resolve, reject) => {
@@ -222,6 +272,7 @@ if (!app.requestSingleInstanceLock()) {
       app.quit();
       return;
     }
+    ipcMain.handle("print:receipt", (_e, html) => (typeof html === "string" && html.length < 3_000_000 ? printReceiptHtml(html) : { ok: false, error: "bad receipt" }));
     ipcMain.on("shell:minimize", () => win && win.minimize());
     ipcMain.on("shell:quit", () => app.quit());
     ipcMain.handle("shell:info", () => ({ version: app.getVersion(), serverUrl: serverUrl() }));

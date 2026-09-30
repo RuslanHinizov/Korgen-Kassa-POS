@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { exitProgram as closeProgram, checkForProgramUpdate, installProgramUpdate } from "@/lib/till-shell";
+import { PRINTER_ENABLED_KEY } from "@/lib/program-print";
 import { flushQueue } from "@/lib/offline/queue";
 import { syncCatalog } from "@/lib/offline/catalog";
 import { toast } from "sonner";
@@ -12,7 +13,6 @@ import { QuickReceivingModal } from "./quick-receiving-modal";
 import { DebtScreen, type Debtor } from "./debt-screen";
 import { ManagerGate } from "./manager-gate";
 
-const PRINTER_ENABLED_KEY = "korgen-printer-enabled";
 const EXTRA_PRINTERS_KEY = "korgen-extra-printers";
 
 function readPrinterEnabled(): boolean {
