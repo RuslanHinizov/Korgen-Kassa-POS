@@ -102,7 +102,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
           <img
             src={settings.logoUrl}
             alt="logo"
-            className="h-12 mx-auto mb-2 object-contain"
+            className="h-[4.5rem] mx-auto mb-2 object-contain"
           />
         )}
         <p className="font-bold text-sm whitespace-pre-line">{settings.receiptHeader || settings.name}</p>
