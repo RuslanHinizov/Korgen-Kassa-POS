@@ -38,6 +38,29 @@ export function receiptDocument(receiptHtml: string, headHtml: string, origin: s
   );
 }
 
+/**
+ * Any other block on screen (a product label, a shift report) printed the same way on the till program. The block is
+ * centred in a 66 mm column and freed from scroll limits so the whole of it is drawn.
+ */
+export function elementDocument(elementHtml: string, headHtml: string, origin: string): string {
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/">${headHtml}` +
+    `<style>html,body{margin:0;padding:0;background:#fff;overflow:hidden}` +
+    `.korgen-print-root{width:66mm;margin:0 auto;padding:2mm 0;color:#000;font-size:10pt}` +
+    `.korgen-print-root *{max-height:none!important;overflow:visible!important;box-shadow:none!important}</style>` +
+    `</head><body><div class="korgen-print-root">${elementHtml}</div></body></html>`
+  );
+}
+
+export async function printElementOnProgram(id: string): Promise<{ ok: boolean; error?: string }> {
+  const b = bridge();
+  const el = typeof document === "undefined" ? null : document.getElementById(id);
+  if (!b?.printReceipt) return { ok: false, error: "no program printer" };
+  if (!el) return { ok: false, error: "nothing to print" };
+  const head = [...document.querySelectorAll('link[rel="stylesheet"], style')].map((n) => n.outerHTML).join("");
+  return b.printReceipt(elementDocument(el.outerHTML, head, window.location.origin));
+}
+
 /** Prints the receipt that is open on screen (element #receipt-print). */
 export async function printReceiptOnProgram(): Promise<{ ok: boolean; error?: string }> {
   const b = bridge();

@@ -49,6 +49,8 @@ export async function importPackage(text: string): Promise<ImportResult> {
   await setDeviceToken(body.deviceToken); // also clears a token left from another market when this package has none
   // a fresh package carries the PINs as they are now; a lock from guesses against the old ones no longer applies
   for (const c of body.cashiers) await idbDelete("meta", `pinAttempts:${c.id}`);
+  if (body.cashbox) await idbPut("meta", { key: "tillCashbox", id: body.cashbox.id, name: body.cashbox.name });
+  else await idbDelete("meta", "tillCashbox");
   await idbPut("meta", { key: "packageInfo", storeId: body.store.id, storeName: body.store.name, generatedAt: body.generatedAt, loadedAt: Date.now(), products: body.products.length } satisfies PackageInfo);
 
   return { ok: true, storeName: body.store.name, products: body.products.length, generatedAt: body.generatedAt };

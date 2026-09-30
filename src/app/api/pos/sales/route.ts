@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         },
       },
       user: { select: { name: true } },
+      cashbox: { select: { name: true } },
       refunds: { select: { id: true, amount: true, reason: true, items: true, createdAt: true }, orderBy: { createdAt: "desc" } },
     },
     orderBy: { createdAt: "desc" },

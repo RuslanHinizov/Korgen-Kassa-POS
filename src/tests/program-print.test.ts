@@ -48,3 +48,24 @@ describe("program printing", () => {
     expect(receiptDocument("<p>a</p>", "", "http://x")).toContain('<div id="receipt-print-overlay"><p>a</p></div>');
   });
 });
+
+import { elementDocument, printElementOnProgram } from "@/lib/program-print";
+
+describe("printing any block (label, shift report)", () => {
+  it("centres it in a 66 mm column and frees it from scroll limits", () => {
+    const html = elementDocument('<div id="x">A</div>', "", "http://x");
+    expect(html).toContain('<div class="korgen-print-root"><div id="x">A</div></div>');
+    expect(html).toContain("width:66mm");
+    expect(html).toContain("max-height:none!important");
+  });
+
+  it("sends the block with the page's styles, and says so when it is missing", async () => {
+    const printReceipt = vi.fn(async () => ({ ok: true }));
+    (window as unknown as { korgenShell?: unknown }).korgenShell = { printReceipt };
+    document.head.innerHTML = '<link rel="stylesheet" href="/a.css">';
+    document.body.innerHTML = '<div id="pos-label-print"><p>Лимон ₸500</p></div>';
+    expect((await printElementOnProgram("pos-label-print")).ok).toBe(true);
+    expect((printReceipt.mock.calls[0] as unknown as [string])[0]).toContain("Лимон ₸500");
+    expect((await printElementOnProgram("nope")).ok).toBe(false);
+  });
+});

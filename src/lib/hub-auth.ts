@@ -45,6 +45,16 @@ export async function resolveHubActor(req: Request): Promise<HubActor | null> {
   if (!row || row.revokedAt) return null;
 
   void prisma.hubToken.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
+  // The standalone till sends its program version; the register it is tied to shows it in Управление → Кассы.
+  const version = req.headers.get("x-korgen-version")?.slice(0, 20);
+  if (row.cashboxId && version && /^[0-9A-Za-z.\-]+$/.test(version)) {
+    void prisma.cashbox
+      .updateMany({
+        where: { id: row.cashboxId, storeId: row.storeId, OR: [{ appVersion: { not: version } }, { lastSyncAt: null }, { lastSyncAt: { lt: new Date(Date.now() - 60_000) } }] },
+        data: { appVersion: version, platform: "Windows (программа кассы)", lastSyncAt: new Date() },
+      })
+      .catch(() => {});
+  }
   return { storeId: row.storeId, tokenId: row.id, cashboxId: row.cashboxId ?? null };
 }
 

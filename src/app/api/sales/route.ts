@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
   const pairedCashbox = pairedCashboxId
     ? await prisma.cashbox.findFirst({
         where: { id: pairedCashboxId, storeId },
-        select: { id: true, accountId: true, extraAccountId: true },
+        select: { id: true, name: true, accountId: true, extraAccountId: true },
       })
     : null;
   const cashboxId = pairedCashbox?.id;
@@ -622,5 +622,5 @@ export async function POST(req: NextRequest) {
       /* handled inside fire() */
     });
 
-  return NextResponse.json({ sale, timeAdjusted }, { status: 201 });
+  return NextResponse.json({ sale: { ...sale, cashboxName: pairedCashbox?.name ?? null }, timeAdjusted }, { status: 201 });
 }

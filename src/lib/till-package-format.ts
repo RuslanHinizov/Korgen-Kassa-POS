@@ -31,6 +31,8 @@ export interface TillPackageBody {
   products: LocalProduct[];
   /** store-scoped Bearer token the offline till uploads with (made per download, revocable); see offline/device-token.ts */
   deviceToken?: string;
+  /** The register (Cashbox) this till was activated for, shown on its receipts. */
+  cashbox?: { id: string; name: string };
 }
 
 export interface TillPackageFile {

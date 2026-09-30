@@ -105,6 +105,7 @@ export function ExtraFunctionsMenu({
         changeDue: sale.changeDue ?? undefined,
         createdAt: new Date(sale.createdAt),
         cashierName: sale.user?.name ?? undefined,
+        cashboxName: sale.cashbox?.name ?? undefined,
       });
       onClose();
     } catch {

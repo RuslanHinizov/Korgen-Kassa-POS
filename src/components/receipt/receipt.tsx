@@ -19,6 +19,8 @@ export interface ReceiptData {
   customerName?: string;
   /** Who rang the sale up («Кассир: …»). */
   cashierName?: string;
+  /** The register the sale was rung up on («Касса: Касса-1»). */
+  cashboxName?: string;
   items: ReceiptItem[];
   subtotal: number;
   discountAmount: number;
@@ -125,6 +127,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
       ) : data.receiptNo ? (
         <p className="text-[10px] text-center mb-2">{`Чек №${data.receiptNo}`}</p>
       ) : null}
+      {data.cashboxName && <p className="text-[10px] text-center mb-1">Касса: {data.cashboxName}</p>}
       {data.cashierName && <p className="text-[10px] text-center mb-2">Кассир: {data.cashierName}</p>}
       {data.customerName && (
         <p className="text-[10px] text-center mb-2">{t("for", { name: data.customerName })}</p>

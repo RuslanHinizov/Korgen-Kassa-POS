@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createHubToken } from "@/lib/hub-auth";
+import { prisma } from "@/lib/db";
 import { buildTillPackageBody } from "@/lib/till-package";
 import { serializePackage } from "@/lib/till-package-format";
 import { redeemActivationCode, tooManyAttempts } from "@/lib/till-activation";
@@ -25,7 +26,9 @@ export async function POST(req: NextRequest) {
 
   const { storeId, cashboxId } = redeemed;
   const body = await buildTillPackageBody(storeId);
+  const cashbox = cashboxId ? await prisma.cashbox.findFirst({ where: { id: cashboxId, storeId }, select: { id: true, name: true } }) : null;
   if (!body) return NextResponse.json({ error: "Магазин не найден." }, { status: 404 });
+  if (cashbox) body.cashbox = cashbox;
   body.deviceToken = await createHubToken(storeId, `Активация кассы ${body.generatedAt.slice(0, 16).replace("T", " ")}`, cashboxId);
   return new NextResponse(await serializePackage(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }

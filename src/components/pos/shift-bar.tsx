@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslations, useLocale } from "next-intl";
 import { Printer, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { programCanPrint, printElementOnProgram } from "@/lib/program-print";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Report = any;
@@ -49,13 +50,13 @@ export function ShiftReportModal({
         <div className="no-print flex items-center justify-between border-b px-4 py-3">
           <h2 className="font-semibold text-sm">{kind === "Z" ? t("z_report") : t("x_report")}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => window.print()} className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
+            <button onClick={() => { if (programCanPrint()) void printElementOnProgram("shift-report-print"); else window.print(); }} className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
               <Printer className="h-3.5 w-3.5" /> {t("print")}
             </button>
             <button onClick={onClose} className="rounded p-1 hover:bg-black/5"><X className="h-4 w-4" /></button>
           </div>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto p-5 font-mono text-xs print:max-h-none">
+        <div id="shift-report-print" className="max-h-[75vh] overflow-y-auto p-5 font-mono text-xs print:max-h-none">
           {!r ? (
             <p className="text-center text-gray-500">…</p>
           ) : (

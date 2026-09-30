@@ -68,7 +68,7 @@ function inside(rel) {
 function proxy(req, res) {
   const target = new URL(serverUrl());
   const lib = target.protocol === "https:" ? https : http;
-  const headers = { ...req.headers, host: target.host, origin: target.origin };
+  const headers = { ...req.headers, host: target.host, origin: target.origin, "x-korgen-version": app.getVersion() };
   delete headers.referer;
   const up = lib.request(
     { protocol: target.protocol, hostname: target.hostname, port: target.port || undefined, method: req.method, path: req.url, headers, timeout: 30000 },

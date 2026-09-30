@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
 import type { ProductResult } from "./product-search";
+import { programCanPrint, printElementOnProgram } from "@/lib/program-print";
 
 export interface LabelProduct { name: string; price: number; unit: string; barcode: string }
 
@@ -36,13 +37,12 @@ export function ProductLabelModal({ product, onClose }: { product: LabelProduct;
           <h2 className="text-lg font-semibold">Этикетка товара</h2>
           <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Закрыть"><X className="h-5 w-5" /></button>
         </div>
-        <div className="label-body rounded-lg border bg-white p-5 text-center text-black">
+        <div id="pos-label-print" className="label-body rounded-lg border bg-white p-5 text-center text-black">
           <p className="text-lg font-bold">{product.name}</p>
           <p className="mt-1 text-2xl font-bold">{formatCurrency(product.price)}{isFractionalUnit(product.unit) ? ` / ${unitLabel(product.unit, true)}` : ""}</p>
           <svg ref={svgRef} className="mx-auto mt-3 w-full max-w-[240px]" />
-          <p className="mt-1 text-xs">Отсканируйте для добавления в кассу</p>
         </div>
-        <button onClick={() => window.print()} className="no-print mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary font-medium text-primary-foreground hover:bg-primary/90">
+        <button onClick={() => { if (programCanPrint()) void printElementOnProgram("pos-label-print").then((r) => { if (!r.ok) toast.error(`Этикетка не напечатана: ${r.error ?? "ошибка принтера"}`); }); else window.print(); }} className="no-print mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary font-medium text-primary-foreground hover:bg-primary/90">
           <Printer className="h-4 w-4" /> Печать
         </button>
       </div>

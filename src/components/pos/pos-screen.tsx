@@ -32,6 +32,7 @@ import { cacheConfig, getCachedConfig } from "@/lib/offline/config-cache";
 import { rememberDiscountCard, getCachedDiscountCard } from "@/lib/offline/discount-cards";
 import { addLocalHeldOrder } from "@/lib/offline/held-orders";
 import { UnsyncedBanner } from "./unsynced-banner";
+import { idbGet } from "@/lib/offline/idb";
 import { POSSalesPanel } from "./pos-sales-modal";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { ReceiptModal } from "@/components/receipt/receipt-modal";
@@ -89,6 +90,11 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     getTillAuth().then((a) => { if (a && a.mode === "offline" && tillAuthValid(a)) setTillWho({ name: a.name, role: a.role }); }).catch(() => {});
   }, []);
   const cashierName = tillWho?.name ?? serverCashierName;
+  // the register this till program was activated for (from its market package), for the receipt
+  const [tillCashboxName, setTillCashboxName] = useState<string | null>(null);
+  useEffect(() => {
+    void idbGet<{ name: string }>("meta", "tillCashbox").then((c) => setTillCashboxName(c?.name ?? null)).catch(() => {});
+  }, []);
   const cashierRole = tillWho?.role ?? serverCashierRole;
   const t = useTranslations("pos");
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX_RATE);
@@ -482,6 +488,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       changeDue: Math.max(0, saleAmountTendered - saleTotal),
       createdAt: new Date(),
       cashierName,
+      cashboxName: s?.cashboxName ?? tillCashboxName ?? undefined,
     };
     setReceiptData(data);
     clearCart();
@@ -871,7 +878,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           onOpenPriceCheck={() => setPriceCheckOpen(true)}
           canCollapse={permissions.posCollapseWindow}
           onToggleCollapse={collapseWindow}
-          onShowReceipt={(data) => setReceiptData({ cashierName, ...data })}
+          onShowReceipt={(data) => setReceiptData({ cashierName, cashboxName: tillCashboxName ?? undefined, ...data })}
         />
       )}
       {/* ЗАБЛОКИРОВАТЬ КАССУ — localStorage-backed (src/lib/till-lock.ts) so a reload or re-navigating to

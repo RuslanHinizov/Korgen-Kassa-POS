@@ -44,6 +44,9 @@ interface ReceiptModalProps {
     paymentMethod: string;
     amountTendered?: number;
     changeDue?: number;
+    cashierName?: string;
+    cashboxName?: string;
+    createdAt?: Date;
   };
   settings: ReceiptSettings;
   /** On the till program: print by itself as soon as the receipt is on screen (when the printer is switched on). */
