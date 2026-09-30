@@ -15,6 +15,11 @@ function finiteNumber(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+/** Quantities are kept to 3 decimals (grams / millilitres / millimetres) so repeated +0.1 taps never leave 1.2000000000000002. */
+export function roundQty(value: number) {
+  return Math.round(value * 1000) / 1000;
+}
+
 export interface CartItem {
   /** Stable per-line id — the true identity for remove/update/selection (NOT productId, which repeats across lines only when merged). */
   id: string;
@@ -149,7 +154,7 @@ export const useCartStore = create<CartState>()(
 
       addItem: (item, quantity = 1) =>
         set((state) => {
-          const amount = Math.max(0.001, finiteNumber(quantity, 1));
+          const amount = Math.max(0.001, roundQty(finiteNumber(quantity, 1)));
           // A held order is serialized as JSON, where Infinity (the stock marker
           // for a manual "Универсальный продукт") becomes null.  Manual lines are
           // intentionally not stock-limited, so restore their sentinel here.
@@ -161,7 +166,7 @@ export const useCartStore = create<CartState>()(
             return {
               items: state.items.map((i) =>
                 i.id === existing.id
-                  ? { ...i, quantity: existing.quantity + amount, unit: item.unit ?? i.unit ?? "pcs" }
+                  ? { ...i, quantity: roundQty(existing.quantity + amount), unit: item.unit ?? i.unit ?? "pcs" }
                   : i
               ),
             };
@@ -190,7 +195,7 @@ export const useCartStore = create<CartState>()(
 
       updateQuantity: (id, quantity) =>
         set((state) => {
-          const safeQuantity = finiteNumber(quantity);
+          const safeQuantity = roundQty(finiteNumber(quantity));
           if (safeQuantity <= 0) {
             return { items: state.items.filter((i) => i.id !== id) };
           }

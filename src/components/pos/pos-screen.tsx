@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useCartStore } from "@/store/cart";
+import { useCartStore, roundQty } from "@/store/cart";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { formatCurrency, cn } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
@@ -618,8 +618,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
 
       {/* Cart table */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-[#e4f5f1] text-xs font-semibold tracking-wide text-[#263b38] uppercase">
+        <table className="w-full border-collapse text-base">
+          <thead className="sticky top-0 z-10 bg-[#e4f5f1] text-sm font-semibold tracking-wide text-[#263b38] uppercase [&_th]:border-x [&_th]:border-[#bfe3dc]">
             <tr>
               <th className="w-10 px-3 py-2">
                 <input
@@ -647,14 +647,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
               <th className="px-3 py-2 text-right">Сумма</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-32 text-center text-lg text-slate-500">
-                  Список пуст
-                </td>
-              </tr>
-            ) : (
+          <tbody className="[&_td]:border-x [&_td]:border-b [&_td]:border-[#c9e6e0]">
+            {(
               items.map((item, idx) => (
                 <tr
                   key={item.id}
@@ -672,7 +666,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
                     />
                   </td>
                   <td className="text-muted-foreground px-2 py-2">{idx + 1}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3">
                     <span className="font-medium">{item.name}</span>
                     {item.unit && item.unit !== "pcs" && (
                       <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800 uppercase">{unitLabel(item.unit, true)}</span>
@@ -691,14 +685,14 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {formatCurrency(item.price)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {item.quantity}
+                  <td className="px-3 py-3 text-right tabular-nums" onClick={() => { selectRow(item.id); setQuantityOpen(true); }}>
+                    {roundQty(item.quantity)}
                     {item.unit && item.unit !== "pcs" ? ` ${unitLabel(item.unit, true)}` : ""}
                   </td>
-                  <td className="text-muted-foreground px-3 py-2 text-right tabular-nums">
+                  <td className="text-muted-foreground px-3 py-3 text-right tabular-nums">
                     {`${lineGrossOf(item) > 0 ? ((item.lineDiscount / lineGrossOf(item)) * 100).toFixed(2) : "0.00"} %`}
                   </td>
                   <td className="px-3 py-2 text-right font-medium tabular-nums">
@@ -707,6 +701,12 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
                 </tr>
               ))
             )}
+            {/* UMAG draws the ruled sheet to the bottom of the table: empty ruled rows fill the free space */}
+            {Array.from({ length: Math.max(0, 14 - items.length) }, (_, i) => (
+              <tr key={`filler-${i}`} aria-hidden className="h-[3.1rem]">
+                {Array.from({ length: 7 }, (_, c) => <td key={c} />)}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
