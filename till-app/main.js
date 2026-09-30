@@ -6,6 +6,7 @@
  *    cannot be reached the till gets a plain 503, which is exactly what its offline logic already treats as "no connection".
  */
 const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
@@ -115,6 +116,64 @@ function handle(req, res) {
   return proxy(req, res);
 }
 
+/**
+ * Automatic updates. The program looks for a newer version by itself when it starts and every few hours (only when the
+ * market's server answers), downloads it quietly, and installs it the next time the program is closed — it never restarts
+ * in the middle of a sale. "ПРОВЕРИТЬ ОБНОВЛЕНИЕ" in ДОП. ФУНКЦИИ can ask right now and offer to install at once.
+ * The versions are files on the market's server (Korgen Kassa serves /till-updates/), see docs/till-updates.md.
+ */
+let update = { state: "idle", version: null, message: null };
+function updateFeed() {
+  return process.env.KORGEN_UPDATE_URL ? process.env.KORGEN_UPDATE_URL.replace(/\/+$/, "") : serverUrl() + "/till-updates";
+}
+function logUpdate(line) {
+  try {
+    fs.appendFileSync(path.join(app.getPath("userData"), "update.log"), new Date().toISOString() + " " + line + "\n");
+  } catch {
+    /* logging is best effort */
+  }
+}
+async function checkForUpdate() {
+  if (!app.isPackaged && !process.env.KORGEN_FORCE_UPDATES) return update;
+  try {
+    autoUpdater.setFeedURL({ provider: "generic", url: updateFeed() });
+    await autoUpdater.checkForUpdates();
+  } catch (e) {
+    update = { state: "error", version: null, message: String((e && e.message) || e) };
+    logUpdate("check failed: " + update.message);
+  }
+  return update;
+}
+function setupUpdates() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.logger = null;
+  autoUpdater.on("update-available", (i) => {
+    update = { state: "downloading", version: i.version, message: null };
+    logUpdate("available " + i.version);
+  });
+  autoUpdater.on("update-not-available", () => {
+    update = { state: "none", version: null, message: null };
+    logUpdate("none");
+  });
+  autoUpdater.on("update-downloaded", (i) => {
+    update = { state: "ready", version: i.version, message: null };
+    logUpdate("downloaded " + i.version);
+  });
+  autoUpdater.on("error", (e) => {
+    update = { state: "error", version: null, message: String((e && e.message) || e) };
+    logUpdate("error " + update.message);
+  });
+  ipcMain.handle("update:check", () => checkForUpdate());
+  ipcMain.handle("update:status", () => update);
+  ipcMain.on("update:install", () => {
+    if (update.state === "ready") autoUpdater.quitAndInstall(false, true);
+  });
+  setTimeout(() => void checkForUpdate(), 20_000);
+  setInterval(() => void checkForUpdate(), 4 * 3600_000);
+}
+
 let server;
 function startServer() {
   return new Promise((resolve, reject) => {
@@ -167,6 +226,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on("shell:quit", () => app.quit());
     ipcMain.handle("shell:info", () => ({ version: app.getVersion(), serverUrl: serverUrl() }));
     createWindow();
+    setupUpdates();
   });
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", () => {

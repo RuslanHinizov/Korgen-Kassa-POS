@@ -21,6 +21,6 @@ export async function POST(req: NextRequest) {
 
   const label = `Касса ${parsed.data.code.toUpperCase()}`;
   await prisma.hubToken.updateMany({ where: { storeId: hub.storeId, label, revokedAt: null }, data: { revokedAt: new Date() } });
-  const token = await createHubToken(hub.storeId, label);
+  const token = await createHubToken(hub.storeId, label, hub.cashboxId);
   return NextResponse.json({ token });
 }

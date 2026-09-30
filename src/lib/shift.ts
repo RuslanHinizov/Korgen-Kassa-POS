@@ -179,5 +179,8 @@ export async function registerCashOfShift(shiftId: string): Promise<Map<string, 
     add(s.cashbox?.accountId, cashKept);
     if (s.paymentMethod === "CASH") add(s.cashbox?.accountId, -s.refunds.reduce((a, r) => a + Number(r.amount), 0));
   }
+  // Cash in/out made at the till moved the same account too (Вложения +, Расходы/Дивиденды −).
+  const movements = await prisma.cashMovement.findMany({ where: { shiftId, accountId: { not: null } }, select: { type: true, amount: true, accountId: true } });
+  for (const m of movements) add(m.accountId, m.type === "DEPOSIT" ? Number(m.amount) : -Number(m.amount));
   return byAccount;
 }

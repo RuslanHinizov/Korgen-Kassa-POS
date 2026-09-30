@@ -11,6 +11,15 @@ interface KorgenShell {
   minimize: () => void;
   quit: () => void;
   info: () => Promise<{ version: string; serverUrl: string }>;
+  checkForUpdate?: () => Promise<UpdateStatus>;
+  updateStatus?: () => Promise<UpdateStatus>;
+  installUpdate?: () => void;
+}
+
+export interface UpdateStatus {
+  state: "idle" | "none" | "downloading" | "ready" | "error";
+  version: string | null;
+  message: string | null;
 }
 
 function shell(): KorgenShell | undefined {
@@ -51,4 +60,24 @@ export function collapseWindow(): void {
   }
   if (document.fullscreenElement) void document.exitFullscreen();
   else void document.documentElement.requestFullscreen?.().catch(() => {});
+}
+
+/**
+ * «ПРОВЕРИТЬ ОБНОВЛЕНИЕ» on the till program: ask the program to look for a newer version now and wait (up to a minute)
+ * for a download in progress. Returns null on a browser register, which has nothing to update (the page just reloads).
+ */
+export async function checkForProgramUpdate(): Promise<UpdateStatus | null> {
+  const s = shell();
+  if (!s?.checkForUpdate || !s.updateStatus) return null;
+  let status = await s.checkForUpdate();
+  for (let i = 0; i < 30 && status.state === "downloading"; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    status = await s.updateStatus();
+  }
+  return status;
+}
+
+/** Restart the program into the downloaded version (the caller asks the cashier first). */
+export function installProgramUpdate(): void {
+  shell()?.installUpdate?.();
 }

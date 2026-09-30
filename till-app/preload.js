@@ -5,4 +5,7 @@ contextBridge.exposeInMainWorld("korgenShell", {
   minimize: () => ipcRenderer.send("shell:minimize"),
   quit: () => ipcRenderer.send("shell:quit"),
   info: () => ipcRenderer.invoke("shell:info"),
+  checkForUpdate: () => ipcRenderer.invoke("update:check"),
+  updateStatus: () => ipcRenderer.invoke("update:status"),
+  installUpdate: () => ipcRenderer.send("update:install"),
 });

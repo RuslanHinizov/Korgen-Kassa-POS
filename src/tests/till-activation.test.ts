@@ -45,13 +45,13 @@ describe("create and redeem", () => {
 
   it("gives the market to the first redeem and refuses every later one (one-time)", async () => {
     const { code } = await createActivationCode("s1", "u1");
-    expect(await redeemActivationCode(code)).toBe("s1");
+    expect((await redeemActivationCode(code))?.storeId).toBe("s1");
     expect(await redeemActivationCode(code)).toBeNull();
   });
 
   it("accepts the code typed with or without the dash", async () => {
     const { code } = await createActivationCode("s2", "u1");
-    expect(await redeemActivationCode(code.replace("-", ""))).toBe("s2");
+    expect((await redeemActivationCode(code.replace("-", "")))?.storeId).toBe("s2");
   });
 
   it("refuses an expired code and an unknown one", async () => {

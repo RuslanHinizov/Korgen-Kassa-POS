@@ -59,6 +59,8 @@ services:
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     volumes:
       - uploads_data:/app/uploads
+      # release files of the standalone till program (latest.yml + installer), copied here by hand, see docs/till-updates.md
+      - ./till-updates:/app/till-updates:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

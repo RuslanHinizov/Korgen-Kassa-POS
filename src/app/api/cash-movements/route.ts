@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import { CASHBOX_DEVICE_COOKIE, getPairedCashboxId } from "@/lib/cashbox-device";
 import { serialize } from "@/lib/serialize";
 import { getOpenShift } from "@/lib/shift";
 import { getStoreId } from "@/lib/store-context";
@@ -34,6 +36,8 @@ const createSchema = z.object({
   type: z.enum(["DEPOSIT", "EXPENSE", "DIVIDEND"]),
   amount: z.number().positive(),
   reason: z.string().max(200).optional(),
+  /** For an EXPENSE: the purpose by name (Другое, Закуп мелочей, Заработная плата, Коммунальные расходы, Инкассация). Defaults to Другое. */
+  expenseType: z.string().max(60).optional(),
   /** Offline till: id made on the till (becomes the row's id), the shift it belongs to, when, and who. */
   id: z.string().regex(CLIENT_ID).optional(),
   shiftId: z.string().optional(),
@@ -70,16 +74,50 @@ export async function POST(req: NextRequest) {
 
   const timeAdjusted = !!parsed.data.createdAt && !trustedTime(parsed.data.createdAt);
 
-  const movement = await prisma.cashMovement.create({
-    data: {
-      ...(parsed.data.id ? { id: parsed.data.id } : {}),
-      shiftId: shift.id,
-      userId: movementUserId,
-      type: parsed.data.type,
-      amount: parsed.data.amount,
-      reason: parsed.data.reason,
-      createdAt: trustedTime(parsed.data.createdAt),
-    },
+  // Like UMAG's till, a cash in/out is a finance entry on the register's cash account: Вложения = Приход, Расходы and
+  // Дивиденды = Расход (with its purpose). It shows up in Платежи, the account's history, the cash-flow report and the balance.
+  const pairedId = ctx.cashboxId ?? getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
+  const cashbox = pairedId ? await prisma.cashbox.findFirst({ where: { id: pairedId, storeId }, select: { accountId: true } }) : null;
+  const accountId = cashbox?.accountId ?? null;
+  let expenseTypeId: string | null = null;
+  if (accountId && parsed.data.type !== "DEPOSIT") {
+    const wanted = parsed.data.type === "DIVIDEND" ? { name: "Дивиденды" } : { name: parsed.data.expenseType?.trim() || "Другое" };
+    expenseTypeId =
+      (await prisma.expenseType.findFirst({ where: { storeId, ...wanted }, select: { id: true } }))?.id ??
+      (await prisma.expenseType.findFirst({ where: { storeId, name: "Другое" }, select: { id: true } }))?.id ??
+      null;
+  }
+  const at = trustedTime(parsed.data.createdAt);
+  const movement = await prisma.$transaction(async (tx) => {
+    const created = await tx.cashMovement.create({
+      data: {
+        ...(parsed.data.id ? { id: parsed.data.id } : {}),
+        shiftId: shift.id,
+        userId: movementUserId,
+        type: parsed.data.type,
+        amount: parsed.data.amount,
+        reason: parsed.data.reason,
+        accountId,
+        createdAt: at,
+      },
+    });
+    if (accountId) {
+      const isIn = parsed.data.type === "DEPOSIT";
+      await tx.payment.create({
+        data: {
+          storeId,
+          direction: isIn ? "IN" : "OUT",
+          amount: parsed.data.amount,
+          expenseTypeId,
+          accountId,
+          userId: movementUserId,
+          comment: parsed.data.reason ?? null,
+          createdAt: at,
+        },
+      });
+      await tx.financeAccount.update({ where: { id: accountId }, data: { balance: isIn ? { increment: parsed.data.amount } : { decrement: parsed.data.amount } } });
+    }
+    return created;
   });
 
   await logAudit({

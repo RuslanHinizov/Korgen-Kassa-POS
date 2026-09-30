@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { exitProgram as closeProgram } from "@/lib/till-shell";
+import { exitProgram as closeProgram, checkForProgramUpdate, installProgramUpdate } from "@/lib/till-shell";
 import { flushQueue } from "@/lib/offline/queue";
 import { syncCatalog } from "@/lib/offline/catalog";
 import { toast } from "sonner";
@@ -61,6 +61,20 @@ export function ExtraFunctionsMenu({
 
   async function exitProgram() {
     await closeProgram();
+  }
+
+  async function checkUpdate() {
+    const status = await checkForProgramUpdate();
+    if (!status) {
+      window.location.reload(); // a browser register: reloading is the update
+      return;
+    }
+    if (status.state === "ready") {
+      if (window.confirm(`Скачана новая версия ${status.version}. Установить сейчас? Программа перезапустится.`)) installProgramUpdate();
+      else toast.info("Обновление установится при следующем закрытии программы");
+    } else if (status.state === "downloading") toast.info(`Загружается версия ${status.version}. Она установится при закрытии программы.`);
+    else if (status.state === "error") toast.error("Не удалось проверить обновление: нет связи с сервером");
+    else toast.success("Установлена последняя версия");
   }
 
   function togglePrinter() {
@@ -158,7 +172,7 @@ export function ExtraFunctionsMenu({
           <button className={BUTTON} onClick={() => setBarcodeOpen(true)}>ПОИСК ПО ШТРИХКОДУ</button>
           <button className={BUTTON} onClick={onToggleCollapse} disabled={!canCollapse}>СВЕРНУТЬ</button>
           <button className={BUTTON} onClick={() => setDebtGateOpen(true)}>ДОЛГ</button>
-          <button className={BUTTON} onClick={() => window.location.reload()}>ПРОВЕРИТЬ ОБНОВЛЕНИЕ</button>
+          <button className={BUTTON} onClick={() => void checkUpdate()}>ПРОВЕРИТЬ ОБНОВЛЕНИЕ</button>
           <button className={BUTTON} onClick={() => setAddPrinterOpen(true)}>ДОБАВИТЬ ДОП ПРИНТЕР</button>
 
           <button className={canPriceCheck ? BUTTON : DISABLED_BUTTON} disabled={!canPriceCheck} onClick={() => { onOpenPriceCheck(); onClose(); }}>

@@ -73,3 +73,6 @@ scripts/tenant-scan/last-run.log
 # Local POS installers and compressed distribution archive
 /Umag Kassa/
 /umag.rar
+
+# release files of the standalone till program (copied to the server by hand)
+/till-updates/

@@ -8,7 +8,7 @@ import { DEVICE_OK_HEADER, deviceMayCall } from "@/lib/device-access";
 
 // /api/hub/* carries its own Bearer-token auth (src/lib/hub-auth.ts), never a session cookie — it must
 // reach the route handler as-is instead of being redirected to /login like a signed-out browser.
-const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping", "/api/errors", "/api/hub"];
+const PUBLIC_PATHS = ["/login", "/kasa-giris", "/api/auth", "/api/login", "/setup", "/api/setup", "/api/ping", "/api/errors", "/api/hub", "/till-updates"];
 
 // Matches "/store/<id>" or "/store/<id>/rest/of/path".
 const STORE_PREFIX_RE = /^\/store\/([^/]+)(\/.*)?$/;
@@ -59,6 +59,8 @@ export function proxy(request: NextRequest) {
   if (pathname === "/till" || pathname.startsWith("/till/")) return pass();
   // A brand-new till program has no cookie either: it trades an activation code for its package (rate-limited in the route).
   if (pathname === "/api/till-activate") return pass();
+  // The till program looks for a newer version of itself (electron-updater) with no cookie either; the route serves only release files.
+  if (pathname.startsWith("/till-updates/")) return pass();
 
   // Check setup completion via cookie (set by /api/setup/complete)
   const setupDone = request.cookies.get("olgax-setup-complete")?.value === "1";

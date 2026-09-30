@@ -20,11 +20,12 @@ export async function POST(req: NextRequest) {
   if (tooManyAttempts(client)) return NextResponse.json({ error: "Слишком много попыток. Подождите несколько минут." }, { status: 429 });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
-  const storeId = parsed.success ? await redeemActivationCode(parsed.data.code) : null;
-  if (!storeId) return NextResponse.json({ error: "Код неверный, уже использован или срок его действия истёк." }, { status: 400 });
+  const redeemed = parsed.success ? await redeemActivationCode(parsed.data.code) : null;
+  if (!redeemed) return NextResponse.json({ error: "Код неверный, уже использован или срок его действия истёк." }, { status: 400 });
 
+  const { storeId, cashboxId } = redeemed;
   const body = await buildTillPackageBody(storeId);
   if (!body) return NextResponse.json({ error: "Магазин не найден." }, { status: 404 });
-  body.deviceToken = await createHubToken(storeId, `Активация кассы ${body.generatedAt.slice(0, 16).replace("T", " ")}`);
+  body.deviceToken = await createHubToken(storeId, `Активация кассы ${body.generatedAt.slice(0, 16).replace("T", " ")}`, cashboxId);
   return new NextResponse(await serializePackage(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }

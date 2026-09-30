@@ -331,6 +331,8 @@ function ShiftKeypad({
 }
 
 const MOVEMENT_TYPES = ["DEPOSIT", "EXPENSE", "DIVIDEND"] as const;
+/** UMAG's purposes for a Вынос of type Расходы. */
+const EXPENSE_KINDS = ["Другое", "Закуп мелочей", "Заработная плата", "Коммунальные расходы", "Инкассация"] as const;
 
 /** UMAG's ВНОС,ВЫНОС СРЕДСТВ dialog: type dropdown (defaults to the first — Вложения), amount, comment. */
 function CashMovementDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
@@ -339,6 +341,7 @@ function CashMovementDialog({ onClose, onSaved }: { onClose: () => void; onSaved
   const [type, setType] = useState<(typeof MOVEMENT_TYPES)[number]>("DEPOSIT");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [expenseType, setExpenseType] = useState<(typeof EXPENSE_KINDS)[number]>("Другое");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -348,7 +351,7 @@ function CashMovementDialog({ onClose, onSaved }: { onClose: () => void; onSaved
     setBusy(true);
     setErr("");
     try {
-      const result = await cashMovementOfflineAware({ type, amount: amt, reason: reason || undefined }, t("err_cash"));
+      const result = await cashMovementOfflineAware({ type, amount: amt, reason: reason || undefined, ...(type === "EXPENSE" ? { expenseType } : {}) }, t("err_cash"));
       if (!result.ok) throw new Error(result.error);
       onSaved();
     } catch (e) {
@@ -370,6 +373,15 @@ function CashMovementDialog({ onClose, onSaved }: { onClose: () => void; onSaved
             <option key={tp} value={tp}>{t(`movement_${tp.toLowerCase()}` as "movement_deposit")}</option>
           ))}
         </select>
+        {type === "EXPENSE" && (
+          <select
+            value={expenseType}
+            onChange={(e) => setExpenseType(e.target.value as (typeof EXPENSE_KINDS)[number])}
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {EXPENSE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+          </select>
+        )}
         <div className="space-y-1.5">
           <label className="text-sm font-medium">{t("amount")}</label>
           <input

@@ -38,6 +38,7 @@ services:
       TELEGRAM_API_BASE: "${TELEGRAM_API_BASE:-https://api.telegram.org}"
     volumes:
       - uploads_data:/app/uploads
+      - ./till-updates:/app/till-updates:ro
     depends_on:
       postgres:
         condition: service_healthy

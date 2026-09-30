@@ -1561,6 +1561,8 @@ model HubToken {
   storeId    String
   /// SHA-256 of the actual token — the token itself is shown once, at creation, and never stored in the clear.
   tokenHash  String    @unique
+  /// The register (Cashbox) this till program is, when it was activated for one. Its sales/cash in-out use that register's accounts.
+  cashboxId  String?
   label      String
   createdAt  DateTime  @default(now())
   lastSeenAt DateTime?
@@ -1577,6 +1579,8 @@ model ActivationCode {
   id        String    @id @default(cuid())
   storeId   String
   codeHash  String    @unique
+  /// The register the new till program will be.
+  cashboxId String?
   createdBy String?
   createdAt DateTime  @default(now())
   expiresAt DateTime
@@ -1594,6 +1598,8 @@ model CashMovement {
   type      CashMovementType
   amount    Decimal          @db.Decimal(10, 2)
   reason    String?
+  /// The register cash account this movement moved (a matching finance Payment was booked); null when the till is not tied to a register.
+  accountId String?
   createdAt DateTime         @default(now())
   /// A local Hub only: when this row was pushed to the cloud. Always null on the cloud itself.
   syncedToCloudAt DateTime?

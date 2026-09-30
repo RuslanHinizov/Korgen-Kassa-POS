@@ -9,7 +9,7 @@ import { pluginRegistry } from "@/lib/plugins";
 import { getOpenShift } from "@/lib/shift";
 import { applyInventoryMovement, consumeInventoryLots } from "@/lib/inventory-ledger";
 import { resolveStockLines } from "@/lib/bundle";
-import { lineGross, roundAmount } from "@/lib/rounding";
+import { lineGross, roundAmount, allocateReceiptDiscount } from "@/lib/rounding";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { findBlockedCategory, type SaleRestrictionRule } from "@/lib/sale-restrictions";
 import { attributedUserId } from "@/lib/offline-write";
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
   // Which physical register this sale was rung up on: a Hub names it explicitly (it has no cashbox-device
   // cookie of its own — that cookie lives on the till's browser, one hop further away); a browser till reads
   // its own pairing cookie. Its linked accounts get the proceeds, so cash/card lands on the register's real balance.
-  const pairedCashboxId = cashboxIdInput ?? getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
+  const pairedCashboxId = cashboxIdInput ?? ctx.cashboxId ?? getPairedCashboxId((await cookies()).get(CASHBOX_DEVICE_COOKIE)?.value);
   const pairedCashbox = pairedCashboxId
     ? await prisma.cashbox.findFirst({
         where: { id: pairedCashboxId, storeId },
@@ -338,6 +338,12 @@ export async function POST(req: NextRequest) {
     subtotal,
     roundAmount(discountValue + promoDiscount, settings?.posRoundingDiscount) + loyaltyDiscount
   );
+  // Receipt-level discounts (header %, promotions, card, points) become part of each line's own discount.
+  const receiptLevelDiscount = Math.max(0, totalDiscount - lineDiscountTotal);
+  const lineShares = allocateReceiptDiscount(
+    items.map((i) => ({ gross: lineGrossOf(i), lineDiscount: i.discountAmount || 0 })),
+    receiptLevelDiscount
+  );
   const taxAmt = (subtotal - totalDiscount) * taxRate;
   const total = subtotal - totalDiscount + taxAmt + (tipAmount ?? 0);
 
@@ -464,8 +470,8 @@ export async function POST(req: NextRequest) {
               price: i.price,
               quantity: i.quantity,
               unit: i.unit,
-              discountAmount: i.discountAmount || 0,
-              total: lineGrossOf(i) - (i.discountAmount || 0),
+              discountAmount: (i.discountAmount || 0) + lineShares[lineNo],
+              total: lineGrossOf(i) - (i.discountAmount || 0) - lineShares[lineNo],
               notes: i.notes ?? undefined,
             })),
           },

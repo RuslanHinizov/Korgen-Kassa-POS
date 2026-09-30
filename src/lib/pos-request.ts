@@ -8,6 +8,8 @@ export interface PosRequestContext {
   actor: PosActor;
   /** true when this request came from a local Hub (Bearer token), not a cashier's own session. */
   viaHub: boolean;
+  /** The register this request's device key was activated for (a standalone till), else null. */
+  cashboxId?: string | null;
 }
 
 /**
@@ -20,7 +22,7 @@ export interface PosRequestContext {
  */
 export async function resolvePosRequest(req: NextRequest): Promise<PosRequestContext | { error: NextResponse }> {
   const hub = await resolveHubActor(req);
-  if (hub) return { storeId: hub.storeId, actor: { userId: "", role: "HUB" }, viaHub: true };
+  if (hub) return { storeId: hub.storeId, actor: { userId: "", role: "HUB" }, viaHub: true, cashboxId: hub.cashboxId };
 
   const actor = await resolvePosActor();
   if (!actor) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };

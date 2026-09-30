@@ -68,13 +68,15 @@ function TillKeys() {
 }
 
 /** One-time code for a new till program: it types it and downloads its market package by itself. */
-function ActivationCodeBox() {
+function ActivationCodeBox({ cashboxes }: { cashboxes: { id: string; name: string }[] }) {
   const [result, setResult] = useState<{ code: string; expiresAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cashboxId, setCashboxId] = useState("");
+  const chosen = cashboxId || cashboxes[0]?.id || "";
   async function create() {
     setBusy(true);
     try {
-      const res = await fetch("/api/till-package/activation", { method: "POST" });
+      const res = await fetch("/api/till-package/activation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cashboxId: chosen || undefined }) });
       if (res.ok) setResult(await res.json());
       else toast.error("Не удалось создать код");
     } finally {
@@ -87,6 +89,14 @@ function ActivationCodeBox() {
         <div className="font-medium">Код активации новой кассы</div>
         <div className="text-muted-foreground">Введите код в программе кассы — она сама загрузит данные магазина. Код одноразовый и действует 24 часа.</div>
       </div>
+      {cashboxes.length > 0 && (
+        <label className="text-sm">
+          <span className="text-muted-foreground mr-2">Это касса:</span>
+          <select value={chosen} onChange={(e) => { setCashboxId(e.target.value); setResult(null); }} className="bg-background h-9 rounded-md border px-2 text-sm" data-testid="activation-cashbox">
+            {cashboxes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      )}
       {result ? (
         <div className="text-right">
           <div className="text-2xl font-bold tracking-widest tabular-nums" data-testid="activation-code">{result.code}</div>
@@ -240,7 +250,7 @@ export function CashboxesList() {
             </a>
           </div>
 
-          <ActivationCodeBox />
+          <ActivationCodeBox cashboxes={cashboxes} />
 
           <TillKeys />
         </>

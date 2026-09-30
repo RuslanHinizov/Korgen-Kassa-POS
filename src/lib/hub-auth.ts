@@ -15,9 +15,9 @@ function hashToken(token: string): string {
 }
 
 /** Issues a new token for a store. Returns the plaintext token — shown once, never recoverable afterwards. */
-export async function createHubToken(storeId: string, label: string): Promise<string> {
+export async function createHubToken(storeId: string, label: string, cashboxId?: string | null): Promise<string> {
   const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
-  await prisma.hubToken.create({ data: { storeId, label, tokenHash: hashToken(token) } });
+  await prisma.hubToken.create({ data: { storeId, label, tokenHash: hashToken(token), cashboxId: cashboxId ?? null } });
   return token;
 }
 
@@ -28,6 +28,8 @@ export async function revokeHubToken(id: string): Promise<void> {
 export interface HubActor {
   storeId: string;
   tokenId: string;
+  /** The register this device was activated for, if any. */
+  cashboxId: string | null;
 }
 
 /** Resolves the store a Hub request is authorized for, from its Authorization header. Null if invalid/revoked. */
@@ -43,7 +45,7 @@ export async function resolveHubActor(req: Request): Promise<HubActor | null> {
   if (!row || row.revokedAt) return null;
 
   void prisma.hubToken.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
-  return { storeId: row.storeId, tokenId: row.id };
+  return { storeId: row.storeId, tokenId: row.id, cashboxId: row.cashboxId ?? null };
 }
 
 /** Constant-time string compare, for anything (rare) that still needs to compare a secret directly. */
