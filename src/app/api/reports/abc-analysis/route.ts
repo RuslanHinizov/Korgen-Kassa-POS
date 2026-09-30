@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   const base = statRows.map((r) => {
     const p = productMap.get(r.productId);
     const price = Number(p?.price ?? 0);
-    const cost = Number(p?.cost ?? p?.price ?? 0);
+    const cost = Number(p?.cost ?? 0);
     const qty = r.saleQty - r.returnQty;
     const costTotal = r.saleCost - r.returnCost;
     const revenue = r.saleAmount - r.returnAmount;

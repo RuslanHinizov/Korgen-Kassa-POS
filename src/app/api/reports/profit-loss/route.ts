@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     const split = splitByMethod(s);
     cash += split.cash; card += split.card; other += split.other;
     for (const it of s.items) {
-      cogsSold += Number(it.quantity) * Number(it.product?.cost ?? it.product?.price ?? 0);
+      cogsSold += Number(it.quantity) * Number(it.product?.cost ?? 0);
     }
   }
 
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
   }
   if (productIds.size > 0) {
     const products = await prisma.product.findMany({ where: { id: { in: [...productIds] }, storeId }, select: { id: true, cost: true, price: true } });
-    const costMap = new Map(products.map((p) => [p.id, Number(p.cost ?? p.price)]));
+    const costMap = new Map(products.map((p) => [p.id, Number(p.cost ?? 0)]));
     for (const r of refunds) {
       const items = r.items as unknown as { productId?: string | null; quantity: number }[];
       for (const it of items) {

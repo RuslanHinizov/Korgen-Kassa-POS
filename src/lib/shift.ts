@@ -67,9 +67,30 @@ export async function computeShiftReport(shiftId: string): Promise<ShiftReport |
   const refundedSales = shift.sales.filter((s: any) => s.status === "REFUNDED");
 
   const grossSales = completed.reduce((a: number, s: { total: unknown }) => a + Number(s.total), 0);
+  // Profit as in UMAG's shift report: (sales − returns) − (cost of sold − cost of returned). A product without a purchase
+  // price counts as cost 0. A fully refunded sale is still a sale of this shift; its refund is what comes off.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const costTotal = completed.reduce((a: number, s: any) => a + s.items.reduce((b: number, i: any) => b + Number(i.quantity) * Number(i.product?.cost ?? i.product?.price ?? 0), 0), 0);
-  const profit = grossSales - costTotal;
+  const soldSales = shift.sales.filter((s: any) => s.status !== "VOIDED");
+  const unitCostByProduct = new Map<string, number>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const s of soldSales as any[]) for (const i of s.items) if (i.productId) unitCostByProduct.set(i.productId, Number(i.product?.cost ?? 0));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const soldRevenue = soldSales.reduce((a: number, s: any) => a + Number(s.total), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const soldCost = soldSales.reduce((a: number, s: any) => a + s.items.reduce((b: number, i: any) => b + Number(i.quantity) * Number(i.product?.cost ?? 0), 0), 0);
+  let returnedRevenue = 0;
+  let returnedCost = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const s of soldSales as any[]) {
+    for (const r of s.refunds) {
+      returnedRevenue += Number(r.amount);
+      for (const l of Array.isArray(r.items) ? (r.items as { productId?: string | null; quantity: number }[]) : []) {
+        returnedCost += Number(l.quantity) * (l.productId ? (unitCostByProduct.get(l.productId) ?? 0) : 0);
+      }
+    }
+  }
+  const costTotal = soldCost - returnedCost;
+  const profit = soldRevenue - returnedRevenue - costTotal;
   const taxTotal = completed.reduce((a: number, s: { taxAmount: unknown }) => a + Number(s.taxAmount ?? 0), 0);
   const tipTotal = completed.reduce((a: number, s: { tipAmount: unknown }) => a + Number(s.tipAmount ?? 0), 0);
   const discountTotal = completed.reduce((a: number, s: { discountAmount: unknown }) => a + Number(s.discountAmount ?? 0), 0);

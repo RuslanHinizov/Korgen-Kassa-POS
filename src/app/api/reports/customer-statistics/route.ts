@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     for (const it of items) if (it.productId) productIds.add(it.productId);
   }
   const products = await prisma.product.findMany({ where: { id: { in: [...productIds] }, storeId }, select: { id: true, cost: true, price: true } });
-  const costMap = new Map(products.map((p) => [p.id, Number(p.cost ?? p.price)]));
+  const costMap = new Map(products.map((p) => [p.id, Number(p.cost ?? 0)]));
 
   const buckets = new Map<string, Bucket>();
   function bucket(key: string) {

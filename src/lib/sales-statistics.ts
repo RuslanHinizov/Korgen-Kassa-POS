@@ -146,7 +146,7 @@ export async function getProductStatRows(req: NextRequest): Promise<ProductStatR
     if (!p) continue;
     const qty = Number(g._sum.quantity ?? 0);
     const amount = Number(g._sum.total ?? 0);
-    const unitCost = Number(p.cost ?? p.price);
+    const unitCost = Number(p.cost ?? 0);
     const ret = returnByProduct.get(p.id);
     rows.push({
       productId: p.id,
@@ -168,7 +168,7 @@ export async function getProductStatRows(req: NextRequest): Promise<ProductStatR
     if (rows.some((r) => r.productId === productId)) continue;
     const p = productMap.get(productId);
     if (!p || !passesProductFilter(p)) continue;
-    const unitCost = Number(p.cost ?? p.price);
+    const unitCost = Number(p.cost ?? 0);
     rows.push({
       productId: p.id,
       productName: p.name,

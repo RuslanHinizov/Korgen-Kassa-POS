@@ -13,7 +13,11 @@ export interface RevenueSummary {
   revenueByDay: RevenueDay[];
 }
 
-/** Revenue/profit summary for [start, end] — used by the Главная dashboard. */
+/**
+ * Revenue/profit summary for [start, end] — used by the Главная dashboard.
+ * Like UMAG's: revenue = sales − returns, profit = (sales − their cost) − (returns − the cost of what came back).
+ * Returns count on the day they were made; a fully refunded sale still counts as a sale (its refund is the deduction).
+ */
 export async function getRevenueSummary(
   start: Date,
   end: Date,
@@ -23,7 +27,7 @@ export async function getRevenueSummary(
 ): Promise<RevenueSummary> {
   const localDay = (d: Date) => new Date(d.getTime() - tzOffsetMin * 60000).toISOString().slice(0, 10);
   const sales = await prisma.sale.findMany({
-    where: { storeId, createdAt: { gte: start, lte: end }, status: "COMPLETED" },
+    where: { storeId, createdAt: { gte: start, lte: end }, status: { in: ["COMPLETED", "REFUNDED"] } },
     select: {
       total: true,
       discountAmount: true,
@@ -54,6 +58,27 @@ export async function getRevenueSummary(
       const itemRevenue = parseFloat(item.total.toString());
       const unitCost = item.product?.cost ? parseFloat(item.product.cost.toString()) : 0;
       totalGrossProfit += itemRevenue - unitCost * parseFloat(item.quantity.toString());
+    }
+  }
+
+  // Returns made in the period, taken off revenue and (at cost) added back to profit.
+  const refunds = await prisma.refund.findMany({
+    where: { sale: { storeId }, createdAt: { gte: start, lte: end } },
+    select: { amount: true, createdAt: true, items: true },
+  });
+  const refundLines = refunds.flatMap((r) => (Array.isArray(r.items) ? (r.items as unknown as { productId?: string | null; quantity: number }[]) : []));
+  const returnedIds = [...new Set(refundLines.map((l) => l.productId).filter((id): id is string => !!id))];
+  const costRows = returnedIds.length ? await prisma.product.findMany({ where: { id: { in: returnedIds }, storeId }, select: { id: true, cost: true } }) : [];
+  const costById = new Map(costRows.map((p) => [p.id, Number(p.cost ?? 0)]));
+  for (const r of refunds) {
+    const day = localDay(r.createdAt);
+    if (!byDay[day]) byDay[day] = { revenue: 0, transactions: 0 };
+    const amount = Number(r.amount);
+    byDay[day].revenue -= amount;
+    totalRevenue -= amount;
+    totalGrossProfit -= amount;
+    for (const l of Array.isArray(r.items) ? (r.items as unknown as { productId?: string | null; quantity: number }[]) : []) {
+      totalGrossProfit += Number(l.quantity) * (l.productId ? (costById.get(l.productId) ?? 0) : 0);
     }
   }
 
