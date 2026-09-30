@@ -56,14 +56,14 @@ export function SalesTable({ sales }: SalesTableProps) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "UTC",
+    timeZone: "Asia/Almaty",
   });
   const saleDateFormatterShort = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "UTC",
+    timeZone: "Asia/Almaty",
   });
 
   if (sales.length === 0) {

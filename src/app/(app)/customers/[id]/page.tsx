@@ -95,7 +95,7 @@ export default async function CustomerProfilePage({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{td("member_since")}</p>
-              <p className="text-sm font-medium">{new Date(customer.createdAt).toLocaleDateString()}</p>
+              <p className="text-sm font-medium">{new Date(customer.createdAt).toLocaleDateString("ru-RU", { timeZone: "Asia/Almaty" })}</p>
             </div>
             <CustomerCreditPanel customerId={customer.id} balance={balance} />
           </div>

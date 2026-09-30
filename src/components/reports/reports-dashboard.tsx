@@ -143,7 +143,7 @@ export function ReportsDashboard() {
           {" · "}
           {t(excludeRefunds ? "net_revenue" : "revenue")}
           {" · "}
-          {new Date().toLocaleDateString()}
+          {new Date().toLocaleDateString("ru-RU", { timeZone: "Asia/Almaty" })}
         </p>
         <hr className="mt-3 border-gray-300" />
       </div>

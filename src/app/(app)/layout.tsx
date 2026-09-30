@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { setCurrencyConfig } from "@/lib/utils";
 import { AppShell } from "@/components/layout/app-shell";
 import { StoreProvider } from "@/components/store/store-provider";
+import { CurrencyInit } from "@/components/layout/currency-init";
 import { resolveStoreAccess } from "@/lib/store-context";
 import { StoreBlocked } from "@/components/store/store-blocked";
 import { SupportChat } from "@/components/support/support-chat";
@@ -101,6 +102,7 @@ export default async function AppLayout({
           })}`,
         }}
       />
+      <CurrencyInit symbol={currencySymbol} decimals={currencyDecimals} locale={currencyLocale} />
       <StoreProvider storeId={storeId}>
         <AppShell user={session.user} businessName={settings?.name ?? "Korgen Kassa"} cssVars={cssVars}>
           {children}

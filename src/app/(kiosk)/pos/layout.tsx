@@ -3,6 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/db";
 import { setCurrencyConfig } from "@/lib/utils";
 import { StoreProvider } from "@/components/store/store-provider";
+import { CurrencyInit } from "@/components/layout/currency-init";
 import { resolveStoreAccess } from "@/lib/store-context";
 import { StoreBlocked } from "@/components/store/store-blocked";
 import { SupportChat } from "@/components/support/support-chat";
@@ -64,6 +65,7 @@ export default async function KioskLayout({ children }: { children: React.ReactN
           })}`,
         }}
       />
+      <CurrencyInit symbol={currencySymbol} decimals={currencyDecimals} locale={currencyLocale} />
       <StoreProvider storeId={storeId}>
         <div className="h-screen w-screen overflow-hidden bg-background">{children}</div>
         <SupportChat compact />

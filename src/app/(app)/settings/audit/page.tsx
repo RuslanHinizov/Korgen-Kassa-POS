@@ -94,7 +94,7 @@ export default function AuditPage() {
                   </td>
                   <td className="px-4 py-3 text-xs">{l.user?.name ?? l.userId}</td>
                   <td className="px-4 py-3">
-                    <span className="text-xs rounded bg-muted px-2 py-0.5 font-medium">{t(`action_${l.action}`)}</span>
+                    <span className="text-xs rounded bg-muted px-2 py-0.5 font-medium">{t.has(`action_${l.action}`) ? t(`action_${l.action}`) : l.action}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono break-all max-w-xs">
                     {l.entityType ? `${l.entityType}${l.entityId ? `#${String(l.entityId).slice(-6)}` : ""} ` : ""}

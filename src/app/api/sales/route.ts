@@ -279,7 +279,9 @@ export async function POST(req: NextRequest) {
   }));
   const blocked = findBlockedCategory(
     items.map((i) => (i.productId ? catById.get(i.productId) : undefined)),
-    restrictionRuleList
+    restrictionRuleList,
+    // an offline sale is judged at the moment it was rung up, not at the moment it reached the server
+    soldAtDate ?? new Date()
   );
   if (blocked) {
     return NextResponse.json(
@@ -322,7 +324,7 @@ export async function POST(req: NextRequest) {
       minSubtotal: p.minSubtotal == null ? null : Number(p.minSubtotal),
     })) as PromotionRule[];
     const cardPct = card && card.active ? Number(card.percent) : 0;
-    const evalRes = evaluatePromotions(lines, rules, { discountCardPercent: cardPct });
+    const evalRes = evaluatePromotions(lines, rules, { discountCardPercent: cardPct, now: soldAtDate ?? new Date() });
     promoDiscount = evalRes.totalDiscount;
     promoLines = evalRes.discounts;
   } catch (e) {

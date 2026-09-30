@@ -981,6 +981,8 @@
     "action_DISCOUNT_OVERRIDE": "Discount override",
     "action_PRICE_OVERRIDE": "Price override",
     "action_STOCK_ADJUST": "Stock adjustment",
+    "action_PRODUCT_CREATE": "Product created",
+    "action_SUPERADMIN_PASSWORD_RESET": "Platform owner reset a password",
     "action_STOCK_RECEIPT": "Goods receipt",
     "action_STOCKTAKE_POST": "Stocktake posted",
     "action_SETTINGS_UPDATE": "Settings updated",

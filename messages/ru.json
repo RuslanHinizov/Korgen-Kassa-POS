@@ -1008,6 +1008,8 @@
     "action_DISCOUNT_OVERRIDE": "Скидка сверх лимита",
     "action_PRICE_OVERRIDE": "Изменение цены",
     "action_STOCK_ADJUST": "Изменение остатка",
+    "action_PRODUCT_CREATE": "Создан товар",
+    "action_SUPERADMIN_PASSWORD_RESET": "Владелец платформы сбросил пароль",
     "action_STOCK_RECEIPT": "Приёмка товара",
     "action_STOCKTAKE_POST": "Инвентаризация проведена",
     "action_WRITE_OFF_POST": "Списание проведено",

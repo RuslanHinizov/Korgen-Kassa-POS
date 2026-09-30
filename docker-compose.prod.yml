@@ -51,6 +51,8 @@ services:
       NEXT_PUBLIC_APP_URL: "https://${DOMAIN}"
       BETTER_AUTH_TRUSTED_ORIGINS: "https://${DOMAIN}"
       NODE_ENV: production
+      # Kazakhstan time: day boundaries in reports, curfew/promotion time windows and server-rendered dates all use it
+      TZ: Asia/Almaty
       UPLOAD_DIR: /app/uploads
       # optional phone alerts (Telegram): new errors, support messages. Leave empty to disable.
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"

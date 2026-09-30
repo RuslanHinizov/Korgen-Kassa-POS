@@ -271,7 +271,7 @@ export default function CustomersPage() {
                       {c.visitCount}
                     </td>
                     <td className="px-4 py-3 text-right text-muted-foreground text-xs">
-                      {c.lastVisit ? new Date(c.lastVisit).toLocaleDateString() : "-"}
+                      {c.lastVisit ? new Date(c.lastVisit).toLocaleDateString("ru-RU", { timeZone: "Asia/Almaty" }) : "-"}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs">
                         {c.loyaltyPoints}
