@@ -82,7 +82,7 @@ export function KioskTopBar({
 
   return (
     <div
-      className={`flex min-h-10 shrink-0 items-center gap-3 border-b px-3 text-sm font-semibold ${
+      className={`flex min-h-11 shrink-0 items-center gap-4 border-b px-3 text-base font-semibold uppercase ${
         palette
       }`}
     >
@@ -105,7 +105,7 @@ export function KioskTopBar({
           <span className="font-bold">{cashierName}</span>
         )}
       </span>
-      <span className="hidden text-xs font-bold lg:inline">v {APP_VERSION}</span>
+      <span className="hidden text-sm font-bold normal-case lg:inline">v {APP_VERSION}</span>
       {/* UMAG shows the connection as a dot next to the version: green = connected, red = no connection. */}
       <span
         data-testid="connection-dot"
@@ -114,14 +114,14 @@ export function KioskTopBar({
       />
 
       <div className="ml-auto flex items-center gap-1">
-        <button type="button" onClick={onShowSales} className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "sales" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}>
+        <button type="button" onClick={onShowSales} className={`self-stretch px-4 py-2.5 text-sm font-bold ${activeTab === "sales" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}>
           Продажи
         </button>
         {canReturn && (
           <button
             type="button"
             onClick={onShowReturns}
-            className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "returns" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
+            className={`self-stretch px-4 py-2.5 text-sm font-bold ${activeTab === "returns" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
           >
             Возврат
           </button>
@@ -129,7 +129,7 @@ export function KioskTopBar({
         <button
           type="button"
           onClick={onShowShift}
-          className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "shift" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
+          className={`self-stretch px-4 py-2.5 text-sm font-bold ${activeTab === "shift" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
         >
           Смена
         </button>
@@ -137,7 +137,7 @@ export function KioskTopBar({
           <button
             type="button"
             onClick={onShowSalesHistory}
-            className={`self-stretch px-3 py-2.5 text-xs font-bold ${activeTab === "history" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
+            className={`self-stretch px-4 py-2.5 text-sm font-bold ${activeTab === "history" ? "bg-white text-[#172b1d]" : "hover:bg-white/15"}`}
           >
             История продаж
           </button>

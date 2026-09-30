@@ -18,7 +18,7 @@ export function UnsyncedBanner() {
   if (waiting === 0 && status.failed === 0 && !status.timeAdjusted) return null;
 
   return (
-    <div data-testid="unsynced-banner" className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-950">
+    <div data-testid="unsynced-banner" className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800">
       {waiting > 0 && dismissedFor !== waiting && (
         <span className="flex items-center gap-2">
           <span data-testid="unsynced-text">
@@ -26,7 +26,7 @@ export function UnsyncedBanner() {
               ? `Отправка данных на сервер… (не отправлено: ${waiting})`
               : `Есть не синхронизированные данные. Пожалуйста подключите интернет. (${waiting})`}
           </span>
-          <button type="button" aria-label="Закрыть" onClick={() => setDismissedFor(waiting)} className="rounded p-0.5 hover:bg-amber-200">
+          <button type="button" aria-label="Закрыть" onClick={() => setDismissedFor(waiting)} className="rounded p-0.5 hover:bg-slate-200">
             <X className="h-4 w-4" />
           </button>
         </span>

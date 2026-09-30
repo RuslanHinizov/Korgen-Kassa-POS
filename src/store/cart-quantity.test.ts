@@ -8,7 +8,7 @@ describe("cart quantities per unit", () => {
   beforeEach(() => useCartStore.getState().clearCart());
 
   it("repeated +0.1 taps on kg/l/m stay clean (no 1.2000000000000002)", () => {
-    for (const unit of ["kg", "l", "m"]) {
+    for (const unit of ["kg", "l", "m"] as const) {
       useCartStore.getState().clearCart();
       useCartStore.getState().addItem({ ...base, unit });
       const id = useCartStore.getState().items[0].id;

@@ -574,17 +574,13 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
         hasOpenShift={hasOpenShift}
       />
       <OfflineManager cashierId={cashierId} cashierName={serverCashierName} cashierRole={serverCashierRole} storeId={storeId} />
-      <UnsyncedBanner />
 
       <div className={salesPanel ? "hidden" : "contents"}>
-
-      <div className="shrink-0 border-b border-slate-200 px-3 py-1.5 text-lg font-medium">
-        Номер чека: <span className="tabular-nums">новый</span>
-      </div>
 
       {/* Search / sale parameters row */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 px-3 py-2">
         <KioskSearchBar />
+        <UnsyncedBanner />
         <div className="text-muted-foreground ml-auto flex items-center gap-2 text-sm">
           {customer ? (
             <span className="rounded-md border px-2 py-1.5 text-xs">{customer.name}</span>
@@ -718,8 +714,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           <div><p className="text-lg font-bold">Сначала откройте смену</p><p className="text-sm">Откройте вкладку «Смена», затем можно будет принять оплату.</p></div>
         </div>
       )}
-      <div className="flex shrink-0 flex-col gap-3 border-t border-slate-700 bg-[#383838] p-4 sm:flex-row sm:items-stretch">
-        <div className="flex min-h-44 shrink-0 flex-col justify-center gap-3 rounded-lg bg-white px-7 py-5 text-[#14231b] shadow-sm sm:w-[24rem]">
+      <div className="flex shrink-0 flex-col gap-3 border-t border-slate-700 bg-[#404040] p-5 sm:flex-row sm:items-stretch">
+        <div className="flex min-h-56 shrink-0 flex-col justify-center gap-4 rounded-xl bg-white px-8 py-6 text-[#14231b] shadow-sm sm:w-[26rem]">
           <Row label="ИТОГО" value={formatCurrency(tot)} bold />
           <Row label="ПОЛУЧЕНО" value={formatCurrency(0)} />
           <Row label="СДАЧА" value={formatCurrency(0)} />
@@ -727,7 +723,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           {tax > 0 && <Row label={t("tax")} value={formatCurrency(tax)} />}
         </div>
 
-        <div className="ml-auto grid w-full max-w-[36rem] grid-cols-4 gap-1.5 self-center">
+        <div className="ml-auto grid w-full max-w-[38rem] grid-cols-4 gap-2 self-end">
           <span />
           <BottomButton label="Быстрые товары" onClick={() => setQuickOpen(true)} />
           <BottomButton label="Количество" onClick={() => setQuantityOpen(true)} disabled={!activeItem} />
@@ -751,7 +747,10 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
             data-charge-btn
             onClick={() => setPaymentOpen(true)}
             disabled={items.length === 0 || (requireShift && !hasOpenShift)}
-            className="col-span-2 flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-lg bg-[#26877c] px-3 py-2 text-xl font-bold text-white hover:bg-[#1e7068] disabled:pointer-events-none disabled:opacity-50"
+            className={cn(
+              "col-span-2 flex min-h-[4.75rem] flex-col items-center justify-center gap-0.5 rounded-lg bg-[#26877c] px-3 py-2 font-bold text-white uppercase hover:bg-[#1e7068] disabled:pointer-events-none disabled:opacity-50",
+              requireShift && !hasOpenShift ? "text-base" : "text-2xl"
+            )}
           >
             {requireShift && !hasOpenShift ? "Сначала откройте смену" : `Оплата ${items.length > 0 ? formatCurrency(tot) : ""}`}
           </button>
@@ -1041,7 +1040,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div className={cn("flex justify-between text-base", bold && "text-xl font-bold")}>
+    <div className={cn("flex justify-between text-xl", bold && "text-3xl font-bold")}>
       <span className={bold ? "" : "text-muted-foreground"}>{label}</span>
       <span>{value}</span>
     </div>
@@ -1071,14 +1070,14 @@ function BottomButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border border-slate-300 bg-[#f2f2f2] px-2 py-2 text-center text-[10px] leading-tight font-semibold text-[#353535] uppercase shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        "flex min-h-[4.75rem] flex-col items-center justify-center gap-1 rounded-lg border border-slate-300 bg-[#f2f2f2] px-2 py-2 text-center text-xs leading-tight font-semibold text-[#353535] uppercase shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         variant === "destructive"
           ? "border-[#8c4e48] bg-[#8d514c] text-white hover:bg-[#773f3a]"
           : "hover:text-foreground hover:bg-white"
       )}
     >
       {Icon && <Icon className="h-4 w-4" />}
-      <span className={big ? "text-3xl leading-none" : undefined}>{label}</span>
+      <span className={big ? "text-4xl leading-none" : undefined}>{label}</span>
     </button>
   );
 }
