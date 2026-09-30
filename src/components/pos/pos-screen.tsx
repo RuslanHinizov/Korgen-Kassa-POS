@@ -481,6 +481,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       amountTendered: saleAmountTendered,
       changeDue: Math.max(0, saleAmountTendered - saleTotal),
       createdAt: new Date(),
+      cashierName,
     };
     setReceiptData(data);
     clearCart();
@@ -870,7 +871,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           onOpenPriceCheck={() => setPriceCheckOpen(true)}
           canCollapse={permissions.posCollapseWindow}
           onToggleCollapse={collapseWindow}
-          onShowReceipt={(data) => setReceiptData(data)}
+          onShowReceipt={(data) => setReceiptData({ cashierName, ...data })}
         />
       )}
       {/* ЗАБЛОКИРОВАТЬ КАССУ — localStorage-backed (src/lib/till-lock.ts) so a reload or re-navigating to

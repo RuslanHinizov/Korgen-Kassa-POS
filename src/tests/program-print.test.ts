@@ -30,7 +30,7 @@ describe("program printing", () => {
     expect(html).toContain("/_next/static/a.css");
     expect(html).toContain('<base href="http://localhost:3000/">');
     expect(html).toContain('id="receipt-print-overlay"');
-    expect(html).toContain("@page{size:76mm auto;margin:0}");
+    expect(html).toContain("@page{size:72mm auto;margin:0}");
   });
 
   it("says so when no receipt is on screen", async () => {

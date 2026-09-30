@@ -204,66 +204,102 @@ async function pickPrinter(webContents) {
   return def ? def.name : null;
 }
 /**
- * The receipt is drawn in a hidden window, photographed at the printer's own resolution (203 dpi, 64 mm wide), and that
- * picture is sent to the Windows driver by a tiny PowerShell script (System.Drawing). Chromium's own silent print
- * produced blank strips on roll printers whose driver has a "continuous" paper size; a plain bitmap job prints right.
+ * The receipt is drawn in a hidden window at the printer's own resolution, turned into black/white dots, and sent to the
+ * printer as raw ESC/POS raster data straight through the Windows spooler (RAW). No driver scaling: the Windows driver of
+ * these roll printers reports an odd 160x72 dpi and resamples any picture (blurry, glued-together letters); raw dots are
+ * printed 1:1 and stay sharp. The printable width of an 80 mm class printer is 576 dots (72 mm); a narrower one can be set
+ * with {"printWidthDots": 384} in %APPDATA%\Korgen Kassa\config.json.
  */
-const PRINT_SCRIPT = [
-  "param([string]$Printer, [string]$Image)",
-  "Add-Type -AssemblyName System.Drawing",
-  "$img = [System.Drawing.Image]::FromFile($Image)",
-  "$doc = New-Object System.Drawing.Printing.PrintDocument",
-  "$doc.PrinterSettings.PrinterName = $Printer",
-  "if (-not $doc.PrinterSettings.IsValid) { Write-Error 'printer not found'; exit 2 }",
-  "$doc.DocumentName = 'Korgen Kassa receipt'",
-  "$doc.add_PrintPage({ param($s, $e)",
-  "  $w = [Math]::Min(250.0, $e.PageSettings.PrintableArea.Width)",
-  "  $h = $w * $img.Height / $img.Width",
-  "  $e.Graphics.DrawImage($img, 0, 0, $w, $h)",
-  "  $e.HasMorePages = $false })",
-  "$doc.Print()",
-  "$img.Dispose()",
-].join("\r\n");
+const RAW_SEND_SCRIPT = "param([string]$Printer, [string]$File)\nAdd-Type -TypeDefinition @\"\nusing System;\nusing System.Runtime.InteropServices;\npublic class RawPrinter {\n  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]\n  public class DOCINFO { [MarshalAs(UnmanagedType.LPWStr)] public string pDocName; [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile; [MarshalAs(UnmanagedType.LPWStr)] public string pDataType; }\n  [DllImport(\"winspool.drv\", EntryPoint = \"OpenPrinterW\", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool OpenPrinter(string name, out IntPtr h, IntPtr pd);\n  [DllImport(\"winspool.drv\", SetLastError = true)] public static extern bool ClosePrinter(IntPtr h);\n  [DllImport(\"winspool.drv\", EntryPoint = \"StartDocPrinterW\", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool StartDocPrinter(IntPtr h, int level, [In] DOCINFO di);\n  [DllImport(\"winspool.drv\", SetLastError = true)] public static extern bool EndDocPrinter(IntPtr h);\n  [DllImport(\"winspool.drv\", SetLastError = true)] public static extern bool StartPagePrinter(IntPtr h);\n  [DllImport(\"winspool.drv\", SetLastError = true)] public static extern bool EndPagePrinter(IntPtr h);\n  [DllImport(\"winspool.drv\", SetLastError = true)] public static extern bool WritePrinter(IntPtr h, byte[] bytes, int count, out int written);\n  public static string Send(string printer, byte[] data) {\n    IntPtr h;\n    if (!OpenPrinter(printer, out h, IntPtr.Zero)) return \"OpenPrinter failed \" + Marshal.GetLastWin32Error();\n    var di = new DOCINFO { pDocName = \"Korgen Kassa receipt\", pDataType = \"RAW\" };\n    string err = null;\n    if (!StartDocPrinter(h, 1, di)) err = \"StartDoc failed \" + Marshal.GetLastWin32Error();\n    else {\n      StartPagePrinter(h);\n      int written;\n      if (!WritePrinter(h, data, data.Length, out written) || written != data.Length) err = \"WritePrinter failed \" + Marshal.GetLastWin32Error();\n      EndPagePrinter(h);\n      EndDocPrinter(h);\n    }\n    ClosePrinter(h);\n    return err;\n  }\n}\n\"@\n$bytes = [System.IO.File]::ReadAllBytes($File)\n$err = [RawPrinter]::Send($Printer, $bytes)\nif ($err) { Write-Error $err; exit 2 }\n";
+
+function printWidthDots() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "config.json"), "utf8"));
+    const n = Number(cfg.printWidthDots);
+    if (Number.isFinite(n) && n >= 192 && n <= 832 && n % 8 === 0) return n;
+  } catch {
+    /* default */
+  }
+  return 576;
+}
+
+/** ESC/POS: initialise, the picture as raster bands (GS v 0), a little feed, partial cut. bgra = image pixels, 4 bytes each. */
+function escPosRaster(bgra, width, height) {
+  const bytesPerRow = width / 8;
+  const rows = Buffer.alloc(bytesPerRow * height);
+  for (let y = 0; y < height; y++) {
+    for (let bx = 0; bx < bytesPerRow; bx++) {
+      let b = 0;
+      for (let i = 0; i < 8; i++) {
+        const o = (y * width + bx * 8 + i) * 4;
+        const lum = 0.114 * bgra[o] + 0.587 * bgra[o + 1] + 0.299 * bgra[o + 2];
+        b = (b << 1) | (bgra[o + 3] > 40 && lum < 165 ? 1 : 0);
+      }
+      rows[y * bytesPerRow + bx] = b;
+    }
+  }
+  const parts = [Buffer.from([0x1b, 0x40])];
+  const BAND = 128;
+  for (let y0 = 0; y0 < height; y0 += BAND) {
+    const h = Math.min(BAND, height - y0);
+    parts.push(Buffer.from([0x1d, 0x76, 0x30, 0x00, bytesPerRow & 255, bytesPerRow >> 8, h & 255, h >> 8]));
+    parts.push(rows.subarray(y0 * bytesPerRow, (y0 + h) * bytesPerRow));
+  }
+  parts.push(Buffer.from([0x1b, 0x64, 0x03, 0x1d, 0x56, 0x42, 0x00])); // feed 3 lines, feed to cut position and cut
+  return { data: Buffer.concat(parts), rows };
+}
 
 async function printReceiptHtml(html) {
-  const dots = 512; // 64 mm at 203 dpi
-  const cssWidth = Math.round((64 / 25.4) * 96); // the same 64 mm in CSS pixels
-  const zoom = dots / cssWidth;
+  const dots = printWidthDots();
+  const cssWidth = (dots / 203) * 96; // the printer's width in CSS pixels (203 dpi)
+  const oversample = 2; // draw twice as large, shrink smoothly: sharper letters than drawing at 1:1
+  const zoom = (dots * oversample) / cssWidth;
   const win = new BrowserWindow({
     show: false,
-    width: dots, // zoomed: 512 window pixels show the receipt's 64 mm (242 CSS pixels) laid out at full size
+    width: dots * oversample,
     height: 400,
     useContentSize: true,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, offscreen: false, zoomFactor: zoom },
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, zoomFactor: zoom },
   });
   const tmp = path.join(app.getPath("temp"), "korgen-receipt-" + Date.now());
   try {
     await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+    await win.webContents.insertCSS("html,body{overflow:hidden!important} ::-webkit-scrollbar{display:none!important}"); // no scrollbar strip in the picture
     const deviceName = await pickPrinter(win.webContents);
     if (!deviceName) return { ok: false, error: "Принтер не найден. Установите драйвер принтера." };
     const cssHeight = await win.webContents.executeJavaScript("Math.ceil(document.documentElement.scrollHeight)");
     const height = Math.max(60, Math.ceil(cssHeight * zoom));
-    win.setContentSize(dots, height);
+    win.setContentSize(dots * oversample, height);
     await new Promise((r) => setTimeout(r, 400)); // let the layout settle at the new size
-    const image = await win.webContents.capturePage({ x: 0, y: 0, width: dots, height });
-    fs.writeFileSync(tmp + ".png", image.toPNG());
-    fs.writeFileSync(tmp + ".ps1", "\ufeff" + PRINT_SCRIPT);
-    const result = await new Promise((resolve) => {
+    const big = await win.webContents.capturePage({ x: 0, y: 0, width: dots * oversample, height });
+    const small = big.resize({ width: dots, quality: "best" });
+    const size = small.getSize();
+    const bitmap = small.toBitmap();
+    const { data, rows } = escPosRaster(bitmap, size.width, size.height);
+    if (process.env.KORGEN_PRINT_DEBUG) {
+      const mono = Buffer.alloc(size.width * size.height * 4, 255);
+      for (let y = 0; y < size.height; y++) for (let x = 0; x < size.width; x++) {
+        const bit = (rows[y * (size.width / 8) + (x >> 3)] >> (7 - (x & 7))) & 1;
+        if (bit) { const o = (y * size.width + x) * 4; mono[o] = mono[o + 1] = mono[o + 2] = 0; }
+      }
+      fs.writeFileSync(path.join(app.getPath("userData"), "print-debug.png"), require("electron").nativeImage.createFromBitmap(mono, { width: size.width, height: size.height }).toPNG());
+    }
+    fs.writeFileSync(tmp + ".bin", data);
+    fs.writeFileSync(tmp + ".ps1", "\ufeff" + RAW_SEND_SCRIPT);
+    return await new Promise((resolve) => {
       require("child_process").execFile(
         "powershell.exe",
-        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp + ".ps1", deviceName, tmp + ".png"],
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp + ".ps1", "-Printer", deviceName, "-File", tmp + ".bin"],
         { windowsHide: true, timeout: 60_000 },
         (err, _out, errOut) => resolve(err ? { ok: false, error: String(errOut || err.message).trim().slice(0, 300) } : { ok: true, printer: deviceName }),
       );
     });
-    if (process.env.KORGEN_PRINT_DEBUG) fs.copyFileSync(tmp + ".png", path.join(app.getPath("userData"), "print-debug.png"));
-    return result;
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
   } finally {
     setTimeout(() => {
       win.destroy();
-      for (const ext of [".png", ".ps1"]) fs.rm(tmp + ext, { force: true }, () => {});
+      for (const ext of [".bin", ".ps1"]) fs.rm(tmp + ext, { force: true }, () => {});
     }, 3000);
   }
 }

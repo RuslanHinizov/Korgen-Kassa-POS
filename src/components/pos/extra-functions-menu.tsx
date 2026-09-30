@@ -104,6 +104,7 @@ export function ExtraFunctionsMenu({
         amountTendered: sale.amountTendered ?? undefined,
         changeDue: sale.changeDue ?? undefined,
         createdAt: new Date(sale.createdAt),
+        cashierName: sale.user?.name ?? undefined,
       });
       onClose();
     } catch {

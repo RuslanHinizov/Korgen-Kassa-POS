@@ -17,6 +17,8 @@ export interface ReceiptData {
   isRefund?: boolean;
   reason?: string;
   customerName?: string;
+  /** Who rang the sale up («Кассир: …»). */
+  cashierName?: string;
   items: ReceiptItem[];
   subtotal: number;
   discountAmount: number;
@@ -123,6 +125,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
       ) : data.receiptNo ? (
         <p className="text-[10px] text-center mb-2">{`Чек №${data.receiptNo}`}</p>
       ) : null}
+      {data.cashierName && <p className="text-[10px] text-center mb-2">Кассир: {data.cashierName}</p>}
       {data.customerName && (
         <p className="text-[10px] text-center mb-2">{t("for", { name: data.customerName })}</p>
       )}
@@ -218,6 +221,7 @@ export function Receipt({ data, settings }: ReceiptProps) {
       {settings.receiptFooter && (
         <p className="text-center text-[10px] mt-2">{settings.receiptFooter}</p>
       )}
+      <p className="text-center text-[9px] mt-2">Korgen Kassa</p>
     </div>
   );
 }
