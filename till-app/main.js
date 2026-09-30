@@ -203,24 +203,68 @@ async function pickPrinter(webContents) {
   const def = real.find((p) => p.isDefault) || real[0];
   return def ? def.name : null;
 }
+/**
+ * The receipt is drawn in a hidden window, photographed at the printer's own resolution (203 dpi, 64 mm wide), and that
+ * picture is sent to the Windows driver by a tiny PowerShell script (System.Drawing). Chromium's own silent print
+ * produced blank strips on roll printers whose driver has a "continuous" paper size; a plain bitmap job prints right.
+ */
+const PRINT_SCRIPT = [
+  "param([string]$Printer, [string]$Image)",
+  "Add-Type -AssemblyName System.Drawing",
+  "$img = [System.Drawing.Image]::FromFile($Image)",
+  "$doc = New-Object System.Drawing.Printing.PrintDocument",
+  "$doc.PrinterSettings.PrinterName = $Printer",
+  "if (-not $doc.PrinterSettings.IsValid) { Write-Error 'printer not found'; exit 2 }",
+  "$doc.DocumentName = 'Korgen Kassa receipt'",
+  "$doc.add_PrintPage({ param($s, $e)",
+  "  $w = [Math]::Min(250.0, $e.PageSettings.PrintableArea.Width)",
+  "  $h = $w * $img.Height / $img.Width",
+  "  $e.Graphics.DrawImage($img, 0, 0, $w, $h)",
+  "  $e.HasMorePages = $false })",
+  "$doc.Print()",
+  "$img.Dispose()",
+].join("\r\n");
+
 async function printReceiptHtml(html) {
-  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  const dots = 512; // 64 mm at 203 dpi
+  const cssWidth = Math.round((64 / 25.4) * 96); // the same 64 mm in CSS pixels
+  const zoom = dots / cssWidth;
+  const win = new BrowserWindow({
+    show: false,
+    width: dots, // zoomed: 512 window pixels show the receipt's 64 mm (242 CSS pixels) laid out at full size
+    height: 400,
+    useContentSize: true,
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, offscreen: false, zoomFactor: zoom },
+  });
+  const tmp = path.join(app.getPath("temp"), "korgen-receipt-" + Date.now());
   try {
     await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
     const deviceName = await pickPrinter(win.webContents);
     if (!deviceName) return { ok: false, error: "Принтер не найден. Установите драйвер принтера." };
-    const px = await win.webContents.executeJavaScript("Math.ceil(document.documentElement.scrollHeight)");
-    const heightMicrons = Math.max(60_000, Math.ceil((px * 25.4) / 96) * 1000 + 8_000);
-    return await new Promise((resolve) => {
-      win.webContents.print(
-        { silent: true, deviceName, printBackground: true, margins: { marginType: "none" }, pageSize: { width: 76_000, height: heightMicrons } },
-        (success, reason) => resolve(success ? { ok: true, printer: deviceName } : { ok: false, error: reason || "Не удалось напечатать" }),
+    const cssHeight = await win.webContents.executeJavaScript("Math.ceil(document.documentElement.scrollHeight)");
+    const height = Math.max(60, Math.ceil(cssHeight * zoom));
+    win.setContentSize(dots, height);
+    await new Promise((r) => setTimeout(r, 400)); // let the layout settle at the new size
+    const image = await win.webContents.capturePage({ x: 0, y: 0, width: dots, height });
+    fs.writeFileSync(tmp + ".png", image.toPNG());
+    fs.writeFileSync(tmp + ".ps1", "\ufeff" + PRINT_SCRIPT);
+    const result = await new Promise((resolve) => {
+      require("child_process").execFile(
+        "powershell.exe",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp + ".ps1", deviceName, tmp + ".png"],
+        { windowsHide: true, timeout: 60_000 },
+        (err, _out, errOut) => resolve(err ? { ok: false, error: String(errOut || err.message).trim().slice(0, 300) } : { ok: true, printer: deviceName }),
       );
     });
+    if (process.env.KORGEN_PRINT_DEBUG) fs.copyFileSync(tmp + ".png", path.join(app.getPath("userData"), "print-debug.png"));
+    return result;
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
   } finally {
-    setTimeout(() => win.destroy(), 1500);
+    setTimeout(() => {
+      win.destroy();
+      for (const ext of [".png", ".ps1"]) fs.rm(tmp + ext, { force: true }, () => {});
+    }, 3000);
   }
 }
 

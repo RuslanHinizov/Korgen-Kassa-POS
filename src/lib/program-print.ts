@@ -32,7 +32,7 @@ export function receiptDocument(receiptHtml: string, headHtml: string, origin: s
   return (
     `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/">${headHtml}` +
     `<style>@page{size:76mm auto;margin:0}html,body{margin:0;padding:0;background:#fff}` +
-    `#receipt-print{width:64mm!important;max-width:64mm!important;margin:0 auto!important;padding:2mm 0!important;font-size:10pt!important}</style>` +
+    `#receipt-print{width:61mm!important;max-width:61mm!important;margin:0 auto!important;padding:2mm 0!important;font-size:10pt!important}</style>` +
     // the wrapper id keeps the modal's own print rule ("hide everything but the overlay") from hiding the receipt
     `</head><body><div id="receipt-print-overlay">${receiptHtml}</div></body></html>`
   );
