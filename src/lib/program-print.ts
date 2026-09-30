@@ -6,7 +6,14 @@
 
 export const PRINTER_ENABLED_KEY = "korgen-printer-enabled";
 
+export interface PrinterStatus {
+  found: boolean;
+  ready: boolean;
+  name: string | null;
+}
+
 interface PrintBridge {
+  printerStatus?: () => Promise<PrinterStatus>;
   printReceipt?: (html: string) => Promise<{ ok: boolean; error?: string; printer?: string }>;
 }
 
@@ -69,4 +76,15 @@ export async function printReceiptOnProgram(): Promise<{ ok: boolean; error?: st
   if (!el) return { ok: false, error: "no receipt on screen" };
   const head = [...document.querySelectorAll('link[rel="stylesheet"], style')].map((n) => n.outerHTML).join("");
   return b.printReceipt(receiptDocument(el.outerHTML, head, window.location.origin));
+}
+
+/** The receipt printer as the program sees it, or null on a browser register (which keeps its Web Serial/USB check). */
+export async function programPrinterStatus(): Promise<PrinterStatus | null> {
+  const b = bridge();
+  if (!b?.printerStatus) return null;
+  try {
+    return await b.printerStatus();
+  } catch {
+    return { found: false, ready: false, name: null };
+  }
 }

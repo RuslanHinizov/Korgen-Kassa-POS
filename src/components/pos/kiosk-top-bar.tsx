@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HelpCircle, LogOut } from "lucide-react";
 import { CashboxStatus } from "./cashbox-status";
 import { APP_VERSION } from "@/lib/app-version";
+import { programPrinterStatus } from "@/lib/program-print";
 import { leaveCashier } from "@/lib/till-shell";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 
@@ -44,6 +45,7 @@ export function KioskTopBar({
   const [now, setNow] = useState(() => new Date());
   const { online } = useOfflineStatus();
   const [printerReady, setPrinterReady] = useState(false);
+  const [printerNote, setPrinterNote] = useState("нет USB");
   const [scannerSeen, setScannerSeen] = useState(false);
   const palette = activeTab === "shift"
     ? "border-red-900 bg-[#c0392b] text-white"
@@ -66,7 +68,22 @@ export function KioskTopBar({
         setPrinterReady(ports.length > 0);
       } catch { setPrinterReady(false); }
     };
-    void detectPrinter();
+    // On the till program the printer is a normal Windows printer: ask the program, and keep asking (it can be switched off).
+    let stop = false;
+    const askProgram = async () => {
+      const st = await programPrinterStatus();
+      if (stop) return true;
+      if (!st) return false;
+      setPrinterReady(st.found && st.ready);
+      setPrinterNote(st.found ? "не готов" : "не найден");
+      return true;
+    };
+    let timer: ReturnType<typeof setInterval> | undefined;
+    void askProgram().then((isProgram) => {
+      if (isProgram) timer = setInterval(() => void askProgram(), 15_000);
+      else void detectPrinter();
+    });
+    return () => { stop = true; if (timer) clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -144,7 +161,7 @@ export function KioskTopBar({
         )}
         <CashboxStatus />
         <DeviceStatus label="Сеть" ok={online} />
-        <DeviceStatus label="Принтер" ok={printerReady} offLabel="нет USB" />
+        <DeviceStatus label="Принтер" ok={printerReady} offLabel={printerNote} />
         <DeviceStatus label="Сканер" ok={scannerSeen} offLabel="ожидание" />
         <DeviceStatus label="Смена" ok={hasOpenShift} offLabel="закрыта" />
         <button

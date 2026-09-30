@@ -11,6 +11,7 @@ import { submitSale } from "@/lib/offline/submit-sale";
 import { applyLocalStockDelta } from "@/lib/offline/catalog";
 import { addLocalHeldOrder } from "@/lib/offline/held-orders";
 import { useRouter } from "next/navigation";
+import { onTillProgram } from "@/lib/till-shell";
 import { DebtScreen, type Debtor } from "./debt-screen";
 import {
   PauseCircle,
@@ -331,7 +332,9 @@ export function PaymentPanel({
       } else {
         onClear();
       }
-      if (navigator.onLine && !submitted.queued) router.refresh();
+      // On the till program (/till) there is no server page to refresh: it would reload the whole page and throw the receipt away
+      // before it is shown or printed.
+      if (navigator.onLine && !submitted.queued && !onTillProgram()) router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("unknown_error"));
     } finally {
