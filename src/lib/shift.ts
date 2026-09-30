@@ -158,3 +158,26 @@ export async function computeShiftReport(shiftId: string): Promise<ShiftReport |
     movements: shift.cashMovements,
   };
 }
+
+/**
+ * What this shift's sales and refunds put into each register's cash account (accountId → amount), mirroring the credit in
+ * POST /api/sales and the debit in the refund route. Closing the shift takes exactly this back out, so a register's account
+ * only ever holds the cash of the shift that is open (UMAG behaves the same: closed registers show 0).
+ */
+export async function registerCashOfShift(shiftId: string): Promise<Map<string, number>> {
+  const sales = await prisma.sale.findMany({
+    where: { shiftId, status: { not: "VOIDED" }, cashboxId: { not: null } },
+    select: { total: true, paymentMethod: true, paymentLines: true, cashbox: { select: { accountId: true } }, refunds: { select: { amount: true } } },
+  });
+  const byAccount = new Map<string, number>();
+  const add = (id: string | null | undefined, amount: number) => {
+    if (id && amount) byAccount.set(id, (byAccount.get(id) ?? 0) + amount);
+  };
+  for (const s of sales) {
+    const lines = Array.isArray(s.paymentLines) ? (s.paymentLines as unknown as { method: string; amount: number }[]) : [];
+    const cashKept = lines.length > 0 ? lines.filter((l) => l.method === "CASH").reduce((a, l) => a + Number(l.amount), 0) : s.paymentMethod === "CASH" ? Number(s.total) : 0;
+    add(s.cashbox?.accountId, cashKept);
+    if (s.paymentMethod === "CASH") add(s.cashbox?.accountId, -s.refunds.reduce((a, r) => a + Number(r.amount), 0));
+  }
+  return byAccount;
+}

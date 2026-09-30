@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { serialize } from "@/lib/serialize";
-import { computeShiftReport } from "@/lib/shift";
+import { computeShiftReport, registerCashOfShift } from "@/lib/shift";
 import { getStoreId } from "@/lib/store-context";
 import { logAudit } from "@/lib/audit";
 import { resolvePosActor } from "@/lib/pos-actor";
@@ -78,17 +78,24 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const difference = parsed.data.countedCash - expected;
   const timeAdjusted = !!parsed.data.closedAt && !trustedTime(parsed.data.closedAt);
 
-  const updated = await prisma.shift.update({
-    where: { id },
-    data: {
-      status: "CLOSED",
-      closedAt: trustedTime(parsed.data.closedAt) ?? new Date(),
-      countedCash: parsed.data.countedCash,
-      expectedCash: expected,
-      difference,
-      notes: parsed.data.notes,
-    },
-  });
+  // The register's cash account holds only the open shift's cash: take this shift's cash back out when it closes.
+  const registerCash = await registerCashOfShift(id);
+  const [updated] = await prisma.$transaction([
+    prisma.shift.update({
+      where: { id },
+      data: {
+        status: "CLOSED",
+        closedAt: trustedTime(parsed.data.closedAt) ?? new Date(),
+        countedCash: parsed.data.countedCash,
+        expectedCash: expected,
+        difference,
+        notes: parsed.data.notes,
+      },
+    }),
+    ...[...registerCash].filter(([, amount]) => amount !== 0).map(([accountId, amount]) =>
+      prisma.financeAccount.update({ where: { id: accountId }, data: { balance: { decrement: amount } } })
+    ),
+  ]);
 
   await logAudit({
     userId: actor.userId,
