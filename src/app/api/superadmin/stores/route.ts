@@ -82,7 +82,8 @@ export async function POST(req: NextRequest) {
     const created = await tx.store.create({ data: { name: d.name, address: d.address || null } });
     await tx.financeAccount.create({ data: { storeId: created.id, name: "Сейф - 1", type: "CASH", allowNegativeBalance: true, showAtPos: true } });
     await tx.expenseType.createMany({ data: DEFAULT_EXPENSE_TYPES.map((e) => ({ ...e, storeId: created.id })) });
-    await tx.businessSettings.create({ data: { storeId: created.id, name: d.name } });
+    // A new market starts the way Kazakhstan markets work: Russian, tenge without decimals, НДС label.
+    await tx.businessSettings.create({ data: { storeId: created.id, name: d.name, language: "ru", currency: "₸", currencyDecimals: 0, taxName: "НДС", receiptFooter: "Спасибо за покупку!" } });
     return created;
   });
 

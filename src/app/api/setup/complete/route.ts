@@ -14,12 +14,8 @@ const schema = z.object({
 export async function POST(request: NextRequest): Promise<NextResponse> {
   // Guard: only allow if setup not yet complete
   try {
-    const { prisma } = await import("@/lib/db");
-    const existing = await prisma.businessSettings.findUnique({
-      where: { storeId: DEFAULT_STORE_ID },
-      select: { setupComplete: true },
-    });
-    if (existing?.setupComplete) {
+    const { isInstalled } = await import("@/lib/installed");
+    if (await isInstalled()) {
       return NextResponse.json({ error: "Setup already complete" }, { status: 403 });
     }
   } catch {

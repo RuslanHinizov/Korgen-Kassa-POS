@@ -34,12 +34,18 @@ async function probeDb(url: string): Promise<{
       return { connected: true, initialized: false, hasAdmin: false, setupComplete: false };
     }
 
-    const [settingsRes, adminRes] = await Promise.all([
+    const [settingsRes, adminRes, ownerRes, storeRes] = await Promise.all([
       client.query(`SELECT "setupComplete" FROM "BusinessSettings" WHERE "storeId" = 'store_main' LIMIT 1`),
       client.query(`SELECT COUNT(*) AS cnt FROM "User" WHERE role = 'ADMIN'`),
+      client.query(`SELECT COUNT(*) AS cnt FROM "User" WHERE role = 'SUPERADMIN'`),
+      client.query(`SELECT COUNT(*) AS cnt FROM "Store"`),
     ]);
 
-    const setupComplete = settingsRes.rows[0]?.setupComplete === true;
+    // a platform owner or any market also means "installed" (see src/lib/installed.ts)
+    const setupComplete =
+      settingsRes.rows[0]?.setupComplete === true ||
+      parseInt(String(ownerRes.rows[0]?.cnt ?? "0"), 10) > 0 ||
+      parseInt(String(storeRes.rows[0]?.cnt ?? "0"), 10) > 0;
     const hasAdmin = parseInt(String(adminRes.rows[0]?.cnt ?? "0"), 10) > 0;
 
     return { connected: true, initialized: true, hasAdmin, setupComplete };

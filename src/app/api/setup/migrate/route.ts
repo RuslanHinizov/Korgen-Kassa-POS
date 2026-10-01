@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { execSync } from "child_process";
 import path from "path";
-import { DEFAULT_STORE_ID } from "@/lib/store-constants";
 
 export const maxDuration = 60; // 60s timeout
 
@@ -12,12 +11,8 @@ export async function POST(): Promise<NextResponse> {
 
   // Guard: if already fully set up, refuse
   try {
-    const { prisma } = await import("@/lib/db");
-    const settings = await prisma.businessSettings.findUnique({
-      where: { storeId: DEFAULT_STORE_ID },
-      select: { setupComplete: true },
-    });
-    if (settings?.setupComplete) {
+    const { isInstalled } = await import("@/lib/installed");
+    if (await isInstalled()) {
       return NextResponse.json({ error: "Setup already complete" }, { status: 403 });
     }
   } catch {

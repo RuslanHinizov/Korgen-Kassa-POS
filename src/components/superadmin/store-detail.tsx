@@ -93,6 +93,7 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetPasswordText, setResetPasswordText] = useState("");
   const [resetResult, setResetResult] = useState<{ password: string; name: string; phone: string | null } | null>(null);
 
   const [events, setEvents] = useState<FeedEvent[]>([]);
@@ -169,10 +170,10 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
     if (!resetTarget) return;
     setBusy(true);
     try {
-      const r = await fetch(`/api/superadmin/stores/${storeId}/employees/${resetTarget.id}/reset-password`, { method: "POST" });
+      const r = await fetch(`/api/superadmin/stores/${storeId}/employees/${resetTarget.id}/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: resetPasswordText.trim() || undefined }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { toast.error(d.error ?? "Не удалось сбросить пароль"); return; }
-      setResetTarget(null); setResetResult(d);
+      setResetTarget(null); setResetPasswordText(""); setResetResult(d);
       loadFeed(false);
     } finally { setBusy(false); }
   }
@@ -450,10 +451,19 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-semibold">Сбросить пароль?</h2>
-            <p className="text-sm text-slate-500">Для «{resetTarget.name}» будет создан новый пароль, все его текущие входы завершатся. Действие попадёт в журнал магазина.</p>
+            <p className="text-sm text-slate-500">Для «{resetTarget.name}» будет задан новый пароль, все его текущие входы завершатся. Действие попадёт в журнал магазина.</p>
+            <input
+              type="text"
+              value={resetPasswordText}
+              onChange={(e) => setResetPasswordText(e.target.value)}
+              autoComplete="off"
+              placeholder="Новый пароль (от 6 символов) — пусто: создать случайный"
+              className="h-9 w-full rounded-md border px-2 text-sm"
+              data-testid="reset-password-input"
+            />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setResetTarget(null)} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
-              <button onClick={resetPassword} disabled={busy} className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50">Сбросить</button>
+              <button onClick={() => { setResetTarget(null); setResetPasswordText(""); }} className="h-9 rounded-md border px-4 text-sm hover:bg-accent">Отмена</button>
+              <button onClick={resetPassword} disabled={busy || (resetPasswordText.trim().length > 0 && resetPasswordText.trim().length < 6)} className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50">Сбросить</button>
             </div>
           </div>
         </div>
@@ -462,7 +472,7 @@ export function StoreDetail({ storeId, userName }: { storeId: string; userName: 
       {resetResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-xl">
-            <h2 className="text-lg font-semibold">Новый пароль создан</h2>
+            <h2 className="text-lg font-semibold">Пароль обновлён</h2>
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm">
               <p>Сотрудник: <b>{resetResult.name}</b></p>
               {resetResult.phone && <p>Телефон (логин): <b>{formatPhone(resetResult.phone)}</b></p>}

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_STORE_ID } from "@/lib/store-constants";
 
 // GET /api/setup/resume?next=/path — for a browser without the "setup complete" cookie.
 // If the system is already installed, remember that (cookie) and go straight back to the page;
@@ -11,9 +10,8 @@ export async function GET(req: NextRequest) {
 
   let complete = false;
   try {
-    const { prisma } = await import("@/lib/db");
-    const settings = await prisma.businessSettings.findUnique({ where: { storeId: DEFAULT_STORE_ID }, select: { setupComplete: true } });
-    complete = Boolean(settings?.setupComplete);
+    const { isInstalled } = await import("@/lib/installed");
+    complete = await isInstalled();
   } catch {
     // database not reachable / not initialised yet
   }
