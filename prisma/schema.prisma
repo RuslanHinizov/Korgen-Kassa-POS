@@ -1190,7 +1190,7 @@ model Cashbox {
   name      String
   active    Boolean  @default(true)
   accountId String?
-  oneTimeKey String? @unique
+  oneTimeKey String?
   /// When the current oneTimeKey (or its predecessor) was redeemed by a terminal.
   pairedAt   DateTime?
   /// Reported by the paired terminal: app version, OS/browser platform, last time it checked in.

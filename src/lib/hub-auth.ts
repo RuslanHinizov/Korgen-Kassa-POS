@@ -25,11 +25,6 @@ export async function revokeHubToken(id: string): Promise<void> {
   await prisma.hubToken.update({ where: { id }, data: { revokedAt: new Date() } });
 }
 
-/** Revokes a just-issued token when a one-time pairing code loses a concurrent claim race. */
-export async function revokeHubTokenSecret(token: string): Promise<void> {
-  await prisma.hubToken.updateMany({ where: { tokenHash: hashToken(token), revokedAt: null }, data: { revokedAt: new Date() } });
-}
-
 export interface HubActor {
   storeId: string;
   tokenId: string;
@@ -51,11 +46,6 @@ export async function resolveHubActor(req: Request): Promise<HubActor | null> {
   // A market the platform owner suspended is switched off for its tills too: they get the same refusal as a revoked key
   // (and work again by themselves once the market is switched back on).
   if (row.store.suspendedAt) return null;
-  // A till credential is permanently scoped to its cashbox. Missing or disabled cashboxes close it too.
-  if (row.cashboxId) {
-    const cashbox = await prisma.cashbox.findFirst({ where: { id: row.cashboxId, storeId: row.storeId }, select: { active: true } });
-    if (!cashbox?.active) return null;
-  }
 
   void prisma.hubToken.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
   // The standalone till sends its program version; the register it is tied to shows it in Управление → Кассы.

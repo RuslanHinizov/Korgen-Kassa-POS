@@ -1,4 +1,4 @@
-import { createHmac, randomInt } from "crypto";
+import { createHmac } from "crypto";
 
 const SECRET = process.env.BETTER_AUTH_SECRET ?? "dev-secret";
 
@@ -20,8 +20,3 @@ export function getPairedCashboxId(token: string | undefined | null): string | n
 }
 
 export const CASHBOX_DEVICE_COOKIE = "cashbox-device";
-
-/** Eight-digit, one-use code printed in management when a cashbox is created. */
-export function createCashboxSetupCode(): string {
-  return String(randomInt(0, 100_000_000)).padStart(8, "0");
-}

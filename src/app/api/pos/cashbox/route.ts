@@ -1,24 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { APP_VERSION } from "@/lib/app-version";
+import { verifyPin } from "@/lib/pin";
 import { CASHBOX_DEVICE_COOKIE, issueCashboxDeviceToken, getPairedCashboxId } from "@/lib/cashbox-device";
-import { resolveHubActor } from "@/lib/hub-auth";
 
-const MAX_AGE = 10 * 365 * 24 * 60 * 60;
+const MAX_AGE = 400 * 24 * 60 * 60; // ~13 months; re-pairing is manual, not time-boxed like the manager/kiosk tokens
 
 /** GET /api/pos/cashbox — which Cashbox (if any) this terminal is currently paired to. */
-export async function GET(req: NextRequest) {
-  const authorization = req.headers.get("authorization") ?? "";
-  if (authorization.startsWith("Bearer hub_")) {
-    const hub = await resolveHubActor(req);
-    if (!hub) return NextResponse.json({ error: "Касса отключена" }, { status: 401 });
-    if (!hub.cashboxId) return NextResponse.json({ cashbox: null, fixed: true });
-    const cashbox = await prisma.cashbox.findFirst({ where: { id: hub.cashboxId, storeId: hub.storeId }, select: { id: true, no: true, name: true, active: true, lastSyncAt: true } });
-    return NextResponse.json({ cashbox, fixed: true });
-  }
+export async function GET() {
   const jar = await cookies();
   const cashboxId = getPairedCashboxId(jar.get(CASHBOX_DEVICE_COOKIE)?.value);
   if (!cashboxId) return NextResponse.json({ cashbox: null });
@@ -46,21 +39,14 @@ const pairSchema = z.object({ key: z.string().min(1) });
  * the physical device is the whole flow, no admin login required on the terminal itself.
  * The key is single-use — it's cleared on redemption so a leaked key can't be reused. */
 export async function POST(req: NextRequest) {
-  if ((req.headers.get("authorization") ?? "").startsWith("Bearer hub_")) {
-    return NextResponse.json({ error: "Касса закреплена при первом подключении" }, { status: 403 });
-  }
   const parsed = pairSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Введите ключ" }, { status: 400 });
 
   const storeId = await getStoreId();
-  const cashbox = await prisma.cashbox.findFirst({ where: { storeId, oneTimeKey: parsed.data.key.trim(), pairedAt: null, active: true } });
+  const cashbox = await prisma.cashbox.findFirst({ where: { storeId, oneTimeKey: parsed.data.key.trim() } });
   if (!cashbox) return NextResponse.json({ error: "Неверный или уже использованный ключ" }, { status: 404 });
 
-  const claimed = await prisma.cashbox.updateMany({
-    where: { id: cashbox.id, storeId, oneTimeKey: parsed.data.key.trim(), pairedAt: null, active: true },
-    data: { oneTimeKey: null, pairedAt: new Date(), lastSyncAt: new Date(), appVersion: APP_VERSION, platform: describePlatform(req.headers.get("user-agent")) },
-  });
-  if (claimed.count !== 1) return NextResponse.json({ error: "Код уже использован" }, { status: 409 });
+  await prisma.cashbox.update({ where: { id: cashbox.id }, data: { oneTimeKey: null, pairedAt: new Date(), lastSyncAt: new Date(), appVersion: APP_VERSION, platform: describePlatform(req.headers.get("user-agent")) } });
 
   const jar = await cookies();
   jar.set(CASHBOX_DEVICE_COOKIE, issueCashboxDeviceToken(cashbox.id), {
@@ -72,4 +58,27 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ cashbox: { id: cashbox.id, no: cashbox.no, name: cashbox.name, active: cashbox.active } });
+}
+
+/** DELETE /api/pos/cashbox — un-pair this terminal (hardware repurposed/replaced).
+ * Requires a real ADMIN/MANAGER session, or the store's manager PIN — this must never
+ * be doable by a bored cashier, but also must never require reaching the admin panel. */
+export async function DELETE(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const privileged = !!session && ["ADMIN", "MANAGER"].includes(session.user.role ?? "");
+
+  if (!privileged) {
+    const body = await req.json().catch(() => null);
+    const pin = typeof body?.pin === "string" ? body.pin : "";
+    const storeId = await getStoreId();
+    const settings = await prisma.businessSettings.findUnique({ where: { storeId }, select: { managerPin: true } });
+    if (!settings?.managerPin) return NextResponse.json({ error: "no_pin_configured" }, { status: 409 });
+    if (!pin || !verifyPin(pin, settings.managerPin)) {
+      return NextResponse.json({ error: "Неверный PIN" }, { status: 403 });
+    }
+  }
+
+  const jar = await cookies();
+  jar.delete(CASHBOX_DEVICE_COOKIE);
+  return NextResponse.json({ cashbox: null });
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Copy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SaleRestrictionsPanel } from "@/components/settings/sale-restrictions-panel";
 
@@ -29,18 +29,38 @@ const RIGHT: [FlagKey, string][] = [
 ];
 const DAYS = [0, 1, 3, 7, 14, 30, 90, 180, 365];
 
-/** Управление → Настройки разрешений: site-wide switches and sale bans. */
+interface Cashbox { id: string; no: number; name: string; platform: string | null; appVersion: string | null; lastSyncAt: string | null; pairedAt: string | null }
+
+function fmt(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return (
+    <>
+      {d.toLocaleDateString("ru-RU")} <b>{d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+    </>
+  );
+}
+
+/** Управление → Настройки разрешений: site-wide switches, sale bans and the android kassa access key. */
 export function SitePermissions() {
   const [flags, setFlags] = useState<Record<FlagKey, boolean> | null>(null);
   const [backdatingDays, setBackdatingDays] = useState(365);
   const [roundUp, setRoundUp] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cashboxes, setCashboxes] = useState<Cashbox[]>([]);
+  const [keyCashbox, setKeyCashbox] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [lastKey, setLastKey] = useState<{ cashbox: string; key: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/management/site-permissions")
       .then((r) => r.json())
       .then((d) => { setFlags(d.flags); setBackdatingDays(d.backdatingDays); setRoundUp(d.roundSalePriceUp); });
   }, []);
+  const loadCashboxes = useCallback(() => {
+    fetch("/api/management/cashboxes").then((r) => r.json()).then((d) => setCashboxes(d.cashboxes ?? []));
+  }, []);
+  useEffect(() => { loadCashboxes(); }, [loadCashboxes]);
 
   async function save() {
     if (!flags) return;
@@ -54,6 +74,17 @@ export function SitePermissions() {
       if (!r.ok) { toast.error(d.error ?? "Не удалось сохранить"); return; }
       toast.success("Сохранено");
     } finally { setSaving(false); }
+  }
+
+  async function generateKey() {
+    if (!keyCashbox) return;
+    setKeyBusy(true);
+    try {
+      const r = await fetch(`/api/management/cashboxes/${keyCashbox}/generate-key`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? "Не удалось создать ключ"); return; }
+      setLastKey({ cashbox: cashboxes.find((c) => c.id === keyCashbox)?.name ?? "", key: d.oneTimeKey });
+    } finally { setKeyBusy(false); }
   }
 
   const SaveBtn = () => (
@@ -111,6 +142,66 @@ export function SitePermissions() {
         <SaleRestrictionsPanel />
       </section>
 
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Ключ доступа для android кассы</h2>
+        <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+          <span>Выберите нужную кассу, чтобы сгенерировать одноразовый ключ доступа</span>
+          <div className="flex items-center gap-2">
+            <select value={keyCashbox} onChange={(e) => setKeyCashbox(e.target.value)} className={`${select} w-44`}>
+              <option value="">Выберите кассу</option>
+              {cashboxes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button onClick={generateKey} disabled={!keyCashbox || keyBusy} className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-40">
+              Сгенерировать ключ
+            </button>
+          </div>
+        </div>
+        {lastKey && (
+          <div className="bg-primary/10 flex items-center gap-3 rounded-lg border p-3 text-sm">
+            Ключ для «{lastKey.cashbox}»: <b className="font-mono text-base">{lastKey.key}</b>
+            <button onClick={() => { void navigator.clipboard?.writeText(lastKey.key); toast.success("Скопировано"); }} className="hover:bg-accent rounded p-1" aria-label="Копировать"><Copy className="h-4 w-4" /></button>
+            <span className="text-muted-foreground">Одноразовый: после ввода на кассе перестаёт действовать.</span>
+          </div>
+        )}
+        <div className="bg-card overflow-x-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/50 text-muted-foreground border-b text-xs font-medium">
+                <th className="px-4 py-2.5 text-left">ID</th>
+                <th className="px-4 py-2.5 text-left">Название кассы</th>
+                <th className="px-4 py-2.5 text-left">Платформа</th>
+                <th className="px-4 py-2.5 text-left">Версия</th>
+                <th className="px-4 py-2.5 text-left">Дата последней синхронизации</th>
+                <th className="px-4 py-2.5 text-left">Статус</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {cashboxes.length === 0 ? (
+                <tr><td colSpan={6} className="text-muted-foreground px-4 py-6 text-center">Нет данных</td></tr>
+              ) : (
+                cashboxes.map((c) => {
+                  const live = Boolean(c.pairedAt);
+                  return (
+                    <tr key={c.id} className="hover:bg-muted/40">
+                      <td className="text-muted-foreground px-4 py-2.5">{c.no}</td>
+                      <td className="px-4 py-2.5">{c.name}</td>
+                      <td className="px-4 py-2.5">{c.platform ?? "Неизвестно"}</td>
+                      <td className="px-4 py-2.5">{c.appVersion ?? "—"}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">{fmt(c.lastSyncAt)}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${live ? "bg-green-500" : "bg-red-500"}`} />
+                          {live ? "Сессия активна" : "Сессия завершена"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
