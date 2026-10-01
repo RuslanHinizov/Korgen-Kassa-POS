@@ -1,4 +1,4 @@
-import { createHmac } from "crypto";
+import { createHmac, randomInt } from "crypto";
 
 const SECRET = process.env.BETTER_AUTH_SECRET ?? "dev-secret";
 
@@ -20,3 +20,10 @@ export function getPairedCashboxId(token: string | undefined | null): string | n
 }
 
 export const CASHBOX_DEVICE_COOKIE = "cashbox-device";
+
+const CASHBOX_KEY_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+
+/** The existing 8-letter one-time key shown in the cashbox editor; distinct from the till activation code. */
+export function createCashboxOneTimeKey(): string {
+  return Array.from({ length: 8 }, () => CASHBOX_KEY_ALPHABET[randomInt(CASHBOX_KEY_ALPHABET.length)]).join("");
+}

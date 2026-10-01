@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
+import { createCashboxOneTimeKey } from "@/lib/cashbox-device";
 
 // GET /api/management/cashboxes — Управление → Управление кассами
 export async function GET() {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     const account = await tx.financeAccount.create({ data: { storeId, name: parsed.data.name, type: "CASH" } });
     const extraAccount = await tx.financeAccount.findFirst({ where: { storeId, type: "NONCASH" }, orderBy: { createdAt: "asc" } })
       ?? await tx.financeAccount.create({ data: { storeId, name: "Банковский счет", type: "NONCASH" } });
-    return tx.cashbox.create({ data: { storeId, name: parsed.data.name, accountId: account.id, extraAccountId: extraAccount.id } });
+    return tx.cashbox.create({ data: { storeId, name: parsed.data.name, accountId: account.id, extraAccountId: extraAccount.id, oneTimeKey: createCashboxOneTimeKey() } });
   });
   return NextResponse.json({ cashbox }, { status: 201 });
 }

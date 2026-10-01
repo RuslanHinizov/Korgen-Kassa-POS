@@ -127,21 +127,6 @@ export function CashboxModal({
     }
   }
 
-  async function generateKey() {
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/management/cashboxes/${id}/generate-key`, { method: "POST" });
-      if (!r.ok) {
-        toast.error("Не удалось сгенерировать ключ");
-        return;
-      }
-      const d = await r.json();
-      setData((prev) => (prev ? { ...prev, oneTimeKey: d.oneTimeKey } : prev));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function copyKey() {
     if (data?.oneTimeKey) {
       navigator.clipboard.writeText(data.oneTimeKey);
@@ -249,7 +234,7 @@ export function CashboxModal({
                 </div>
                 <div>
                   <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                    Сгенерировать одноразовый ключ
+                    Одноразовый ключ кассы
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -264,13 +249,6 @@ export function CashboxModal({
                       className="hover:bg-accent rounded p-2 disabled:opacity-40"
                     >
                       <Copy className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={generateKey}
-                      disabled={busy}
-                      className="text-primary text-sm whitespace-nowrap hover:underline"
-                    >
-                      Сгенерировать
                     </button>
                   </div>
                 </div>

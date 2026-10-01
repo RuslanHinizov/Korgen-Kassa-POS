@@ -141,6 +141,8 @@ export function CashboxesList() {
         toast.error("Не удалось создать кассу");
         return;
       }
+      const data = await r.json();
+      setOpenId(data.cashbox.id);
       load();
     } finally {
       setCreating(false);
