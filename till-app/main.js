@@ -353,6 +353,22 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     ipcMain.handle("print:receipt", (_e, html) => (typeof html === "string" && html.length < 3_000_000 ? printReceiptHtml(html) : { ok: false, error: "bad receipt" }));
+    // «ПРИНТЕР» light on the till screen: is the receipt printer installed and ready (not switched off / unplugged / out of paper)?
+    ipcMain.handle("print:status", async () => {
+      try {
+        const wc = win && !win.isDestroyed() ? win.webContents : null;
+        if (!wc) return { found: false, ready: false, name: null, status: 0 };
+        const name = await pickPrinter(wc);
+        if (!name) return { found: false, ready: false, name: null, status: 0 };
+        const info = (await wc.getPrintersAsync()).find((p) => p.name === name);
+        const status = Number((info && info.status) || 0);
+        // Windows PRINTER_STATUS_*: ERROR 0x2, PAPER_OUT 0x10, OFFLINE 0x80, NOT_AVAILABLE 0x1000, DOOR_OPEN 0x400000
+        const bad = 0x2 | 0x10 | 0x80 | 0x1000 | 0x400000;
+        return { found: true, ready: (status & bad) === 0, name, status };
+      } catch {
+        return { found: false, ready: false, name: null, status: 0 };
+      }
+    });
     ipcMain.on("shell:minimize", () => win && win.minimize());
     ipcMain.on("shell:quit", () => app.quit());
     ipcMain.handle("shell:info", () => ({ version: app.getVersion(), serverUrl: serverUrl() }));
