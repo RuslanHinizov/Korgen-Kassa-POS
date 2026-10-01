@@ -13,3 +13,8 @@ Geri alınamaz, ama betik önce yedek alır (`/opt/korgen-backups/before-reset-*
 
 Silinenler: tüm marketler, çalışanlar (SUPERADMIN hariç), ürünler, satışlar, vardiyalar, finans, destek yazışmaları,
 hata kayıtları, cihaz anahtarları/aktivasyon kodları, yüklenmiş resimler. Fiş/belge numaraları 1'den başlar.
+
+## Her şeyi sil (süper admin dahil), yedeksiz
+`sh deploy/reset-all-data.sh --everything --no-backup` — `DELETE EVERYTHING` yazılır, sonra yeni süper admin için telefon,
+ad ve şifre (8+ karakter) sorulur. Geri alınamaz. Yeni süper admin, uygulama kapalıyken oluşturulur (kurulum sihirbazı
+bir an bile yabancıya açık kalmaz).

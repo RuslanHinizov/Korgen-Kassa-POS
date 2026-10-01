@@ -36,12 +36,15 @@ try {
     `insert into "Account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") values ($1,$2,'credential',$2,$3,$4,$4)`,
     ["acc" + randomBytes(12).toString("hex"), id, await hashPassword(password), now],
   );
-  // A fresh install would otherwise send every visitor to the first-run setup wizard.
-  await db.query(
-    `insert into "BusinessSettings" (id, "storeId", "setupComplete", "updatedAt") values ($1,'store_main',true,$2)
-     on conflict ("storeId") do update set "setupComplete" = true`,
-    ["bs" + randomBytes(12).toString("hex"), now],
-  );
+  // A fresh install would otherwise send every visitor to the first-run setup wizard. (Only when the default market
+  // exists; on a wiped server the owner account itself keeps the wizard closed, see src/lib/installed.ts.)
+  if ((await db.query(`select 1 from "Store" where id = 'store_main'`)).rowCount) {
+    await db.query(
+      `insert into "BusinessSettings" (id, "storeId", "setupComplete", "updatedAt") values ($1,'store_main',true,$2)
+       on conflict ("storeId") do update set "setupComplete" = true`,
+      ["bs" + randomBytes(12).toString("hex"), now],
+    );
+  }
   await db.query("commit");
   console.log(`SUPERADMIN created\n  phone:    ${phone}\n  password: ${password}\nSign in at /login, then open /superadmin.`);
 } catch (e) {
