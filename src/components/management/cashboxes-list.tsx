@@ -86,7 +86,7 @@ function ActivationCodeBox({ cashboxes }: { cashboxes: { id: string; name: strin
   return (
     <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
       <div className="text-sm">
-        <div className="font-medium">Код активации новой кассы</div>
+        <div className="font-medium">Код активации кассы</div>
         <div className="text-muted-foreground">Введите код в программе кассы — она сама загрузит данные магазина. Код одноразовый и действует 24 часа.</div>
       </div>
       {cashboxes.length > 0 && (
@@ -184,6 +184,8 @@ export function CashboxesList() {
             Создать кассу
           </button>
 
+          <ActivationCodeBox cashboxes={cashboxes} />
+
           <div className="bg-card overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead>
@@ -251,8 +253,6 @@ export function CashboxesList() {
               <Download className="h-4 w-4" /> Скачать пакет
             </a>
           </div>
-
-          <ActivationCodeBox cashboxes={cashboxes} />
 
           <TillKeys />
         </>
