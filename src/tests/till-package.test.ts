@@ -16,6 +16,7 @@ vi.mock("@/lib/offline/idb", () => ({
 }));
 vi.mock("@/lib/offline/config-cache", () => ({ cacheConfig: async (k: string, v: unknown) => void (db.config[k] = v) }));
 vi.mock("@/lib/offline/catalog", () => ({ clearCatalog: async () => void (db.products = []) }));
+vi.mock("@/lib/offline/device-token", () => ({ setDeviceToken: async (token: string) => { db.meta.deviceToken = { key: "deviceToken", token }; } }));
 const bind = vi.fn(async (storeId: string) => void (db.meta.tillStore = { key: "tillStore", storeId }));
 vi.mock("@/lib/offline/clear", () => ({ bindTillToStore: (id: string) => bind(id) }));
 
@@ -83,6 +84,24 @@ describe("importPackage", () => {
     db.meta.tillStore = { key: "tillStore", storeId: "s1" };
     db.queue = 3;
     expect((await importPackage(await serializePackage(body()))).ok).toBe(true);
+  });
+  it("keeps a paired till bound to its existing cashbox when refreshed", async () => {
+    db.meta.tillStore = { key: "tillStore", storeId: "s1" };
+    db.meta.tillCashbox = { key: "tillCashbox", id: "cb1", name: "Касса-1" };
+    db.meta.deviceToken = { key: "deviceToken", token: "hub_permanent" };
+    const refreshed = { ...body(), cashbox: { id: "cb1", name: "Касса-1" }, deviceToken: "hub_rotated" };
+    expect((await importPackage(await serializePackage(refreshed))).ok).toBe(true);
+    expect(db.meta.deviceToken).toEqual({ key: "deviceToken", token: "hub_permanent" });
+    expect(db.meta.tillCashbox).toMatchObject({ id: "cb1" });
+  });
+  it("refuses a different cashbox or market after first binding", async () => {
+    db.meta.tillStore = { key: "tillStore", storeId: "s1" };
+    db.meta.tillCashbox = { key: "tillCashbox", id: "cb1", name: "Касса-1" };
+    expect(await importPackage(await serializePackage({ ...body(), cashbox: { id: "cb2", name: "Касса-2" } })))
+      .toEqual({ ok: false, reason: "already-bound" });
+    expect(await importPackage(await serializePackage({ ...body("s2"), cashbox: { id: "cb1", name: "Касса-1" } })))
+      .toEqual({ ok: false, reason: "already-bound" });
+    expect(bind).not.toHaveBeenCalled();
   });
   it("does not touch the till when the file is damaged", async () => {
     const r = await importPackage("{}");

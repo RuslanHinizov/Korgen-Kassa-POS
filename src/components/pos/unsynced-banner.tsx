@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
+import { usePathname } from "next/navigation";
 import { retryFailed, clearTimeAdjusted } from "@/lib/offline/queue";
 import { PackageLoader } from "@/components/till/package-loader";
 
@@ -11,6 +12,7 @@ import { PackageLoader } from "@/components/till/package-loader";
  * The cashier can close it; it comes back when the number of waiting items changes.
  */
 export function UnsyncedBanner() {
+  const pathname = usePathname();
   const status = useOfflineStatus();
   const [dismissedFor, setDismissedFor] = useState<number | null>(null);
   const waiting = status.pending;
@@ -36,7 +38,7 @@ export function UnsyncedBanner() {
           {typeof location !== "undefined" && location.pathname.startsWith("/till") ? (
             <>
               Данные ждут отправки: сервер не принял ключ кассы. Пакет магазина отозван или устарел — загрузите новый пакет.
-              <PackageLoader label="Загрузить новый пакет" onLoaded={() => window.location.reload()} />
+              {!pathname.startsWith("/till") && <PackageLoader label="Загрузить новый пакет" onLoaded={() => window.location.reload()} />}
             </>
           ) : (
             <>

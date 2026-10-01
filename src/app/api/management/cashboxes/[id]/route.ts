@@ -8,7 +8,7 @@ import { z } from "zod";
 // GET /api/management/cashboxes/:id — full detail for the edit modal (all 3 tabs)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || !["ADMIN", "MANAGER"].includes(session.user.role ?? "")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const storeId = await getStoreId();
 
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   return NextResponse.json({
     cashbox: {
-      id: cashbox.id, no: cashbox.no, name: cashbox.name, active: cashbox.active, oneTimeKey: cashbox.oneTimeKey,
+      id: cashbox.id, no: cashbox.no, name: cashbox.name, active: cashbox.active, oneTimeKey: cashbox.oneTimeKey, pairedAt: cashbox.pairedAt,
       accountId: cashbox.accountId, accountName: cashbox.account?.name ?? null, cashBalance: cashbox.account ? Number(cashbox.account.balance) : 0,
       extraAccountId: cashbox.extraAccountId, extraAccountName: cashbox.extraAccount?.name ?? null, extraBalance: cashbox.extraAccount ? Number(cashbox.extraAccount.balance) : 0,
       appVersion: cashbox.appVersion, platform: cashbox.platform, lastSyncAt: cashbox.lastSyncAt,

@@ -6,7 +6,6 @@ import { POSScreen } from "@/components/pos/pos-screen";
 import { setCurrencyConfig } from "@/lib/utils";
 import { loadTillProfile, type TillProfileResult } from "@/lib/offline/till-profile";
 import { getPackageInfo, type PackageInfo } from "@/lib/offline/package-import";
-import { PackageLoader } from "./package-loader";
 import { PinLogin } from "./pin-login";
 import { ActivationForm } from "./activation-form";
 import { BlockedScreen } from "./blocked-screen";
@@ -78,26 +77,15 @@ export function TillShell() {
   }, [result]);
 
   if (!result) return <div className="h-screen w-screen bg-background" />;
-  if (blocked) return <BlockedScreen onChanged={() => { reload(); }} />;
+  if (blocked) return <BlockedScreen />;
   if (result.state === "unbound") {
     return (
-      <Notice title="Касса не привязана к магазину" message="На этой кассе ещё нет данных магазина. Введите код активации (его выдаёт администратор в панели управления) или загрузите пакет магазина файлом.">
+      <Notice title="Касса не привязана к магазину" message="Для первого подключения требуется интернет. Введите одноразовый код, созданный для этой кассы в панели управления.">
         <ActivationForm onLoaded={reload} />
-        <p className="my-3 text-xs text-muted-foreground">или, если нет интернета:</p>
-        <PackageLoader label="Загрузить пакет магазина" onLoaded={reload} />
       </Notice>
     );
   }
-  if (result.state === "signed-out") {
-    return (
-      <>
-        <PinLogin key={info?.loadedAt} storeName={info?.storeName} onSignedIn={reload} />
-        <div className="fixed bottom-3 left-0 right-0 flex items-center justify-center gap-3 text-xs">
-          <PackageLoader label="Загрузить новый пакет магазина" onLoaded={reload} />
-        </div>
-      </>
-    );
-  }
+  if (result.state === "signed-out") return <PinLogin key={info?.loadedAt} storeName={info?.storeName} onSignedIn={reload} />;
 
   const { profile } = result;
   const brandingCSS = `

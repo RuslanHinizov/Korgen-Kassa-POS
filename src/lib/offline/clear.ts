@@ -8,8 +8,7 @@
  */
 
 import { clearCatalog } from "./catalog";
-import { idbClear, idbGet, idbPut } from "./idb";
-import { setNeedsLogin } from "./queue";
+import { idbGet, idbPut } from "./idb";
 
 async function wipeCaches(): Promise<void> {
   try {
@@ -39,16 +38,4 @@ export async function bindTillToStore(storeId: string): Promise<void> {
   const known = await idbGet<{ key: string; storeId: string }>("meta", "tillStore");
   if (known && known.storeId !== storeId) await wipeCaches();
   if (!known || known.storeId !== storeId) await idbPut("meta", { key: "tillStore", storeId });
-}
-
-/**
- * Forget everything this till program holds: the upload queue (sales not sent yet), catalogue, saved market package, saved
- * sign-in, the basket on screen. Used when the market this till belonged to was switched off or deleted for good and the
- * till must be tied to a new one. Unsent sales are lost: they belong to a market that no longer accepts them.
- */
-export async function resetTill(): Promise<void> {
-  await wipeCaches();
-  for (const store of ["queue", "products", "meta"] as const) await idbClear(store);
-  try { localStorage.removeItem("olgax-pos-cart"); } catch { /* best effort */ }
-  setNeedsLogin(false);
 }

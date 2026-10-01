@@ -13,7 +13,7 @@ import { parsePackage, type TillPackageBody } from "@/lib/till-package-format";
 
 export type ImportResult =
   | { ok: true; storeName: string; products: number; generatedAt: string }
-  | { ok: false; reason: "not-json" | "not-a-package" | "newer-version" | "damaged" | "unsent-sales" | "storage-failed" };
+  | { ok: false; reason: "not-json" | "not-a-package" | "newer-version" | "damaged" | "unsent-sales" | "already-bound" | "storage-failed" };
 
 export interface PackageInfo {
   key: "packageInfo";
@@ -32,6 +32,10 @@ export async function importPackage(text: string): Promise<ImportResult> {
   // Never swap markets under sales that were rung up and not uploaded yet: they belong to the old market.
   const known = await idbGet<{ storeId: string }>("meta", "tillStore");
   if (known && known.storeId !== body.store.id && (await idbCount("queue")) > 0) return { ok: false, reason: "unsent-sales" };
+  const oldCashbox = await idbGet<{ id: string; name: string }>("meta", "tillCashbox");
+  const oldToken = await idbGet<{ token: string; enrolled?: boolean }>("meta", "deviceToken");
+  if (known && known.storeId !== body.store.id) return { ok: false, reason: "already-bound" };
+  if (known && (oldCashbox?.id ?? null) !== (body.cashbox?.id ?? null)) return { ok: false, reason: "already-bound" };
 
   await bindTillToStore(body.store.id); // wipes the previous market's caches when it differs
   await clearCatalog();
@@ -46,11 +50,12 @@ export async function importPackage(text: string): Promise<ImportResult> {
   await cacheConfig("quickProductGroups", body.quickGroups);
   await cacheConfig("quickProducts", body.quickItems);
   await cacheConfig("packageCashiers", body.cashiers);
-  await setDeviceToken(body.deviceToken); // also clears a token left from another market when this package has none
+  // A package refresh may update catalogue data, but it must never replace a till's existing server identity.
+  if (!oldToken && body.deviceToken) await setDeviceToken(body.deviceToken);
   // a fresh package carries the PINs as they are now; a lock from guesses against the old ones no longer applies
   for (const c of body.cashiers) await idbDelete("meta", `pinAttempts:${c.id}`);
   if (body.cashbox) await idbPut("meta", { key: "tillCashbox", id: body.cashbox.id, name: body.cashbox.name });
-  else await idbDelete("meta", "tillCashbox");
+  else if (!known) await idbDelete("meta", "tillCashbox");
   await idbPut("meta", { key: "packageInfo", storeId: body.store.id, storeName: body.store.name, generatedAt: body.generatedAt, loadedAt: Date.now(), products: body.products.length } satisfies PackageInfo);
 
   return { ok: true, storeName: body.store.name, products: body.products.length, generatedAt: body.generatedAt };

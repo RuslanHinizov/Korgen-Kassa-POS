@@ -12,6 +12,7 @@ interface CashboxDetail {
   name: string;
   active: boolean;
   oneTimeKey: string | null;
+  pairedAt: string | null;
   accountName: string | null;
   cashBalance: number;
   extraAccountId: string | null;
@@ -127,25 +128,14 @@ export function CashboxModal({
     }
   }
 
-  async function generateKey() {
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/management/cashboxes/${id}/generate-key`, { method: "POST" });
-      if (!r.ok) {
-        toast.error("Не удалось сгенерировать ключ");
-        return;
-      }
-      const d = await r.json();
-      setData((prev) => (prev ? { ...prev, oneTimeKey: d.oneTimeKey } : prev));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function copyKey() {
+  async function copyKey() {
     if (data?.oneTimeKey) {
-      navigator.clipboard.writeText(data.oneTimeKey);
-      toast.success("Скопировано");
+      try {
+        await navigator.clipboard.writeText(data.oneTimeKey);
+        toast.success("Код подключения скопирован");
+      } catch {
+        toast.error("Не удалось скопировать код");
+      }
     }
   }
 
@@ -249,30 +239,24 @@ export function CashboxModal({
                 </div>
                 <div>
                   <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                    Сгенерировать одноразовый ключ
+                    Одноразовый код подключения
                   </label>
                   <div className="flex items-center gap-2">
                     <input
                       disabled
                       value={data.oneTimeKey ?? ""}
-                      placeholder="—"
+                      placeholder={data.pairedAt ? "Уже подключена" : "Код создаётся автоматически"}
                       className="bg-muted text-muted-foreground h-9 flex-1 rounded-md border px-2 text-sm"
                     />
                     <button
-                      onClick={copyKey}
+                      onClick={() => void copyKey()}
                       disabled={!data.oneTimeKey}
                       className="hover:bg-accent rounded p-2 disabled:opacity-40"
                     >
                       <Copy className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={generateKey}
-                      disabled={busy}
-                      className="text-primary text-sm whitespace-nowrap hover:underline"
-                    >
-                      Сгенерировать
-                    </button>
                   </div>
+                  <p className="text-muted-foreground mt-1 text-xs">Код создаётся вместе с кассой, используется один раз и после подключения не меняется. Переподключение с терминала отключено.</p>
                 </div>
               </div>
             )}
