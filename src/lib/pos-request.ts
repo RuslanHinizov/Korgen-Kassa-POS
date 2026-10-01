@@ -21,8 +21,14 @@ export interface PosRequestContext {
  * Returns `{ error }` (already-built 401 response) when neither authenticates.
  */
 export async function resolvePosRequest(req: NextRequest): Promise<PosRequestContext | { error: NextResponse }> {
+  const authorization = req.headers.get("authorization") ?? "";
   const hub = await resolveHubActor(req);
   if (hub) return { storeId: hub.storeId, actor: { userId: "", role: "HUB" }, viaHub: true, cashboxId: hub.cashboxId };
+
+  // Invalid device credentials must not be reinterpreted as a cashier's cookie session.
+  if (authorization.startsWith("Bearer hub_")) {
+    return { error: NextResponse.json({ error: "Till disabled or device key revoked" }, { status: 401 }) };
+  }
 
   const actor = await resolvePosActor();
   if (!actor) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };

@@ -9,6 +9,8 @@ import { getPackageInfo, type PackageInfo } from "@/lib/offline/package-import";
 import { PackageLoader } from "./package-loader";
 import { PinLogin } from "./pin-login";
 import { ActivationForm } from "./activation-form";
+import { BlockedScreen } from "./blocked-screen";
+import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 import { installDeviceFetch } from "@/lib/offline/device-fetch";
 import { flushQueue } from "@/lib/offline/queue";
 import { enrollDevice } from "@/lib/offline/device-token";
@@ -60,19 +62,23 @@ function useBackgroundUpload(active: boolean) {
 export function TillShell() {
   const [result, setResult] = useState<TillProfileResult | null>(null);
   const [info, setInfo] = useState<PackageInfo | undefined>();
+  const { needsLogin, online } = useOfflineStatus();
 
   const reload = () => {
     loadTillProfile().then(setResult).catch(() => setResult({ state: "unbound" }));
     getPackageInfo().then(setInfo).catch(() => {});
   };
   useEffect(reload, []);
-  useBackgroundUpload(result?.state === "signed-out");
+  // refused by the server while online = switched off: keep asking, so the till wakes up by itself when the market is back
+  const blocked = needsLogin && online && !!result && result.state !== "unbound";
+  useBackgroundUpload(result?.state === "signed-out" || blocked);
 
   useEffect(() => {
     if (result?.state === "ready") setCurrencyConfig(result.profile.currency);
   }, [result]);
 
   if (!result) return <div className="h-screen w-screen bg-background" />;
+  if (blocked) return <BlockedScreen onChanged={() => { reload(); }} />;
   if (result.state === "unbound") {
     return (
       <Notice title="Касса не привязана к магазину" message="На этой кассе ещё нет данных магазина. Введите код активации (его выдаёт администратор в панели управления) или загрузите пакет магазина файлом.">

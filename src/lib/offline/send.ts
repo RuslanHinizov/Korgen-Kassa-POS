@@ -47,9 +47,14 @@ export async function sendOrQueue(opts: {
       clearTimeout(timer);
       // sent to the sign-in page instead of the API: nobody is signed in any more
       if (!isApiAnswer(res)) sessionGone = true;
-      // The till program's key was refused (package revoked or replaced): the sale is still real — keep it on the till,
-      // tell the cashier (needsLogin banner asks for a new package), never turn the customer away.
-      if (isApiAnswer(res) && res.status === 401 && deviceKey) sessionGone = true;
+      // The server is reachable but refused this till's key (market suspended/deleted or key revoked).
+      // Do not accept a new sale locally in that case; network failures still queue sales below.
+      if (isApiAnswer(res) && res.status === 401 && deviceKey) {
+        setOnline(true);
+        setNeedsLogin(true);
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        return { ok: false, error: errorText(data?.error, "Касса отключена. Обратитесь к администратору."), status: res.status, data };
+      }
       // 502/503/504: the server (or the proxy in front of it) is down or restarting — same as no connection.
       else if (isApiAnswer(res) && (res.status < 502 || res.status > 504)) {
         setOnline(true);

@@ -74,5 +74,8 @@ const realGetSession = auth.api.getSession.bind(auth.api);
   }
   const device = h ? await resolveDeviceSession(h) : null;
   if (device) return { session: device.session, user: device.user };
+  // A rejected till key (revoked, suspended market, or deleted market) must never fall back to a
+  // browser cookie that happens to exist in the same Electron profile.
+  if ((h?.get("authorization") ?? "").startsWith("Bearer hub_")) return null;
   return realGetSession(ctx as never);
 };

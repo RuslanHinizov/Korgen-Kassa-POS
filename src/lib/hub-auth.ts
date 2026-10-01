@@ -41,8 +41,11 @@ export async function resolveHubActor(req: Request): Promise<HubActor | null> {
   const tokenHash = hashToken(match[1]);
   // Constant-time-ish: the hash is already opaque and unique-indexed, a direct lookup does not leak timing
   // information about the token's content the way comparing raw secrets would.
-  const row = await prisma.hubToken.findUnique({ where: { tokenHash } });
+  const row = await prisma.hubToken.findUnique({ where: { tokenHash }, include: { store: { select: { suspendedAt: true } } } });
   if (!row || row.revokedAt) return null;
+  // A market the platform owner suspended is switched off for its tills too: they get the same refusal as a revoked key
+  // (and work again by themselves once the market is switched back on).
+  if (row.store.suspendedAt) return null;
 
   void prisma.hubToken.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
   // The standalone till sends its program version; the register it is tied to shows it in Управление → Кассы.

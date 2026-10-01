@@ -12,6 +12,8 @@ import type { PackageCashier } from "@/lib/till-package-format";
 import { setTillAuth } from "./auth";
 import { cacheConfig, getCachedConfig } from "./config-cache";
 import { idbDelete, idbGet, idbPut } from "./idb";
+import { deviceAuthHeaders } from "./device-token";
+import { setNeedsLogin } from "./queue";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MS = 5 * 60_000;
@@ -38,7 +40,10 @@ export async function refreshPackageCashiers(): Promise<void> {
   lastStaffRefresh = Date.now();
   try {
     const res = await fetch("/api/pos/till-cashiers", { cache: "no-store" });
+    // The server answered and refused this till's key: the market is switched off or the key was revoked.
+    if (res.status === 401 && Boolean((await deviceAuthHeaders()).Authorization)) { setNeedsLogin(true); return; }
     if (!res.ok) return;
+    setNeedsLogin(false);
     const data = (await res.json()) as { cashiers?: PackageCashier[] };
     if (Array.isArray(data.cashiers)) await cacheConfig("packageCashiers", data.cashiers);
   } catch {

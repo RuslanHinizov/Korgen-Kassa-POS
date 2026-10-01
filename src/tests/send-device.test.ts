@@ -1,4 +1,4 @@
-/** On the till program a refused device key must never turn a sale away: it is kept on the till and the cashier is warned. */
+/** A server refusal blocks new sales; only an unreachable server queues a sale for later. */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -22,13 +22,13 @@ beforeEach(() => { rows.clear(); meta.clear(); vi.stubGlobal("navigator", { onLi
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sendOrQueue with a device key", () => {
-  it("keeps the sale and raises the warning when the key is refused (401)", async () => {
+  it("blocks a new sale and raises the warning when the server refuses the key (401)", async () => {
     vi.stubGlobal("location", { pathname: "/till" });
     meta.set("deviceToken", { key: "deviceToken", token: "hub_revoked" });
     vi.stubGlobal("fetch", async () => json(401, { error: "Unauthorized" }));
     const r = await send();
-    expect(r).toMatchObject({ ok: true, queued: true });
-    expect(rows.has("sale1")).toBe(true);
+    expect(r).toMatchObject({ ok: false, status: 401 });
+    expect(rows.has("sale1")).toBe(false);
     expect(getOfflineStatus().needsLogin).toBe(true);
   });
 

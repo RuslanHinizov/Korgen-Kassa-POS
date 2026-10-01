@@ -28,6 +28,7 @@ export function ActivationForm({ onLoaded }: { onLoaded: () => void }) {
       }
       const result = await importPackage(await res.text());
       if (result.ok) onLoaded();
+      else if (result.reason === "unsent-sales") setError("На кассе есть не отправленные продажи другого магазина. Нажмите «Сбросить кассу» ниже, чтобы удалить их и подключить новый магазин.");
       else setError("Не удалось сохранить данные магазина на кассе.");
     } catch {
       setError("Нет связи с сервером. Проверьте интернет или загрузите пакет магазина файлом.");
