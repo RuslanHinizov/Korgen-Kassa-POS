@@ -57,7 +57,7 @@ export async function POST(
       cashbox: { select: { accountId: true, extraAccountId: true } },
     },
   });
-  if (!sale) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
+  if (!sale) return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   const saleId = sale.id;
 
   const body = await req.json();
@@ -70,7 +70,7 @@ export async function POST(
     const already = await prisma.refund.findFirst({ where: { id: parsed.data.id, sale: { storeId } } });
     if (already) return NextResponse.json({ refund: already, duplicate: true }, { status: 200 });
   }
-  if (sale.status !== "COMPLETED") return NextResponse.json({ error: "Sale is not refundable" }, { status: 400 });
+  if (sale.status !== "COMPLETED") return NextResponse.json({ error: "Эту продажу нельзя вернуть" }, { status: 400 });
   const refundUserId = await attributedUserId(actor, storeId, parsed.data.cashierUserId);
   if (!refundUserId) return NextResponse.json({ error: "cashierUserId required" }, { status: 400 });
 

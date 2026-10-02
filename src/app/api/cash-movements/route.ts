@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const shift =
     (parsed.data.shiftId ? await prisma.shift.findFirst({ where: { id: parsed.data.shiftId, storeId } }) : null) ??
     (await getOpenShift(movementUserId, storeId));
-  if (!shift) return NextResponse.json({ error: "No open shift" }, { status: 409 });
+  if (!shift) return NextResponse.json({ error: "Нет открытой смены" }, { status: 409 });
 
   const timeAdjusted = !!parsed.data.createdAt && !trustedTime(parsed.data.createdAt);
 

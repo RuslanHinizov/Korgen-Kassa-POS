@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ group }, { status: 201 });
   } catch (e: unknown) {
     if ((e as { code?: string }).code === "P2002") {
-      return NextResponse.json({ error: "Bu isimde bir grup zaten var" }, { status: 409 });
+      return NextResponse.json({ error: "Группа с таким названием уже есть" }, { status: 409 });
     }
     throw e;
   }

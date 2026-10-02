@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setOversellGuard, useCartStore } from "@/store/cart";
 
-const bread = { productId: "p1", name: "Нан", price: 120, stock: 1, unit: "pcs", categoryId: null };
+const bread = { productId: "p1", name: "Нан", price: 120, stock: 1, unit: "pcs" as const, categoryId: null };
 
 describe("«Запретить продажу больше остатка»", () => {
   beforeEach(() => {

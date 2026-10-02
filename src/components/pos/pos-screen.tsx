@@ -429,6 +429,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   // UMAG's «СКИДКА» box in the table header: a percent for the ticked lines (or the active line when none is ticked).
   function applyDiscountPercent() {
     if (!permissions.posDiscount) return;
+    // an empty field means "nothing typed" (e.g. the field lost focus after Enter): it must not wipe the discount just set
+    if (discountText.trim() === "") return;
     const pct = Math.min(100, Math.max(0, Number(discountText.replace(",", "."))));
     if (!Number.isFinite(pct)) return;
     const ids = selected.size > 0 ? [...selected] : activeItemId ? [activeItemId] : [];

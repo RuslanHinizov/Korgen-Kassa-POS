@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const err = e as { code?: string };
     if (err.code === "P2002") {
-      return NextResponse.json({ error: "Phone or email already in use" }, { status: 409 });
+      return NextResponse.json({ error: "Клиент с таким телефоном или email уже есть" }, { status: 409 });
     }
     throw e;
   }

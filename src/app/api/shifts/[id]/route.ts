@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (shift.status === "CLOSED") {
     // an upload that is repeated (lost answer) must not look like a failure
     if (parsed.data.offline) return NextResponse.json({ shift: serialize(shift), duplicate: true }, { status: 200 });
-    return NextResponse.json({ error: "Shift already closed" }, { status: 409 });
+    return NextResponse.json({ error: "Смена уже закрыта" }, { status: 409 });
   }
 
   const isPrivileged = ["ADMIN", "MANAGER"].includes(actor.role ?? "");
