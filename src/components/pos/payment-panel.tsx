@@ -383,7 +383,7 @@ export function PaymentPanel({
   }
 
   return (
-    <div className="space-y-3 p-3 sm:p-4">
+    <div className="pos-payment-panel space-y-3 p-3 sm:p-4">
       {/* UMAG's own payment ribbon: К ОПЛАТЕ / ПОЛУЧЕНО (green) / СДАЧА (red). "Осталось" is a Korgen
           addition, useful for split-tender only, shown as a 4th column just there. */}
       <div className={`grid gap-2 bg-[#f1f1f1] px-4 py-2 text-center ${splitMode ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>

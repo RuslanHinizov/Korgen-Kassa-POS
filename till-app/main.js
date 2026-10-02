@@ -314,6 +314,9 @@ function startServer() {
 }
 
 let win;
+let allowWindowClose = false;
+let closeRequestPending = false;
+let closeFallbackTimer;
 function createWindow() {
   win = new BrowserWindow({
     width: 1280,
@@ -325,6 +328,21 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.maximize();
+  // Keep an unfinished sale from disappearing when the cashier clicks the window's X / Alt+F4.
+  win.on("close", (event) => {
+    if (allowWindowClose) return;
+    event.preventDefault();
+    if (closeRequestPending) return;
+    closeRequestPending = true;
+    win.webContents.send("shell:close-requested");
+    // No POS screen is mounted (e.g. PIN/activation page): don't trap the cashier in the app.
+    closeFallbackTimer = setTimeout(() => {
+      allowWindowClose = true;
+      if (win && !win.isDestroyed()) win.close();
+    }, 400);
+    // A delayed answer from a slow renderer should still be able to recover on the next close attempt.
+    setTimeout(() => { closeRequestPending = false; }, 5000);
+  });
   win.once("ready-to-show", () => win.show());
   win.loadURL(`http://127.0.0.1:${PORT}/till`);
   // links to other sites open in the normal browser, never inside the till window
@@ -370,13 +388,26 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     ipcMain.on("shell:minimize", () => win && win.minimize());
-    ipcMain.on("shell:quit", () => app.quit());
+    ipcMain.on("shell:quit", () => win && win.close());
+    ipcMain.on("shell:defer-close", () => clearTimeout(closeFallbackTimer));
+    ipcMain.on("shell:cancel-close", () => {
+      clearTimeout(closeFallbackTimer);
+      closeRequestPending = false;
+    });
+    ipcMain.on("shell:confirm-close", () => {
+      clearTimeout(closeFallbackTimer);
+      allowWindowClose = true;
+      closeRequestPending = false;
+      if (win && !win.isDestroyed()) win.close();
+    });
     ipcMain.handle("shell:info", () => ({ version: app.getVersion(), serverUrl: serverUrl() }));
     createWindow();
     setupUpdates();
   });
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", () => {
+    clearTimeout(closeFallbackTimer);
+    allowWindowClose = true;
     if (server) server.close();
   });
 }

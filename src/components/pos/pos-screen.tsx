@@ -101,6 +101,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [showHeldOrders, setShowHeldOrders] = useState(false);
   const [holdLoading, setHoldLoading] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [closeCartPrompt, setCloseCartPrompt] = useState(false);
   const [voidTargetIds, setVoidTargetIds] = useState<string[] | null>(null);
   const [quantityOpen, setQuantityOpen] = useState(false);
   const [discountText, setDiscountText] = useState("");
@@ -257,6 +258,46 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     discountCardPercent,
     setDiscountCard,
   } = useCartStore();
+
+  // Electron asks the till screen before closing so a scanned, unpaid order cannot vanish silently.
+  useEffect(() => {
+    const shell = (window as unknown as { korgenShell?: {
+      onCloseRequested?: (handler: () => void) => () => void;
+      deferClose?: () => void;
+      confirmClose?: () => void;
+    } }).korgenShell;
+    if (!shell?.onCloseRequested) return;
+    return shell.onCloseRequested(() => {
+      if (useCartStore.getState().items.length === 0) shell.confirmClose?.();
+      else {
+        shell.deferClose?.();
+        setCloseCartPrompt(true);
+      }
+    });
+  }, []);
+
+  function respondToCloseWithCart(action: "sell" | "delete" | "stay") {
+    const shell = (window as unknown as { korgenShell?: {
+      cancelClose?: () => void;
+      confirmClose?: () => void;
+    } }).korgenShell;
+    setCloseCartPrompt(false);
+    if (action === "stay") {
+      shell?.cancelClose?.();
+      return;
+    }
+    if (action === "sell") {
+      shell?.cancelClose?.();
+      setPaymentOpen(true);
+      return;
+    }
+    clearCart();
+    setCustomer(null);
+    setConsultantId("");
+    setSelected(new Set());
+    setActiveItemId(null);
+    shell?.confirmClose?.();
+  }
 
   // Load active promotions once
   const [promos, setPromos] = useState<PromotionRule[]>([]);
@@ -568,7 +609,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
     : "";
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white text-[#172b1d]">
+    <div className="pos-screen flex h-full min-h-0 flex-col bg-white text-[#172b1d]">
       <KioskTopBar
         cashierName={cashierName}
         showSalesHistory={showSalesHistory}
@@ -707,7 +748,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
             )}
             {/* UMAG draws the ruled sheet to the bottom of the table: empty ruled rows fill the free space */}
             {Array.from({ length: Math.max(0, 14 - items.length) }, (_, i) => (
-              <tr key={`filler-${i}`} aria-hidden className="h-[3.1rem]">
+              <tr key={`filler-${i}`} aria-hidden data-pos-filler className="h-[3.1rem]">
                 {Array.from({ length: 7 }, (_, c) => <td key={c} />)}
               </tr>
             ))}
@@ -722,8 +763,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           <div><p className="text-lg font-bold">Сначала откройте смену</p><p className="text-sm">Откройте вкладку «Смена», затем можно будет принять оплату.</p></div>
         </div>
       )}
-      <div className="flex shrink-0 flex-col gap-3 border-t border-slate-700 bg-[#404040] p-5 sm:flex-row sm:items-stretch">
-        <div className="flex min-h-56 shrink-0 flex-col justify-center gap-4 rounded-xl bg-white px-8 py-6 text-[#14231b] shadow-sm sm:w-[26rem]">
+      <div data-pos-footer className="flex shrink-0 flex-col gap-3 border-t border-slate-700 bg-[#404040] p-5 sm:flex-row sm:items-stretch">
+        <div data-pos-total className="flex min-h-56 shrink-0 flex-col justify-center gap-4 rounded-xl bg-white px-8 py-6 text-[#14231b] shadow-sm sm:w-[26rem]">
           <Row label="ИТОГО" value={formatCurrency(tot)} bold />
           <Row label="ПОЛУЧЕНО" value={formatCurrency(0)} />
           <Row label="СДАЧА" value={formatCurrency(0)} />
@@ -753,6 +794,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
           />
           <button
             data-charge-btn
+            data-pos-action
             onClick={() => setPaymentOpen(true)}
             disabled={items.length === 0 || (requireShift && !hasOpenShift)}
             className={cn(
@@ -1042,6 +1084,20 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
         onCancel={() => setConfirmClear(false)}
       />
 
+      {closeCartPrompt && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50" role="presentation">
+          <section className="mx-4 w-full max-w-md rounded-lg border bg-background p-6 shadow-xl" role="alertdialog" aria-modal="true" aria-labelledby="close-cart-title">
+            <h2 id="close-cart-title" className="text-base font-semibold">В корзине есть товары</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Перед закрытием выберите, что сделать с текущей продажей.</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button className="h-10 rounded-md border px-4 text-sm" onClick={() => respondToCloseWithCart("stay")}>Остаться</button>
+              <button className="h-10 rounded-md border border-destructive px-4 text-sm text-destructive" onClick={() => respondToCloseWithCart("delete")}>Удалить и закрыть</button>
+              <button className="h-10 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => respondToCloseWithCart("sell")}>Перейти к оплате</button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
@@ -1075,6 +1131,7 @@ function BottomButton({
 }) {
   return (
     <button
+      data-pos-action
       ref={anchorRef}
       onClick={onClick}
       disabled={disabled}

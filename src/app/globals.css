@@ -1,6 +1,74 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Compact touch-POS layout for common 720p cashier monitors. Keep all sale controls
+   visible without shrinking the text or forcing the cashier to scroll the whole page. */
+@media (max-height: 780px) and (min-width: 900px) {
+  .pos-screen [data-pos-footer] {
+    gap: .5rem !important;
+    padding: .5rem !important;
+  }
+
+  .pos-screen [data-pos-total] {
+    min-height: 0 !important;
+    gap: .35rem !important;
+    padding: .5rem .8rem !important;
+    border-radius: .5rem !important;
+  }
+
+  .pos-screen [data-pos-action] {
+    min-height: 3rem !important;
+    padding-block: .35rem !important;
+  }
+
+  .pos-screen tbody td {
+    padding-block: .3rem !important;
+  }
+
+  .pos-screen [data-pos-filler] {
+    height: 1.45rem !important;
+  }
+
+  [data-pos-payment-dialog] {
+    padding: .4rem !important;
+  }
+
+  .pos-payment-card {
+    max-height: calc(100dvh - .8rem) !important;
+    max-width: 64rem !important;
+  }
+
+  .pos-payment-panel {
+    padding: .5rem !important;
+  }
+
+  .pos-payment-panel > :not([hidden]) ~ :not([hidden]) {
+    margin-top: .35rem !important;
+  }
+
+  .pos-payment-panel .p-3,
+  .pos-payment-panel .p-4 {
+    padding: .45rem !important;
+  }
+
+  .pos-payment-panel .px-4 {
+    padding-inline: .55rem !important;
+  }
+
+  .pos-payment-panel .py-2 {
+    padding-block: .3rem !important;
+  }
+
+  .pos-payment-panel .py-3 {
+    padding-block: .4rem !important;
+  }
+
+  .pos-payment-panel .h-11 {
+    height: 2.25rem !important;
+    min-height: 2.25rem !important;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

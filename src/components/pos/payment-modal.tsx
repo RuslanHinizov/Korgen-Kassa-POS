@@ -12,8 +12,8 @@ export function PaymentModal({
   ...panelProps
 }: ComponentProps<typeof PaymentPanel> & { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-      <div className="relative flex max-h-[92vh] w-full max-w-[52rem] flex-col overflow-hidden rounded-sm border border-slate-300 bg-white shadow-2xl">
+    <div data-pos-payment-dialog className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
+      <div className="pos-payment-card relative flex max-h-[92vh] w-full max-w-[52rem] flex-col overflow-hidden rounded-sm border border-slate-300 bg-white shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-2 right-2 z-10 rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -21,7 +21,7 @@ export function PaymentModal({
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="pos-payment-content min-h-0 flex-1 overflow-y-auto">
           <PaymentPanel {...panelProps} />
         </div>
       </div>
