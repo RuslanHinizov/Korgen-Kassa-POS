@@ -10,6 +10,7 @@ import { PackageLoader } from "./package-loader";
 import { PinLogin } from "./pin-login";
 import { ActivationForm } from "./activation-form";
 import { BlockedScreen } from "./blocked-screen";
+import { TillCornerActions } from "./till-corner-actions";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 import { installDeviceFetch } from "@/lib/offline/device-fetch";
 import { flushQueue } from "@/lib/offline/queue";
@@ -85,6 +86,7 @@ export function TillShell() {
         <ActivationForm onLoaded={reload} />
         <p className="my-3 text-xs text-muted-foreground">или, если нет интернета:</p>
         <PackageLoader label="Загрузить пакет магазина" onLoaded={reload} />
+        <TillCornerActions bound={false} onChanged={reload} />
       </Notice>
     );
   }
@@ -95,6 +97,7 @@ export function TillShell() {
         <div className="fixed bottom-3 left-0 right-0 flex items-center justify-center gap-3 text-xs">
           <PackageLoader label="Загрузить новый пакет магазина" onLoaded={reload} />
         </div>
+        <TillCornerActions bound onChanged={reload} />
       </>
     );
   }

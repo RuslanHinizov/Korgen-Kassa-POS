@@ -5,6 +5,7 @@ import { useOfflineStatus } from "@/lib/offline/use-offline-status";
 import { resetTill } from "@/lib/offline/clear";
 import { ActivationForm } from "./activation-form";
 import { PackageLoader } from "./package-loader";
+import { TillCornerActions } from "./till-corner-actions";
 
 /**
  * Shown instead of the till when the server is reachable and refuses this till's key: the market was suspended, deleted,
@@ -30,6 +31,7 @@ export function BlockedScreen({ onChanged }: { onChanged: () => void }) {
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background p-6" data-testid="till-blocked">
+      <TillCornerActions bound={false} onChanged={onChanged} />
       <div className="max-w-md rounded-xl border-2 border-red-300 bg-card p-8 text-center shadow-sm">
         <h1 className="mb-2 text-xl font-semibold text-red-700">Касса отключена</h1>
         <p className="mb-2 text-sm text-muted-foreground">
