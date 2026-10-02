@@ -44,6 +44,12 @@ export function KioskTopBar({
 }: KioskTopBarProps) {
   const [now, setNow] = useState(() => new Date());
   const { online } = useOfflineStatus();
+  // on the till program the real program version, not the web build's
+  const [version, setVersion] = useState(APP_VERSION);
+  useEffect(() => {
+    const shell = (window as unknown as { korgenShell?: { info?: () => Promise<{ version: string }> } }).korgenShell;
+    void shell?.info?.().then((i) => setVersion(i.version)).catch(() => {});
+  }, []);
   const [printerReady, setPrinterReady] = useState(false);
   const [printerNote, setPrinterNote] = useState("нет USB");
   const [scannerSeen, setScannerSeen] = useState(false);
@@ -122,7 +128,7 @@ export function KioskTopBar({
           <span className="font-bold">{cashierName}</span>
         )}
       </span>
-      <span className="hidden text-sm font-bold normal-case lg:inline">v {APP_VERSION}</span>
+      <span className="hidden text-sm font-bold normal-case lg:inline">v {version}</span>
       {/* UMAG shows the connection as a dot next to the version: green = connected, red = no connection. */}
       <span
         data-testid="connection-dot"
