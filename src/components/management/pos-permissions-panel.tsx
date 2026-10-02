@@ -8,7 +8,7 @@ interface Permissions {
   posCollapseWindow: boolean; posInstantSync: boolean; posShowSalesHistory: boolean; posNewReceiptFormat: boolean; posGlobalSearch: boolean;
   posUniversalProduct: boolean; posCreateProduct: boolean; posEditProductAtPos: boolean; posHoldOrder: boolean; posDiscount: boolean; posCreditSale: boolean; posCashInOut: boolean;
   posSplitCounterparty: boolean; posWholesaleAtPos: boolean;
-  posPriceCheck: boolean; posBanPriceDecrease: boolean; posChangePriceAtPos: boolean; posCardPayment: boolean; posSalesOverMillion: boolean;
+  posPriceCheck: boolean; posBanPriceDecrease: boolean; posBlockOversell: boolean; posChangePriceAtPos: boolean; posCardPayment: boolean; posSalesOverMillion: boolean;
   posAccessReturn: string; posAccessReturnNoReceipt: string; posAccessDeleteItem: string; posAccessDecreaseQty: string;
   posRoundingWeightItems: string; posRoundingDiscount: string;
 }
@@ -56,6 +56,7 @@ const EXTRA = [
 const FINANCE = [
   { key: "posPriceCheck", label: "Проверка цены" },
   { key: "posBanPriceDecrease", label: "Запрет на снижение цен" },
+  { key: "posBlockOversell", label: "Запретить продажу больше остатка" },
   { key: "posChangePriceAtPos", label: "Изменение цены на кассе" },
   { key: "posCardPayment", label: "Безналичный расчет" },
   { key: "posSalesOverMillion", label: "Продажи свыше миллиона" },

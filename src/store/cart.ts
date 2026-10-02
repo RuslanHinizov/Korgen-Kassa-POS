@@ -20,6 +20,21 @@ export function roundQty(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
+/**
+ * «Запретить продажу больше остатка» (a store setting, off by default = UMAG-style, stock may go negative). When on, a
+ * line cannot be taken above the product's stock; `notify` tells the cashier what is left. Set by the register screen.
+ */
+let oversellGuard: { enabled: boolean; notify: (stock: number, unit: string) => void } = { enabled: false, notify: () => {} };
+export function setOversellGuard(enabled: boolean, notify: (stock: number, unit: string) => void) {
+  oversellGuard = { enabled, notify };
+}
+/** The quantity allowed for a catalogue line with `stock` on hand; null = no limit applies. */
+function capToStock(wanted: number, stock: number, unit: string, productId: string | null): number | null {
+  if (!oversellGuard.enabled || productId === null || !Number.isFinite(stock) || wanted <= stock) return null;
+  oversellGuard.notify(Math.max(0, stock), unit);
+  return Math.max(0, stock);
+}
+
 export interface CartItem {
   /** Stable per-line id — the true identity for remove/update/selection (NOT productId, which repeats across lines only when merged). */
   id: string;
@@ -163,15 +178,18 @@ export const useCartStore = create<CartState>()(
           // Like UMAG's till, a sale is never limited by the stock balance (the balance may go negative and shows in the
           // reports); an offline till cannot know the real balance anyway. The line only shows a "no stock" badge.
           if (existing) {
+            const capped = capToStock(roundQty(existing.quantity + amount), finiteNumber(existing.stock, Infinity), existing.unit ?? "pcs", existing.productId);
             return {
               items: state.items.map((i) =>
                 i.id === existing.id
-                  ? { ...i, quantity: roundQty(existing.quantity + amount), unit: item.unit ?? i.unit ?? "pcs" }
+                  ? { ...i, quantity: capped !== null ? Math.max(capped, 0.001) : roundQty(existing.quantity + amount), unit: item.unit ?? i.unit ?? "pcs" }
                   : i
               ),
             };
           }
-          return { items: [...state.items, { ...item, stock: availableStock, id: lineId(), unit: item.unit ?? "pcs", quantity: amount, notes: item.notes ?? "", lineDiscount: item.lineDiscount ?? 0 }] };
+          const cappedNew = capToStock(amount, availableStock, item.unit ?? "pcs", item.productId);
+          if (cappedNew === 0) return {}; // nothing in stock: the line is not added
+          return { items: [...state.items, { ...item, stock: availableStock, id: lineId(), unit: item.unit ?? "pcs", quantity: cappedNew ?? amount, notes: item.notes ?? "", lineDiscount: item.lineDiscount ?? 0 }] };
         }),
 
       addCustomItem: (item) =>
@@ -199,8 +217,10 @@ export const useCartStore = create<CartState>()(
           if (safeQuantity <= 0) {
             return { items: state.items.filter((i) => i.id !== id) };
           }
+          const line = state.items.find((i) => i.id === id);
+          const capped = line ? capToStock(safeQuantity, finiteNumber(line.stock, Infinity), line.unit ?? "pcs", line.productId) : null;
           return {
-            items: state.items.map((i) => (i.id === id ? { ...i, quantity: safeQuantity } : i)),
+            items: state.items.map((i) => (i.id === id ? { ...i, quantity: capped !== null ? Math.max(capped, 0.001) : safeQuantity } : i)),
           };
         }),
 

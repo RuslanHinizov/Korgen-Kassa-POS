@@ -1783,6 +1783,8 @@ model BusinessSettings {
   posWholesaleAtPos       Boolean @default(false)
   posPriceCheck           Boolean @default(false)
   posBanPriceDecrease     Boolean @default(false)
+  /// «Запретить продажу больше остатка»: the register refuses a quantity above the product's stock (off = UMAG-style, may go negative)
+  posBlockOversell        Boolean @default(false)
   posChangePriceAtPos     Boolean @default(true)
   posCardPayment          Boolean @default(true)
   posSalesOverMillion     Boolean @default(true)

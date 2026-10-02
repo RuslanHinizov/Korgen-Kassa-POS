@@ -9,7 +9,7 @@ const FIELDS = [
   "posCollapseWindow", "posInstantSync", "posShowSalesHistory", "posNewReceiptFormat", "posGlobalSearch",
   "posUniversalProduct", "posCreateProduct", "posEditProductAtPos", "posHoldOrder", "posDiscount", "posCreditSale", "posCashInOut",
   "posSplitCounterparty", "posWholesaleAtPos",
-  "posPriceCheck", "posBanPriceDecrease", "posChangePriceAtPos", "posCardPayment", "posSalesOverMillion",
+  "posPriceCheck", "posBanPriceDecrease", "posBlockOversell", "posChangePriceAtPos", "posCardPayment", "posSalesOverMillion",
   "posAccessReturn", "posAccessReturnNoReceipt", "posAccessDeleteItem", "posAccessDecreaseQty",
   "posRoundingWeightItems", "posRoundingDiscount",
 ] as const;
@@ -46,6 +46,7 @@ const patchSchema = z.object({
   posWholesaleAtPos: z.boolean().optional(),
   posPriceCheck: z.boolean().optional(),
   posBanPriceDecrease: z.boolean().optional(),
+  posBlockOversell: z.boolean().optional(),
   posChangePriceAtPos: z.boolean().optional(),
   posCardPayment: z.boolean().optional(),
   posSalesOverMillion: z.boolean().optional(),

@@ -40,6 +40,7 @@ export async function getPublicSettings(storeId: string) {
     posRoundingWeightItems: s.posRoundingWeightItems,
     posRoundingDiscount: s.posRoundingDiscount,
     posBanPriceDecrease: s.posBanPriceDecrease,
+    posBlockOversell: s.posBlockOversell,
     allowWholesale: s.allowWholesale,
     posWholesaleAtPos: s.posWholesaleAtPos,
     posPriceCheck: s.posPriceCheck,

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useCartStore, roundQty } from "@/store/cart";
+import { useCartStore, roundQty, setOversellGuard } from "@/store/cart";
 import { evaluatePromotions, type PromotionRule } from "@/lib/promotions";
 import { formatCurrency, cn } from "@/lib/utils";
 import { unitLabel } from "@/lib/units";
@@ -64,6 +64,7 @@ type KioskPermissions = {
   posCardPayment: boolean;
   posChangePriceAtPos: boolean;
   posBanPriceDecrease: boolean;
+  posBlockOversell: boolean;
   wholesaleAtPos: boolean;
   posPriceCheck: boolean;
   posGlobalSearch: boolean;
@@ -77,7 +78,7 @@ type KioskPermissions = {
 
 const DEFAULT_KIOSK_PERMISSIONS: KioskPermissions = {
   posUniversalProduct: true, posCreateProduct: true, posEditProductAtPos: true, posHoldOrder: true,
-  posDiscount: true, posCashInOut: true, posCardPayment: true, posChangePriceAtPos: true, posBanPriceDecrease: false,
+  posDiscount: true, posCashInOut: true, posCardPayment: true, posChangePriceAtPos: true, posBanPriceDecrease: false, posBlockOversell: false,
   wholesaleAtPos: false, posPriceCheck: false, posGlobalSearch: false, posCollapseWindow: true, posInstantSync: true,
   posAccessReturn: "ALL", posAccessReturnNoReceipt: "ALL", posAccessDeleteItem: "ALL", posAccessDecreaseQty: "ALL",
 };
@@ -129,6 +130,11 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [creditSaleEnabled, setCreditSaleEnabled] = useState(true);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [permissions, setPermissions] = useState<KioskPermissions>(DEFAULT_KIOSK_PERMISSIONS);
+  // «Запретить продажу больше остатка»: the cart refuses a quantity above the stock and says what is left
+  useEffect(() => {
+    setOversellGuard(permissions.posBlockOversell, (stock, unit) => toast.error(stock > 0 ? `Недостаточно на складе: осталось ${stock} ${unitLabel(unit, true)}` : "Товара нет на складе"));
+    return () => setOversellGuard(false, () => {});
+  }, [permissions.posBlockOversell]);
   const [hasOpenShift, setHasOpenShift] = useState(true);
   const [shiftRefreshKey, setShiftRefreshKey] = useState(0);
   const [settingsTick, setSettingsTick] = useState(0);
@@ -157,6 +163,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       posCardPayment: d?.posCardPayment !== false,
       posChangePriceAtPos: d?.posChangePriceAtPos !== false,
       posBanPriceDecrease: d?.posBanPriceDecrease === true,
+      posBlockOversell: d?.posBlockOversell === true,
       wholesaleAtPos: d?.posWholesaleAtPos === true && d?.allowWholesale === true,
       posPriceCheck: d?.posPriceCheck === true,
       posGlobalSearch: d?.posGlobalSearch === true,

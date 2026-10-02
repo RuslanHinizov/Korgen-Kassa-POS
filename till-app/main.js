@@ -328,7 +328,14 @@ function createWindow() {
     title: "Korgen Kassa",
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  win.maximize();
+  // Full screen, no title bar: the till fills the monitor like a real cash register. F11 switches it off and on.
+  win.setFullScreen(true);
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type === "keyDown" && input.key === "F11") {
+      event.preventDefault();
+      win.setFullScreen(!win.isFullScreen());
+    }
+  });
   // Keep an unfinished sale from disappearing when the cashier clicks the window's X / Alt+F4.
   win.on("close", (event) => {
     if (allowWindowClose) return;
