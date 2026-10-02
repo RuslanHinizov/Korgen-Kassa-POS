@@ -77,6 +77,13 @@ export function ExtraFunctionsMenu({
     else toast.success("Установлена последняя версия");
   }
 
+  const zoomShell = typeof window === "undefined" ? undefined : (window as unknown as { korgenShell?: { getZoom?: () => number; setZoom?: (p: number) => number } }).korgenShell;
+  const [zoom, setZoomState] = useState<number | null>(() => zoomShell?.getZoom?.() ?? null);
+  function changeZoom(delta: number) {
+    if (zoom === null || !zoomShell?.setZoom) return;
+    setZoomState(zoomShell.setZoom(zoom + delta));
+  }
+
   function togglePrinter() {
     const next = !printerEnabled;
     setPrinterEnabled(next);
@@ -176,6 +183,15 @@ export function ExtraFunctionsMenu({
           <button className={BUTTON} onClick={() => setDebtGateOpen(true)}>ДОЛГ</button>
           <button className={BUTTON} onClick={() => void checkUpdate()}>ПРОВЕРИТЬ ОБНОВЛЕНИЕ</button>
           <button className={BUTTON} onClick={() => setAddPrinterOpen(true)}>ДОБАВИТЬ ДОП ПРИНТЕР</button>
+          {zoom !== null && (
+            <div className={BUTTON + " flex-col gap-1"}>
+              <span>РАЗМЕР ЭКРАНА: {zoom}%</span>
+              <span className="flex gap-2">
+                <button type="button" aria-label="Уменьшить" className="rounded border border-slate-300 bg-white px-4 py-1 text-base font-bold" onClick={() => changeZoom(-10)}>−</button>
+                <button type="button" aria-label="Увеличить" className="rounded border border-slate-300 bg-white px-4 py-1 text-base font-bold" onClick={() => changeZoom(10)}>+</button>
+              </span>
+            </div>
+          )}
 
           <button className={canPriceCheck ? BUTTON : DISABLED_BUTTON} disabled={!canPriceCheck} onClick={() => { onOpenPriceCheck(); onClose(); }}>
             ПРОВЕРКА ЦЕНЫ

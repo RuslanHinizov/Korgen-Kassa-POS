@@ -1,4 +1,11 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webFrame } = require("electron");
+
+// The cashier picks the screen size in ДОП. ФУНКЦИИ; it is kept per computer and applied on every start.
+const ZOOM_KEY = "korgen-ui-zoom";
+try {
+  const saved = Number(localStorage.getItem(ZOOM_KEY));
+  if (saved >= 0.5 && saved <= 1.5) webFrame.setZoomFactor(saved);
+} catch { /* default size */ }
 
 /** What the till screen may ask of the program around it (the web page has no other access to the computer). */
 contextBridge.exposeInMainWorld("korgenShell", {
@@ -18,4 +25,11 @@ contextBridge.exposeInMainWorld("korgenShell", {
   checkForUpdate: () => ipcRenderer.invoke("update:check"),
   updateStatus: () => ipcRenderer.invoke("update:status"),
   installUpdate: () => ipcRenderer.send("update:install"),
+  getZoom: () => Math.round(webFrame.getZoomFactor() * 100),
+  setZoom: (percent) => {
+    const f = Math.min(1.5, Math.max(0.5, Number(percent) / 100));
+    webFrame.setZoomFactor(f);
+    try { localStorage.setItem(ZOOM_KEY, String(f)); } catch { /* best effort */ }
+    return Math.round(f * 100);
+  },
 });
