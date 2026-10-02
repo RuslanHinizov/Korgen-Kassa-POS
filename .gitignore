@@ -76,3 +76,4 @@ scripts/tenant-scan/last-run.log
 
 # release files of the standalone till program (copied to the server by hand)
 /till-updates/
+/public/*.xlsx

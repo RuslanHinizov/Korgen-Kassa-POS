@@ -9,6 +9,7 @@ import { bindTillToStore } from "./clear";
 import { cacheConfig } from "./config-cache";
 import { idbCount, idbDelete, idbGet, idbPut, idbPutMany } from "./idb";
 import { setDeviceToken } from "./device-token";
+import { setNeedsLogin } from "./queue";
 import { parsePackage, type TillPackageBody } from "@/lib/till-package-format";
 
 export type ImportResult =
@@ -53,6 +54,8 @@ export async function importPackage(text: string): Promise<ImportResult> {
   else await idbDelete("meta", "tillCashbox");
   await idbPut("meta", { key: "packageInfo", storeId: body.store.id, storeName: body.store.name, generatedAt: body.generatedAt, loadedAt: Date.now(), products: body.products.length } satisfies PackageInfo);
 
+  // a fresh key from the market just arrived: a "till switched off" notice from the old key no longer applies
+  setNeedsLogin(false);
   return { ok: true, storeName: body.store.name, products: body.products.length, generatedAt: body.generatedAt };
 }
 

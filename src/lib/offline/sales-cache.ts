@@ -32,6 +32,7 @@ export interface CachedSale {
   total: number;
   discountAmount: number;
   paymentMethod: string;
+  paymentLines?: { method: string; amount: number }[] | null;
   amountTendered?: number | null;
   changeDue?: number | null;
   status: "COMPLETED" | "VOIDED" | "REFUNDED";
@@ -96,6 +97,7 @@ export async function queuedSales(): Promise<CachedSale[]> {
       total,
       discountAmount: discount,
       paymentMethod: p.paymentMethod ?? p.paymentLines?.[0]?.method ?? "CASH",
+      paymentLines: p.paymentLines ?? null,
       amountTendered: p.amountTendered ?? null,
       status: "COMPLETED",
       user: { name: auth?.name ?? "" },

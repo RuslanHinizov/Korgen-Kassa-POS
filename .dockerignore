@@ -18,3 +18,7 @@ umag.rar
 till-app
 
 till-updates
+
+# one-off exports and photos must never ship in the image
+NURAY logo.jpeg
+public/*.xlsx

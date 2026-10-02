@@ -15,10 +15,12 @@ import { TouchSearchKeyboard } from "./product-search";
 
 type SaleItem = { id: string; productId: string | null; name: string; quantity: number; returnableQuantity: number; price: number; total: number; unit: string };
 type Refund = { id: string; amount: number; reason: string | null; createdAt: string; items: { saleItemId?: string; name: string; quantity: number; price: number; unit?: string }[] };
-type Sale = { id: string; documentNo?: number; receiptNo?: string; waiting?: boolean; createdAt: string; subtotal: number; taxAmount: number; total: number; discountAmount: number; paymentMethod: string; amountTendered?: number | null; changeDue?: number | null; status: "COMPLETED" | "VOIDED" | "REFUNDED"; user: { name: string }; cashbox?: { name: string } | null; referenceValues?: { bookName: string; entryName: string }[] | null; items: SaleItem[]; refunds?: Refund[] };
+type Sale = { id: string; documentNo?: number; receiptNo?: string; waiting?: boolean; createdAt: string; subtotal: number; taxAmount: number; total: number; discountAmount: number; paymentMethod: string; paymentLines?: { method: string; amount: number }[] | null; amountTendered?: number | null; changeDue?: number | null; status: "COMPLETED" | "VOIDED" | "REFUNDED"; user: { name: string }; cashbox?: { name: string } | null; referenceValues?: { bookName: string; entryName: string }[] | null; items: SaleItem[]; refunds?: Refund[] };
 type Product = { id: string; name: string; price: number; unit: string };
 
 const paymentLabel: Record<string, string> = { CASH: "Наличные", CARD: "Безналичный", OTHER: "Другое", CREDIT: "В долг" };
+/** «Разделённая» when the sale was paid with more than one method (e.g. cash + card). */
+const paymentText = (sale: Sale) => (sale.paymentLines && sale.paymentLines.length > 1 ? "Разделённая" : paymentLabel[sale.paymentMethod] ?? sale.paymentMethod);
 
 /** The receipt was made on this till but hasn't reached the server yet (no connection at the time). */
 function SyncPendingIcon() {
@@ -140,7 +142,7 @@ function SalesHistory(props: { sales: Sale[]; loading: boolean; error: string; q
   const statusLabel = (sale: Sale) => sale.status === "COMPLETED" ? "Проведён" : sale.status === "REFUNDED" ? "Возврат" : "Отменён";
   return <section className="mx-auto max-w-7xl"><Filters {...props} />
     {/* Desktop/tablet table */}
-    <div className="hidden sm:block overflow-x-auto rounded border bg-white"><table className="w-full text-sm"><thead className="bg-[#e9ecef] text-left text-xs font-bold uppercase text-slate-600"><tr><th className="px-3 py-3">№ чека</th><th className="px-3 py-3">Время</th><th className="px-3 py-3">Кассир</th><th className="px-3 py-3 text-right">Скидка</th><th className="px-3 py-3 text-right">Сумма</th><th className="px-3 py-3">Тип оплаты</th><th className="px-3 py-3">Статус</th><th></th></tr></thead><tbody>{props.loading ? <LoadingRow cols={8} /> : props.error ? <ErrorRow cols={8} error={props.error} /> : props.sales.length === 0 ? <EmptyRow cols={8} /> : props.sales.map((sale) => <tr key={sale.id} className="border-t"><td className="px-3 py-2 font-medium">{receiptNumber(sale)}{sale.waiting && <SyncPendingIcon />}</td><td className="px-3 py-2">{dateTime(sale.createdAt)}</td><td className="px-3 py-2">{sale.user.name}</td><td className="px-3 py-2 text-right">{sale.discountAmount ? `−${formatCurrency(sale.discountAmount)}` : "—"}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(sale.total)}</td><td className="px-3 py-2">{paymentLabel[sale.paymentMethod] ?? sale.paymentMethod}</td><td className="px-3 py-2">{sale.status === "COMPLETED" ? "Проведён" : sale.status === "REFUNDED" ? "Возврат" : "Отменён"}</td><td className="px-3 py-2 text-right"><button onClick={() => props.onReprint(sale)} className="inline-flex h-9 items-center gap-1 rounded bg-[#26877c] px-3 text-xs font-bold text-white"><Printer className="h-4 w-4" /> Печать</button></td></tr>)}</tbody></table></div>
+    <div className="hidden sm:block overflow-x-auto rounded border bg-white"><table className="w-full text-sm"><thead className="bg-[#e9ecef] text-left text-xs font-bold uppercase text-slate-600"><tr><th className="px-3 py-3">№ чека</th><th className="px-3 py-3">Время</th><th className="px-3 py-3">Кассир</th><th className="px-3 py-3 text-right">Скидка</th><th className="px-3 py-3 text-right">Сумма</th><th className="px-3 py-3">Тип оплаты</th><th className="px-3 py-3">Статус</th><th></th></tr></thead><tbody>{props.loading ? <LoadingRow cols={8} /> : props.error ? <ErrorRow cols={8} error={props.error} /> : props.sales.length === 0 ? <EmptyRow cols={8} /> : props.sales.map((sale) => <tr key={sale.id} className="border-t"><td className="px-3 py-2 font-medium">{receiptNumber(sale)}{sale.waiting && <SyncPendingIcon />}</td><td className="px-3 py-2">{dateTime(sale.createdAt)}</td><td className="px-3 py-2">{sale.user.name}</td><td className="px-3 py-2 text-right">{sale.discountAmount ? `−${formatCurrency(sale.discountAmount)}` : "—"}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(sale.total)}</td><td className="px-3 py-2">{paymentText(sale)}</td><td className="px-3 py-2">{sale.status === "COMPLETED" ? "Проведён" : sale.status === "REFUNDED" ? "Возврат" : "Отменён"}</td><td className="px-3 py-2 text-right"><button onClick={() => props.onReprint(sale)} className="inline-flex h-9 items-center gap-1 rounded bg-[#26877c] px-3 text-xs font-bold text-white"><Printer className="h-4 w-4" /> Печать</button></td></tr>)}</tbody></table></div>
 
     {/* Mobile card list */}
     <div className="sm:hidden space-y-2">
@@ -157,7 +159,7 @@ function SalesHistory(props: { sales: Sale[]; loading: boolean; error: string; q
             <span>{dateTime(sale.createdAt)}</span>
           </div>
           <div className="mt-1 flex items-center justify-between text-sm">
-            <span className="truncate text-slate-600">{sale.user.name} · {paymentLabel[sale.paymentMethod] ?? sale.paymentMethod}</span>
+            <span className="truncate text-slate-600">{sale.user.name} · {paymentText(sale)}</span>
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-xs">{statusLabel(sale)}{sale.discountAmount ? ` · скидка −${formatCurrency(sale.discountAmount)}` : ""}</span>
