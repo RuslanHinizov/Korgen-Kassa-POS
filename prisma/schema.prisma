@@ -1364,6 +1364,12 @@ model Supplier {
   phone       String?
   email       String?
   notes       String?
+  /// UMAG's «Общие данные»: ИИН/БИН, Тип контрагента, Полное наименование, Юридический/Фактический адрес
+  bin            String?
+  counterpartyType String?
+  fullName       String?
+  legalAddress   String?
+  actualAddress  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

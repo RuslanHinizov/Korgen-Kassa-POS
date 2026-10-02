@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Download, Plus, Pencil, Trash2, Search, Package } from "lucide-react";
+import { StoreLink } from "@/components/store/store-link";
 
 interface Supplier {
   id: string;
@@ -58,19 +59,6 @@ export default function SuppliersPage() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
-    setError(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(s: Supplier) {
-    setEditing(s);
-    setForm({
-      name: s.name,
-      contactName: s.contactName ?? "",
-      email: s.email ?? "",
-      phone: s.phone ?? "",
-      notes: s.notes ?? "",
-    });
     setError(null);
     setModalOpen(true);
   }
@@ -180,25 +168,25 @@ export default function SuppliersPage() {
             <tbody className="divide-y">
               {filtered.map((s) => (
                 <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{s.name}</td>
+                  <td className="px-4 py-3 font-medium"><StoreLink href={`/suppliers/${s.id}`} className="hover:underline">{s.name}</StoreLink></td>
                   <td className="px-4 py-3 text-muted-foreground">{s.contactName ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{s.email ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{s.phone ?? "—"}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className="flex items-center justify-center gap-1 text-muted-foreground">
+                    <StoreLink href={`/suppliers/${s.id}?tab=products`} className="flex items-center justify-center gap-1 text-muted-foreground hover:text-foreground hover:underline" title="Товары поставщика">
                       <Package className="h-3.5 w-3.5" />
                       {s._count?.products ?? 0}
-                    </span>
+                    </StoreLink>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => openEdit(s)}
+                      <StoreLink
+                        href={`/suppliers/${s.id}`}
                         className="rounded p-1.5 hover:bg-accent transition-colors"
                         title={tc("edit")}
                       >
                         <Pencil className="h-4 w-4 text-muted-foreground" />
-                      </button>
+                      </StoreLink>
                       <button
                         onClick={() => handleDelete(s)}
                         className="rounded p-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"

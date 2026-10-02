@@ -12,7 +12,24 @@ const updateSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   notes: z.string().optional(),
+  bin: z.string().max(40).optional(),
+  counterpartyType: z.string().max(40).optional(),
+  fullName: z.string().max(300).optional(),
+  legalAddress: z.string().max(300).optional(),
+  actualAddress: z.string().max(300).optional(),
 });
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !["ADMIN", "MANAGER", "WAREHOUSE"].includes(session.user.role ?? "")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const storeId = await getStoreId();
+  const supplier = await prisma.supplier.findFirst({ where: { id, ...(await counterpartyScope(storeId)) } });
+  if (!supplier) return NextResponse.json({ error: "Поставщик не найден" }, { status: 404 });
+  return NextResponse.json({ supplier });
+}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
