@@ -37,16 +37,16 @@ const pairSchema = z.object({ key: z.string().min(1) });
 /** POST /api/pos/cashbox — redeem a cashbox's one-time pairing key (generated in
  * Управление кассами) to bind this terminal to it. Matches UMAG: entering the key on
  * the physical device is the whole flow, no admin login required on the terminal itself.
- * The key is single-use — it's cleared on redemption so a leaked key can't be reused. */
+ * The key is permanent (shown in the cashbox's edit window at any time); it is not cleared on use. */
 export async function POST(req: NextRequest) {
   const parsed = pairSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Введите ключ" }, { status: 400 });
 
   const storeId = await getStoreId();
   const cashbox = await prisma.cashbox.findFirst({ where: { storeId, oneTimeKey: parsed.data.key.trim() } });
-  if (!cashbox) return NextResponse.json({ error: "Неверный или уже использованный ключ" }, { status: 404 });
+  if (!cashbox) return NextResponse.json({ error: "Неверный ключ" }, { status: 404 });
 
-  await prisma.cashbox.update({ where: { id: cashbox.id }, data: { oneTimeKey: null, pairedAt: new Date(), lastSyncAt: new Date(), appVersion: APP_VERSION, platform: describePlatform(req.headers.get("user-agent")) } });
+  await prisma.cashbox.update({ where: { id: cashbox.id }, data: { pairedAt: new Date(), lastSyncAt: new Date(), appVersion: APP_VERSION, platform: describePlatform(req.headers.get("user-agent")) } });
 
   const jar = await cookies();
   jar.set(CASHBOX_DEVICE_COOKIE, issueCashboxDeviceToken(cashbox.id), {

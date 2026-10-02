@@ -14,7 +14,11 @@ contextBridge.exposeInMainWorld("korgenShell", {
   onCloseRequested: (handler) => {
     const listener = () => handler();
     ipcRenderer.on("shell:close-requested", listener);
-    return () => ipcRenderer.removeListener("shell:close-requested", listener);
+    ipcRenderer.send("shell:close-handler", true); // the till screen answers close requests (cart check)
+    return () => {
+      ipcRenderer.removeListener("shell:close-requested", listener);
+      ipcRenderer.send("shell:close-handler", false);
+    };
   },
   deferClose: () => ipcRenderer.send("shell:defer-close"),
   cancelClose: () => ipcRenderer.send("shell:cancel-close"),

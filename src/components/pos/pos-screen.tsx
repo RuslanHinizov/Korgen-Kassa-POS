@@ -106,6 +106,8 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
   const [quantityOpen, setQuantityOpen] = useState(false);
   const [discountText, setDiscountText] = useState("");
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  // the last sale's amounts stay in the totals card (ИТОГО/ПОЛУЧЕНО/СДАЧА) until the next sale is started
+  const [lastSale, setLastSale] = useState<{ total: number; received: number; change: number } | null>(null);
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
   const [consultants, setConsultants] = useState<{ id: string; name: string; photoUrl: string | null }[]>([]);
   const [consultantId, setConsultantId] = useState("");
@@ -532,6 +534,7 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       cashboxName: s?.cashboxName ?? tillCashboxName ?? undefined,
     };
     setReceiptData(data);
+    setLastSale({ total: data.total, received: data.amountTendered ?? data.total, change: data.changeDue ?? 0 });
     clearCart();
     setCustomer(null);
     setConsultantId("");
@@ -765,9 +768,16 @@ export function POSScreen({ cashierName: serverCashierName, cashierRole: serverC
       )}
       <div data-pos-footer className="flex shrink-0 flex-col gap-3 border-t border-slate-700 bg-[#404040] p-5 sm:flex-row sm:items-stretch">
         <div data-pos-total className="flex min-h-56 shrink-0 flex-col justify-center gap-4 rounded-xl bg-white px-8 py-6 text-[#14231b] shadow-sm sm:w-[26rem]">
-          <Row label="ИТОГО" value={formatCurrency(tot)} bold />
-          <Row label="ПОЛУЧЕНО" value={formatCurrency(0)} />
-          <Row label="СДАЧА" value={formatCurrency(0)} />
+          {(() => {
+            const showLast = lastSale !== null && items.length === 0;
+            return (
+              <>
+                <Row label="ИТОГО" value={formatCurrency(showLast ? lastSale.total : tot)} bold />
+                <Row label="ПОЛУЧЕНО" value={formatCurrency(showLast ? lastSale.received : 0)} />
+                <Row label="СДАЧА" value={formatCurrency(showLast ? lastSale.change : 0)} />
+              </>
+            );
+          })()}
           {disc > 0 && <Row label="Скидка" value={`−${formatCurrency(disc)}`} />}
           {tax > 0 && <Row label={t("tax")} value={formatCurrency(tax)} />}
         </div>

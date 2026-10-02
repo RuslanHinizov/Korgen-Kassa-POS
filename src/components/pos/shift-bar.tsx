@@ -40,10 +40,14 @@ export function ShiftReportModal({
     <div id="shift-report-overlay" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <style>{`
         @media print {
+          /* a 72 mm receipt-roll page, like the receipt and the label: a thermal printer's driver gets a page it can print */
+          @page { size: 72mm auto; margin: 0; }
+          html, body { width: 72mm !important; margin: 0 !important; background: white !important; }
           body > *:not(#shift-report-overlay) { display: none !important; }
-          #shift-report-overlay { position: static !important; display: block !important; background: white !important; }
+          #shift-report-overlay { position: static !important; display: block !important; background: white !important; padding: 0 !important; }
           #shift-report-overlay .no-print { display: none !important; }
-          #shift-report-overlay .print-card { box-shadow: none !important; border: none !important; max-width: none !important; }
+          #shift-report-overlay .print-card { box-shadow: none !important; border: none !important; border-radius: 0 !important; max-width: none !important; width: 72mm !important; }
+          #shift-report-overlay #shift-report-print { padding: 2mm 3mm !important; font-size: 9pt !important; }
         }
       `}</style>
       <div className="print-card w-full max-w-sm rounded-xl bg-white text-black border shadow-2xl overflow-hidden">

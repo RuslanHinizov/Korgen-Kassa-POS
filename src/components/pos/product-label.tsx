@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import JsBarcode from "jsbarcode";
+import { drawBarcode } from "@/lib/draw-barcode";
 import { Loader2, Printer, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
 import type { ProductResult } from "./product-search";
 import { programCanPrint, printElementOnProgram } from "@/lib/program-print";
+import { CreateProductModal } from "./create-product-modal";
+import { searchLocal, syncCatalog } from "@/lib/offline/catalog";
 
 export interface LabelProduct { name: string; price: number; unit: string; barcode: string }
 
@@ -18,9 +20,7 @@ export function ProductLabelModal({ product, onClose }: { product: LabelProduct;
 
   useEffect(() => {
     if (svgRef.current) {
-      JsBarcode(svgRef.current, product.barcode, {
-        format: /^\d{13}$/.test(product.barcode) ? "EAN13" : "CODE128", displayValue: true, margin: 0, height: 46, width: 1.45, fontSize: 12,
-      });
+      drawBarcode(svgRef.current, product.barcode, { displayValue: true, margin: 0, height: 46, width: 1.45, fontSize: 12 });
       // Let the bars scale to the label width (58 mm roll) instead of a fixed pixel size.
       const svg = svgRef.current;
       svg.setAttribute("viewBox", `0 0 ${svg.getAttribute("width")} ${svg.getAttribute("height")}`);
@@ -57,13 +57,19 @@ export function LabelPickerModal({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<ProductResult[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelProduct | null>(null);
+  const [creating, setCreating] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     if (!q.trim()) { setResults([]); return; }
     timer.current = setTimeout(() => {
-      fetch(`/api/products/search?q=${encodeURIComponent(q.trim())}`).then((r) => (r.ok ? r.json() : [])).then(setResults).catch(() => setResults([]));
+      // the server, or this till's own catalogue copy when there is no connection
+      fetch(`/api/products/search?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .catch(async () => (await searchLocal(q.trim(), 30)) as unknown as ProductResult[])
+        .then(setResults)
+        .catch(() => setResults([]));
     }, 250);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [q]);
@@ -83,6 +89,22 @@ export function LabelPickerModal({ onClose }: { onClose: () => void }) {
   }
 
   if (label) return <ProductLabelModal product={label} onClose={() => setLabel(null)} />;
+  if (creating) {
+    // a code the shop does not know: the cashier types the name (and price), the product joins the shop's catalogue
+    return (
+      <CreateProductModal
+        initialBarcode={/^[A-Za-z0-9-]{4,30}$/.test(q.trim()) ? q.trim() : ""}
+        submitLabel="Создать и напечатать этикетку"
+        overlayClass="z-[75]"
+        onClose={() => setCreating(false)}
+        onCreated={(product) => {
+          void syncCatalog(); // the other tills get it with their next catalogue update
+          setCreating(false);
+          if (product.barcode) setLabel({ name: product.name, price: Number(product.price), unit: product.unit ?? "pcs", barcode: product.barcode });
+        }}
+      />
+    );
+  }
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
       <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border bg-card p-5 shadow-2xl">
@@ -96,7 +118,12 @@ export function LabelPickerModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="min-h-0 flex-1 divide-y overflow-y-auto rounded-md border">
           {!q.trim() ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">Найдите товар, чтобы напечатать этикетку</p>
-            : results.length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">Ничего не найдено</p>
+            : results.length === 0 ? (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                <p>Товар «{q.trim()}» не найден в магазине</p>
+                <button onClick={() => setCreating(true)} className="mt-3 h-10 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Добавить новый товар</button>
+              </div>
+            )
             : results.slice(0, 30).map((p) => (
               <button key={p.id} onClick={() => void pick(p)} disabled={busyId === p.id} className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50">
                 <span className="min-w-0"><span className="block truncate font-medium">{p.name}</span><span className="block text-xs text-muted-foreground">{p.barcode ?? "нет штрихкода — будет создан"}</span></span>

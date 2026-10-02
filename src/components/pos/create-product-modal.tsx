@@ -41,11 +41,18 @@ export function CreateProductModal({ initialBarcode, onCreated, onClose, withCos
     if (!valid || busy) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/pos/products", {
+      let r: Response;
+      try {
+        r = await fetch("/api/pos/products", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), price: priceVal, barcode: barcode.trim() || undefined, unit, stock: stockVal, ...(withCost ? { cost: costVal } : {}) }),
       });
+      } catch {
+        toast.error("Нет связи с сервером: новый товар можно создать только при подключении к интернету");
+        return;
+      }
       const d = await r.json().catch(() => ({}));
+      if (r.status === 502 || r.status === 503 || r.status === 504) { toast.error("Нет связи с сервером: новый товар можно создать только при подключении к интернету"); return; }
       if (!r.ok) { toast.error(d.error ?? "Не удалось создать товар"); return; }
       toast.success(`Товар создан${d.product.barcode ? ` · штрихкод ${d.product.barcode}` : ""}`);
       onCreated(d.product);

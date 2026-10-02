@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import JsBarcode from "jsbarcode";
+import { drawBarcode } from "@/lib/draw-barcode";
 import { Barcode, Printer, WandSparkles, X } from "lucide-react";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
 
@@ -11,7 +11,7 @@ export function BarcodeLabelButton({ productId, productName, initialBarcode, pri
   const [busy, setBusy] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => { if (open && barcode && svgRef.current) JsBarcode(svgRef.current, barcode, { format: /^\d{13}$/.test(barcode) ? "EAN13" : "CODE128", displayValue: true, margin: 0, height: 46, width: 1.45, fontSize: 12 }); }, [open, barcode]);
+  useEffect(() => { if (open && barcode && svgRef.current) drawBarcode(svgRef.current, barcode, { displayValue: true, margin: 0, height: 46, width: 1.45, fontSize: 12 }); }, [open, barcode]);
   // Lets a toolbar-level "Печать" action (e.g. the Список товаров bulk bar) open
   // this exact row's label modal without lifting state up to a shared parent.
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import JsBarcode from "jsbarcode";
+import { drawBarcode } from "@/lib/draw-barcode";
 import { Printer, WandSparkles, X } from "lucide-react";
 import { isFractionalUnit, unitLabel } from "@/lib/units";
 
@@ -10,7 +10,7 @@ export interface LabelProduct { id: string; name: string; barcode: string | null
 function LabelBarcode({ code }: { code: string }) {
   const ref = useRef<SVGSVGElement>(null);
   useEffect(() => {
-    if (ref.current) JsBarcode(ref.current, code, { format: /^\d{13}$/.test(code) ? "EAN13" : "CODE128", displayValue: true, margin: 0, height: 36, width: 1.3, fontSize: 11 });
+    if (ref.current) drawBarcode(ref.current, code, { displayValue: true, margin: 0, height: 36, width: 1.3, fontSize: 11 });
   }, [code]);
   return <svg ref={ref} className="mx-auto max-w-full" />;
 }

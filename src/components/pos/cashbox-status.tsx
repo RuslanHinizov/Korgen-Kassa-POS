@@ -75,7 +75,7 @@ export function CashboxStatus() {
             {mode === "pair" ? (
               <>
                 <h2 className="mb-1 font-semibold">Привязать кассу</h2>
-                <p className="mb-3 text-xs text-muted-foreground">Введите одноразовый ключ из Управление → Управление кассами.</p>
+                <p className="mb-3 text-xs text-muted-foreground">Введите ключ кассы из Управление → Управление кассами.</p>
                 <input
                   autoFocus
                   value={key}

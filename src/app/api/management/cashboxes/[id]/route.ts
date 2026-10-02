@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getStoreId } from "@/lib/store-context";
 import { z } from "zod";
+import { createCashboxOneTimeKey } from "@/lib/cashbox-device";
 
 // GET /api/management/cashboxes/:id — full detail for the edit modal (all 3 tabs)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -12,11 +13,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const storeId = await getStoreId();
 
-  const cashbox = await prisma.cashbox.findFirst({
+  let cashbox = await prisma.cashbox.findFirst({
       where: { id, storeId },
       include: { account: { select: { id: true, name: true, balance: true } }, extraAccount: { select: { id: true, name: true, balance: true } } },
     });
   if (!cashbox) return NextResponse.json({ error: "Касса не найдена" }, { status: 404 });
+  // The cashbox key is permanent: a register made before that (key used up) gets one now.
+  if (!cashbox.oneTimeKey) cashbox = { ...cashbox, oneTimeKey: (await prisma.cashbox.update({ where: { id }, data: { oneTimeKey: createCashboxOneTimeKey() }, select: { oneTimeKey: true } })).oneTimeKey };
 
   return NextResponse.json({
     cashbox: {

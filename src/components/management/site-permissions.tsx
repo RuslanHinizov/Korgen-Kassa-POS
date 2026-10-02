@@ -160,7 +160,7 @@ export function SitePermissions() {
           <div className="bg-primary/10 flex items-center gap-3 rounded-lg border p-3 text-sm">
             Ключ для «{lastKey.cashbox}»: <b className="font-mono text-base">{lastKey.key}</b>
             <button onClick={() => { void navigator.clipboard?.writeText(lastKey.key); toast.success("Скопировано"); }} className="hover:bg-accent rounded p-1" aria-label="Копировать"><Copy className="h-4 w-4" /></button>
-            <span className="text-muted-foreground">Одноразовый: после ввода на кассе перестаёт действовать.</span>
+            <span className="text-muted-foreground">Ключ постоянный: после ввода на кассе он остаётся тем же.</span>
           </div>
         )}
         <div className="bg-card overflow-x-auto rounded-lg border">

@@ -24,7 +24,7 @@ const paymentLabel: Record<string, string> = { CASH: "Наличные", CARD: "
 function SyncPendingIcon() {
   return <Clock className="ml-1.5 inline h-3.5 w-3.5 text-amber-500" aria-label="Не отправлен на сервер" />;
 }
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }; // local date
 const dateTime = (value: string) => new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const receiptNumber = (sale: Sale) => String(sale.documentNo ?? sale.receiptNo ?? "");
 
@@ -95,7 +95,8 @@ export function POSSalesPanel({ mode, canReturnWithReceipt, canReturnWithoutRece
       } catch {
         r = null;
       }
-      if (!r) {
+      // The till program answers 502/503/504 itself when the server cannot be reached: the same "no connection" case.
+      if (!r || [502, 503, 504].includes(r.status)) {
         // no connection: show what this till knows
         setSales(await offlineSales(from, to, searched));
         setOfflineNotice(true);

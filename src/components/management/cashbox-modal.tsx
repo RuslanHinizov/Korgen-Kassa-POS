@@ -234,7 +234,7 @@ export function CashboxModal({
                 </div>
                 <div>
                   <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                    Одноразовый ключ кассы
+                    Ключ кассы (постоянный)
                   </label>
                   <div className="flex items-center gap-2">
                     <input

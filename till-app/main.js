@@ -315,6 +315,7 @@ function startServer() {
 
 let win;
 let allowWindowClose = false;
+let closeHandlerReady = false;
 let closeRequestPending = false;
 let closeFallbackTimer;
 function createWindow() {
@@ -335,11 +336,12 @@ function createWindow() {
     if (closeRequestPending) return;
     closeRequestPending = true;
     win.webContents.send("shell:close-requested");
-    // No POS screen is mounted (e.g. PIN/activation page): don't trap the cashier in the app.
+    // No POS screen is mounted (e.g. PIN/activation page): don't trap the cashier in the app. When the till screen
+    // does answer close requests, give a slow computer plenty of time (it answers at once, with a cart check).
     closeFallbackTimer = setTimeout(() => {
       allowWindowClose = true;
       if (win && !win.isDestroyed()) win.close();
-    }, 400);
+    }, closeHandlerReady ? 5000 : 400);
     // A delayed answer from a slow renderer should still be able to recover on the next close attempt.
     setTimeout(() => { closeRequestPending = false; }, 5000);
   });
@@ -389,6 +391,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.on("shell:minimize", () => win && win.minimize());
     ipcMain.on("shell:quit", () => win && win.close());
+    ipcMain.on("shell:close-handler", (_event, ready) => { closeHandlerReady = Boolean(ready); });
     ipcMain.on("shell:defer-close", () => clearTimeout(closeFallbackTimer));
     ipcMain.on("shell:cancel-close", () => {
       clearTimeout(closeFallbackTimer);
