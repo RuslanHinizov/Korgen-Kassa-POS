@@ -1,157 +1,198 @@
 <div align="center">
-  <h1>Korgen Kassa POS</h1>
-  <p>Offline-capable Point of Sale system for retail.</p>
-  <p>
-    <a href="docs/getting-started.md">Getting Started</a> ·
-    <a href="docs/architecture.md">Architecture</a> ·
-    <a href="docs/deployment.md">Deployment</a> ·
-    <a href="docs/contributing.md">Contributing</a>
-  </p>
-  <p>
-    <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg" />
-    <img alt="Version 0.1" src="https://img.shields.io/badge/version-0.1--MVP-orange.svg" />
-    <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-black.svg" />
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" />
-    <a href="https://discord.com/invite/EAXcCXgUz2"><img alt="Discord" src="https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white" /></a>
-  </p>
+
+# Korgen Kassa POS
+
+**Облачная касса и программа кассира с работой без интернета — для супермаркетов и магазинов у дома**
+
+Продажи · Склад · Закупки · Финансы · Отчёты · Печать чеков · Несколько магазинов
+
 </div>
 
 ---
 
-## What is Korgen Kassa POS?
+**Korgen Kassa POS** — программный продукт [ТОО «Innova Corporation Company»](https://ba.prg.kz/790000000-shymkent/210340021928-too-innova-corporation-company/).
+Это полноценная система учёта для розничной торговли: рабочее место кассира, веб-кабинет владельца и администратора,
+учёт товаров и денег, отчёты. Работает на собственном сервере компании или арендованном VPS.
 
-**Korgen Kassa POS** is a fast, touch-friendly, fully offline-capable Point of Sale system for small businesses. It is built on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project (MIT).
-
-- **Self-hosted** — run it on your own server with Docker in minutes.
-- **Offline-first** — uses PGLite (Postgres WASM) to record sales even with no internet, then syncs automatically when connectivity returns.
-- **Globally configurable** — change your business name, logo, colors, currency, and tax settings from the UI.
-- **Open source** — MIT licensed. Fork it, extend it, run it.
+> **Хотите запустить систему? Откройте [ZAPUSK.md](ZAPUSK.md)** — там пошаговая инструкция: как поднять проект на новом
+> компьютере, как поставить его на боевой сервер и как установить программу на кассу.
 
 ---
 
-## Features (v0.1 MVP)
+## Содержание
 
-| Feature | Status |
-|---|---|
-| Product catalog (create / edit / delete) | ✅ |
-| Barcode / keyboard product search | ✅ |
-| Stock adjustment history with audit trail | ✅ |
-| Supplier management | ✅ |
-| POS checkout — cart, qty, discount, tax | ✅ |
-| Split-tender payments (Cash + Card + Other) | ✅ |
-| Hold & recall orders | ✅ |
-| Void sale with reason | ✅ |
-| Refund / partial refund support | ✅ |
-| Tip support at checkout | ✅ |
-| Receipt printing (ESC/POS thermal + browser fallback) | ✅ |
-| Customer directory with purchase history | ✅ |
-| Loyalty points (earn & redeem) | ✅ |
-| Offline mode with auto-sync | ✅ |
-| Admin + Cashier roles | ✅ |
-| Business settings (logo, colors, currency, tax) | ✅ |
-| Sales reports & CSV export | ✅ |
-| Breadcrumb navigation on detail pages | ✅ |
-| Docker Compose ready | ✅ |
-| PWA / installable on tablet | ✅ |
+1. [Что умеет система](#что-умеет-система)
+2. [Из чего состоит](#из-чего-состоит)
+3. [Программа кассира для Windows](#программа-кассира-для-windows)
+4. [Как это устроено внутри](#как-это-устроено-внутри)
+5. [Технологии](#технологии)
+6. [Структура репозитория](#структура-репозитория)
+7. [Документация](#документация)
+8. [Проверка качества](#проверка-качества)
+9. [Лицензия и сторонние компоненты](#лицензия-и-сторонние-компоненты)
 
 ---
 
-## Quick Start (Docker — recommended)
+## Что умеет система
 
-```bash
-# 1. Clone
-git clone https://github.com/olgax/olgax-pos.git
-cd olgax-pos
+### Касса (рабочее место кассира)
+- Крупный сенсорный интерфейс для моноблока: поиск по названию и штрихкоду, сканер, весовые товары (кг), экранная клавиатура.
+- Корзина с построчными скидками и изменением количества; **универсальный продукт** (товар без штрихкода) и **быстрые товары**
+  (кнопки для хлеба, пакетов, подгузников и т. п., собранные в группы).
+- Оплата **наличными** (с расчётом сдачи), **картой**, **другим способом**, **в долг** (с карточкой должника) и **разделённая**
+  (например, часть наличными и часть картой). Чаевые, налог, скидочные карты и автоматические акции.
+- **Отложка** чеков, **возвраты** (по чеку и без чека), история продаж с повторной печатью.
+- **Смены**: открытие, внос/вынос денег, расходы, X- и Z-отчёты, подсчёт наличных по купюрам и расхождения.
+- Кассир не видит чужих данных: права настраиваются (скидки, возвраты, удаление позиций, запрет продажи алкоголя по времени и т. д.).
+- Необязательный запрет продажи сверх остатка на складе (включается в настройках магазина).
 
-# 2. Configure secrets
-cp .env.example .env
-# Edit .env: set BETTER_AUTH_SECRET to a long random string
+### Работа без интернета
+- Программа кассира для Windows хранит каталог товаров и очередь продаж на самом компьютере. Пропал интернет — **продажи
+  продолжаются**, чеки печатаются, возвраты и история доступны.
+- Как только связь вернулась, все накопленные продажи, возвраты и движения денег **отправляются на сервер сами**, в правильном
+  порядке и без дублей.
+- Если магазин отключён или ключ кассы отозван, программа показывает экран «Касса отключена» и не принимает новые продажи.
 
-# 3. Start
-docker compose up -d
+### Веб-кабинет (владелец, администратор, менеджер)
+- **Товары**: список, категории, комплекты, услуги, артикулы, штрихкоды и этикетки, массовые действия.
+- **Склад**: остатки, оприходование, списание, перемещение, **инвентаризация**.
+- **Закупки**: приёмка товара от поставщика, возвраты поставщикам, платежи поставщикам.
+- **Контрагенты**: поставщики (с их товарами), покупатели и должники.
+- **Финансы**: счета (сейф, касса, банк), платежи, переводы, типы расходов; смена закрывается — деньги уходят со счёта кассы.
+- **Отчёты**: статистика продаж, отчёты по сменам, кассирам, скидкам, консультантам, движение денег, прибыли и убытки, ABC-анализ.
+- **Акции и лояльность**: правила автоматических скидок, скидочные карты, кешбэк.
+- **Управление**: пользователи и должности, кассы и коды активации, настройка чека, разрешения, справочники, журнал действий.
+- Загрузка и выгрузка в Excel, печать этикеток и отчётов.
 
-# 4. Open in browser
-open http://localhost:3000
+### Несколько магазинов и владелец платформы
+- Одна установка обслуживает **много независимых магазинов**. Данные магазинов изолированы друг от друга.
+- Отдельная панель владельца платформы: создание, приостановка и удаление магазинов, сброс паролей сотрудников,
+  сообщения от магазинов (встроенный чат поддержки).
+
+### Эксплуатация
+- Автоматические ночные резервные копии, скрипты безопасного обновления, отката и очистки сервера.
+- Уведомления в Telegram о новых ошибках и сообщениях поддержки (по желанию).
+- Интерфейс переведён на 14 языков; для русского и казахстанского рынка настроены тенге, часовой пояс Алматы и формат документов.
+
+---
+
+## Из чего состоит
+
+```
+                      ┌──────────────────────────────┐
+  Веб-кабинет ───────▶│                              │
+  (браузер)           │      Сервер Korgen Kassa     │◀──── Резервные копии
+                      │  Next.js + API + PostgreSQL  │      (каждую ночь)
+  Касса в браузере ──▶│                              │
+                      └──────────────▲───────────────┘
+                                     │  HTTPS (когда есть интернет)
+                      ┌──────────────┴───────────────┐
+                      │  Программа кассира (Windows) │
+                      │  каталог и очередь продаж на │
+                      │  компьютере, печать чеков    │
+                      └──────────────────────────────┘
 ```
 
-The first time you open the app you will be guided through a setup wizard that migrates the database and creates your admin account.
+| Часть | Что это | Где лежит |
+|---|---|---|
+| Веб-приложение и API | Кабинет, касса в браузере, сервер данных | `src/`, `prisma/` |
+| База данных | PostgreSQL 16, миграции Prisma | `prisma/migrations/` |
+| Программа кассира | Приложение Windows (Electron) | `till-app/` |
+| Развёртывание | Docker, HTTPS, резервные копии, обновление | `docker-compose*.yml`, `deploy/` |
+| Служебные скрипты | Создание владельца платформы, проверка изоляции магазинов | `scripts/` |
 
 ---
 
-## Quick Start (Serverless — Vercel / Netlify)
+## Программа кассира для Windows
 
-You can run Korgen Kassa POS serverless without Docker or a VPS:
+Отдельная установка для кассового компьютера (моноблока):
 
-1. **Fork or Use Template**: Click **Fork** or **Use this template** at the top of this repository to create a copy in your own account.
-2. **Deploy**: Import your copy into **Vercel** or **Netlify**.
-3. **Database**: Use a managed database provider like Neon or Supabase (using a pooled `DATABASE_URL` and a direct `DIRECT_URL`).
+- **Полный экран** без рамки окна; размер интерфейса настраивается кнопками «−» и «+» (ДОП. ФУНКЦИИ → РАЗМЕР ЭКРАНА), чтобы
+  подогнать под любой монитор.
+- **Активация по коду.** Администратор выдаёт 8-значный код в кабинете (Управление → Кассы), кассир вводит его один раз — и
+  касса загружает данные магазина. Вход кассиров по **PIN-коду**.
+- **Автообновление.** Программа сама находит новую версию на сервере, скачивает и устанавливает при закрытии.
+- **Печать на термопринтере** (чековый принтер 80 мм): чеки, этикетки товаров, отчёты смены. Печать напрямую в принтер без
+  диалогов; индикатор состояния принтера в верхней панели.
+- Нельзя закрыть программу «случайно»: если в корзине есть товары, касса предложит завершить продажу, очистить корзину или остаться.
 
-See the [Deployment Guide](docs/deployment.md#serverless-deployments-vercel--netlify) for detailed instructions.
+Подробности установки и выпуска новых версий — в [ZAPUSK.md](ZAPUSK.md) и [docs/till-updates.md](docs/till-updates.md).
 
 ---
 
-## Quick Start (Local Development)
+## Как это устроено внутри
 
-**Prerequisites**: Node.js ≥ 20, pnpm ≥ 9, PostgreSQL ≥ 14
+- **Один код — два режима кассы.** Тот же экран кассы работает и в браузере (`/pos`, с живой сессией сервера), и внутри программы
+  Windows (`/till`, полностью из локального хранилища). Продажа всегда сначала сохраняется на кассе и отправляется на сервер с
+  уникальным номером, поэтому повторная отправка никогда не создаёт дубль.
+- **Изоляция магазинов.** Каждый запрос к данным привязан к магазину; есть автоматическая проверка (`scripts/tenant-scan`),
+  которая пытается прочитать данные чужого магазина по всем страницам и маршрутам API.
+- **Деньги и остатки.** Остатки меняются через журнал движений (приход, продажа, возврат, списание, инвентаризация); прибыль
+  считается за вычетом возвратов; скидка на весь чек распределяется по позициям.
+- **Устройства.** Каждая касса получает собственный ключ; его можно отозвать, и касса перестанет принимать продажи.
 
-```bash
-# 1. Clone & install
-git clone https://github.com/olgax/olgax-pos.git
-cd olgax-pos
-pnpm install
+---
 
-# 2. Configure environment
-cp .env.example .env
-# Set DATABASE_URL and BETTER_AUTH_SECRET in .env
+## Технологии
 
-# 3. Migrate database
-pnpm db:migrate
+| Область | Что используется |
+|---|---|
+| Интерфейс | Next.js 16, React 19, TypeScript, Tailwind CSS, Zustand, next-intl |
+| Сервер | Next.js (маршруты API), Prisma ORM 7, PostgreSQL 16, Better Auth |
+| Касса без интернета | IndexedDB, очередь отправки, Electron, печать ESC/POS |
+| Развёртывание | Docker Compose, Caddy (автоматический HTTPS), Plesk (по желанию) |
+| Проверка | Vitest (модульные тесты), Playwright (проверка в браузере), ESLint |
 
-# 4. (Optional) Seed sample products
-pnpm db:seed
+---
 
-# 5. Start dev server
-pnpm dev
+## Структура репозитория
+
+```
+├── src/
+│   ├── app/              страницы и маршруты API (кабинет, касса, супер-админ)
+│   ├── components/       компоненты интерфейса (касса, финансы, склад, управление…)
+│   ├── lib/              бизнес-логика: отчёты, смены, акции, права, офлайн-очередь
+│   └── tests/            модульные тесты
+├── prisma/               схема базы данных и миграции
+├── till-app/             программа кассира для Windows (Electron)
+├── deploy/               обновление, откат, резервные копии, очистка сервера
+├── scripts/              служебные скрипты (владелец платформы, проверка изоляции)
+├── messages/             переводы интерфейса (14 языков)
+├── docs/                 технические документы (развёртывание, обновления кассы и др.)
+├── docker-compose.yml        запуск на одном компьютере (пробный и разработка)
+├── docker-compose.prod.yml   боевой сервер: HTTPS, резервные копии, миграции
+└── ZAPUSK.md             как запустить проект
 ```
 
-Open [http://localhost:3000](http://localhost:3000). A setup wizard will guide you through creating your admin account on first run.
-
 ---
 
-## Documentation
+## Документация
 
-| Document | Description |
+| Документ | О чём |
 |---|---|
-| [Getting Started](docs/getting-started.md) | Full installation guide for all environments |
-| [Configuration](docs/configuration.md) | Environment variables, business settings, per-device settings |
-| [Architecture](docs/architecture.md) | Tech stack, project structure, data model |
-| [Deployment](docs/deployment.md) | Docker, reverse proxy, HTTPS, production checklist |
-| [API Reference](docs/api-reference.md) | Internal REST API endpoints |
-| [Contributing](docs/contributing.md) | Development workflow, coding standards, PR guide |
+| [ZAPUSK.md](ZAPUSK.md) | **Запуск проекта** на новом компьютере, на сервере, установка программы кассира |
+| [docs/production.md](docs/production.md) | Боевой сервер: первый запуск, резервные копии, обновление, изоляция магазинов |
+| [docs/till-updates.md](docs/till-updates.md) | Выпуск новых версий программы кассира |
+| [docs/server-reset.md](docs/server-reset.md) | Полная очистка сервера и начало с чистого листа |
+| [docs/monitoring.md](docs/monitoring.md) | Мониторинг и уведомления |
+| [docs/architecture.md](docs/architecture.md) | Архитектура приложения |
+| [docs/configuration.md](docs/configuration.md) | Переменные окружения и настройки |
+| [docs/api-reference.md](docs/api-reference.md) | Справочник по API |
+| [docs/kasa-offline-plan.md](docs/kasa-offline-plan.md) | Как устроена работа кассы без интернета |
 
 ---
 
-## Tech Stack
+## Проверка качества
 
-- **Framework**: Next.js 16 App Router + TypeScript strict mode
-- **UI**: shadcn/ui + Tailwind CSS 4
-- **Database**: PostgreSQL + Prisma 7 ORM
-- **Offline DB**: PGLite (Postgres WASM in the browser)
-- **Auth**: Better Auth (email/password, role-based)
-- **State**: Zustand (POS cart)
-- **Forms**: react-hook-form + Zod validation
-- **Testing**: Vitest + Playwright
+```bash
+npx vitest run        # модульные тесты
+npx tsc --noEmit      # проверка типов
+npx eslint            # проверка стиля кода
+```
 
 ---
 
-## Roadmap
+## Лицензия и сторонние компоненты
 
-- [ ] Multi-store / multi-location
-- [ ] Advanced reports + charts
-- [ ] Kitchen Display System (KDS)
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE) for details. Based on the open-source [Olgax POS](https://github.com/olgax/olgax-pos) project.
+Исходный код и программа принадлежат ТОО «Innova Corporation Company». Условия лицензий сторонних открытых компонентов,
+на которых основана часть проекта, сохранены в файле [LICENSE](LICENSE).

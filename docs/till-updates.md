@@ -24,8 +24,8 @@ yöneticinin bir şey yapması gerekmez; program satışın ortasında asla yeni
    ```
 3. `till-app/dist/` içindeki **üç dosyayı** sunucuya kopyala (klasör yoksa önce oluştur):
    ```bash
-   ssh root@178.88.115.193 "mkdir -p /opt/korgen/till-updates"
-   scp "till-app/dist/latest.yml" "till-app/dist/Korgen Kassa Setup 1.1.1.exe" "till-app/dist/Korgen Kassa Setup 1.1.1.exe.blockmap" root@178.88.115.193:/opt/korgen/till-updates/
+   ssh root@<IP-СЕРВЕРА> "mkdir -p /opt/korgen/till-updates"
+   scp "till-app/dist/latest.yml" "till-app/dist/Korgen Kassa Setup 1.1.1.exe" "till-app/dist/Korgen Kassa Setup 1.1.1.exe.blockmap" root@<IP-СЕРВЕРА>:/opt/korgen/till-updates/
    ```
    Sunucuyu yeniden başlatmak gerekmez; kasalar bir sonraki kontrolde yeni sürümü görür.
 4. Eski dosyaları silebilirsin; `latest.yml` her zaman en yeni sürümü göstermelidir.
