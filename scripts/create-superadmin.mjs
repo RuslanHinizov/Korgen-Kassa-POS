@@ -1,6 +1,6 @@
 // Creates the platform owner account (role SUPERADMIN) on a fresh database.
 //   docker compose --env-file .env.production -f docker-compose.prod.yml exec web \
-//     node scripts/create-superadmin.mjs "+7 (777) 123-45-67" "Ruslan"
+//     node scripts/create-superadmin.mjs "+7 (777) 123-45-67" "Owner"
 // Prints a generated password once (or pass a third argument to choose your own, min 8 chars).
 import { randomBytes, randomInt } from "node:crypto";
 import pg from "pg";
